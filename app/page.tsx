@@ -206,7 +206,7 @@ export default async function Landing() {
           </Reveal>
           <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {["1", "2", "3"].map((n) => (
-              <div key={n} className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-sm">
+              <div key={n} className="relative aspect-[19/20] overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-sm">
                 <Image
                   src={`/images/prints/${n}.png`}
                   alt={`Avaliação de cliente ${n}`}
