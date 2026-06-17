@@ -27,6 +27,7 @@ export const FEATURES: Feature[] = [
 
   // Gestão
   { chave: "dashboard", nome: "Dashboard e gráficos", categoria: "Gestão" },
+  { chave: "multiempresa", nome: "Multiempresa (vários CNPJs)", categoria: "Gestão" },
   { chave: "multiusuario", nome: "Equipe / multiusuário", categoria: "Gestão" },
   { chave: "relatorios", nome: "Relatórios fiscais", categoria: "Gestão" },
 ];

@@ -77,6 +77,8 @@ model Plano {
   nome           String
   descricao      String?
   preco          Decimal  @default(0) @db.Decimal(10, 2)
+  precoAntigo    Decimal? @db.Decimal(10, 2) // valor "de" (riscado) opcional
+  categoria      String? // agrupamento na landing (ex.: "Para começar", "Para crescer")
   periodicidade  String   @default("mensal") // mensal | anual
   limiteEmpresas Int      @default(1) // -1 = ilimitado
   limiteUsuarios Int      @default(1) // membros por empresa; -1 = ilimitado

@@ -212,7 +212,7 @@ function AbaPlanos() {
   useEffect(() => { void recarregar(); }, []);
 
   const porId = new Map(beneficios.map((b) => [b.id, b]));
-  const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, beneficioIds: [], ativo: true, ordem: planos.length };
+  const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, precoAntigo: 0, categoria: "", periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, beneficioIds: [], ativo: true, ordem: planos.length };
 
   return (
     <div className="space-y-4">
@@ -229,11 +229,14 @@ function AbaPlanos() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="font-semibold">{p.nome}</p>
-                  <p className="text-xs text-[var(--muted)]">{p.periodicidade} · {p.limiteEmpresas < 0 ? "∞" : p.limiteEmpresas} empresa(s)</p>
+                  <p className="text-xs text-[var(--muted)]">{p.categoria ? `${p.categoria} · ` : ""}{p.periodicidade} · {p.limiteEmpresas < 0 ? "∞" : p.limiteEmpresas} empresa(s)</p>
                 </div>
                 {!p.ativo && <Badge tom="neutral">inativo</Badge>}
               </div>
-              <p className="mt-2 text-2xl font-bold text-[var(--primary)]">{formatBRL(p.preco)}</p>
+              <p className="mt-2 flex items-baseline gap-2">
+                {p.precoAntigo > 0 && <span className="text-sm text-[var(--muted)] line-through">{formatBRL(p.precoAntigo)}</span>}
+                <span className="text-2xl font-bold text-[var(--primary)]">{formatBRL(p.preco)}</span>
+              </p>
               {p.descricao && <p className="mt-1 text-sm text-[var(--muted)]">{p.descricao}</p>}
               <ul className="mt-3 flex-1 space-y-1 text-sm">
                 {p.beneficioIds.map((id) => {
@@ -287,12 +290,14 @@ function PlanoModal({ inicial, catalogo, planos, onFechar, onSalvo }: { inicial:
   const dados = (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Nome" required className="col-span-2"><Input value={p.nome} onChange={(e) => set("nome", e.target.value)} /></Field>
+        <Field label="Nome" required><Input value={p.nome} onChange={(e) => set("nome", e.target.value)} /></Field>
+        <Field label="Categoria" hint="Agrupa na landing"><Input value={p.categoria} onChange={(e) => set("categoria", e.target.value)} placeholder="Ex.: Para crescer" /></Field>
+        <Field label="Preço de (riscado)" hint="0 = sem promoção"><Input type="number" step="0.01" min="0" value={p.precoAntigo} onChange={(e) => set("precoAntigo", Number(e.target.value))} /></Field>
         <Field label="Preço (R$)"><Input type="number" step="0.01" min="0" value={p.preco} onChange={(e) => set("preco", Number(e.target.value))} /></Field>
         <Field label="Periodicidade"><Select opcoes={[{ value: "mensal", label: "Mensal" }, { value: "anual", label: "Anual" }]} value={p.periodicidade} onChange={(e) => set("periodicidade", e.target.value)} /></Field>
+        <Field label="Ordem"><Input type="number" value={p.ordem} onChange={(e) => set("ordem", Number(e.target.value))} /></Field>
         <Field label="Limite de empresas" hint="-1 = ilimitado"><Input type="number" value={p.limiteEmpresas} onChange={(e) => set("limiteEmpresas", Number(e.target.value))} /></Field>
         <Field label="Usuários por empresa" hint="-1 = ilimitado"><Input type="number" value={p.limiteUsuarios} onChange={(e) => set("limiteUsuarios", Number(e.target.value))} /></Field>
-        <Field label="Ordem"><Input type="number" value={p.ordem} onChange={(e) => set("ordem", Number(e.target.value))} /></Field>
         <Field label="Descrição" className="col-span-2"><Input value={p.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
       </div>
       <label className="flex items-center gap-2 text-sm">

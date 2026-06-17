@@ -14,6 +14,7 @@ import {
 import { definirEmpresaAtiva, hashSenha } from "@/lib/auth";
 import { codigoMunicipio } from "@/lib/nfe/municipios";
 import { encriptar } from "@/lib/crypto";
+import { temFeature } from "@/lib/permissoes";
 
 const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
@@ -226,10 +227,16 @@ export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id
       // Nova empresa própria: usuário comum respeita o limite do plano.
       if (!admin) {
         const lim = await limiteEmpresasDoUsuario(userId);
-        if (!lim.podeAdicionar) {
+        // Sem o benefício "multiempresa", o teto é 1 — independente do limite do plano.
+        const temMulti = await temFeature("multiempresa");
+        const limiteEfetivo = temMulti ? lim.limite : 1;
+        const podeAdicionar = limiteEfetivo < 0 || lim.usadas < limiteEfetivo;
+        if (!podeAdicionar) {
           return {
             ok: false,
-            erro: `Seu plano permite ${lim.limite} empresa(s) e você já tem ${lim.usadas}. Faça upgrade para adicionar mais.`,
+            erro: temMulti
+              ? `Seu plano permite ${lim.limite} empresa(s) e você já tem ${lim.usadas}. Faça upgrade para adicionar mais.`
+              : "Seu plano permite apenas 1 empresa. Faça upgrade para multiempresa.",
           };
         }
       }

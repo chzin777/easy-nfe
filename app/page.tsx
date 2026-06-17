@@ -64,6 +64,17 @@ export default async function Landing() {
   const nomePlanoAnterior = (ordem: number) =>
     planos.filter((x) => x.ordem < ordem).sort((a, b) => b.ordem - a.ordem)[0]?.nome;
 
+  const destaqueId = planos[1]?.id;
+  // Agrupa por categoria preservando a ordem de aparição.
+  const grupos: { categoria: string; itens: typeof planos }[] = [];
+  for (const p of planos) {
+    const c = p.categoria ?? "";
+    const g = grupos.find((x) => x.categoria === c);
+    if (g) g.itens.push(p);
+    else grupos.push({ categoria: c, itens: [p] });
+  }
+  const agruparPorCategoria = grupos.some((g) => g.categoria !== "");
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-900">
       {/* Navbar */}
@@ -225,31 +236,41 @@ export default async function Landing() {
           {planos.length === 0 ? (
             <p className="mt-12 text-center text-sm text-[var(--muted)]">Planos em breve.</p>
           ) : (
-            <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
-              {planos.map((p, i) => {
-                const destaque = i === 1;
-                return (
-                  <div key={p.id} className={"relative flex flex-col rounded-2xl border bg-white p-7 " + (destaque ? "border-[var(--primary)] shadow-xl shadow-violet-500/10 ring-1 ring-[var(--primary)]" : "border-[var(--border)] shadow-sm")}>
-                    {destaque && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--primary)] px-3 py-1 text-xs font-semibold text-white">Mais popular</span>}
-                    <h3 className="text-lg font-bold">{p.nome}</h3>
-                    {p.descricao && <p className="mt-1 text-sm text-[var(--muted)]">{p.descricao}</p>}
-                    <p className="mt-5 text-4xl font-extrabold tracking-tight">
-                      {formatBRL(Number(p.preco))}
-                      <span className="text-base font-medium text-[var(--muted)]">/{p.periodicidade === "anual" ? "ano" : "mês"}</span>
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--muted)]">{p.limiteEmpresas < 0 ? "Empresas ilimitadas" : `${p.limiteEmpresas} empresa(s)`}</p>
-                    <ul className="mt-6 flex-1 space-y-2.5 text-sm">
-                      {p.beneficios.map((b, j) => (
-                        <li key={j} className="flex gap-2"><span className="text-[var(--success)]">✓</span><span className="text-slate-600">{b.chave === "tudo_anterior" ? `Tudo do ${nomePlanoAnterior(p.ordem) ?? "plano anterior"}` : b.nome}</span></li>
-                      ))}
-                    </ul>
-                    <Link href="/login" className={"mt-7 rounded-xl px-5 py-2.5 text-center text-sm font-semibold transition " + (destaque ? "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg shadow-violet-500/25 hover:-translate-y-0.5" : "bg-slate-100 text-slate-900 hover:bg-slate-200")}>
-                      Começar agora
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
+            grupos.map((g) => (
+              <div key={g.categoria || "_"} className="mt-12">
+                {agruparPorCategoria && g.categoria && (
+                  <h3 className="mb-5 text-center text-sm font-semibold uppercase tracking-wider text-[var(--primary)]">{g.categoria}</h3>
+                )}
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                  {g.itens.map((p) => {
+                    const destaque = p.id === destaqueId;
+                    return (
+                      <div key={p.id} className={"relative flex flex-col rounded-2xl border bg-white p-7 " + (destaque ? "border-[var(--primary)] shadow-xl shadow-violet-500/10 ring-1 ring-[var(--primary)]" : "border-[var(--border)] shadow-sm")}>
+                        {destaque && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--primary)] px-3 py-1 text-xs font-semibold text-white">Mais popular</span>}
+                        <h3 className="text-lg font-bold">{p.nome}</h3>
+                        {p.descricao && <p className="mt-1 text-sm text-[var(--muted)]">{p.descricao}</p>}
+                        {p.precoAntigo && Number(p.precoAntigo) > 0 && (
+                          <p className="mt-5 text-sm text-[var(--muted)] line-through">{formatBRL(Number(p.precoAntigo))}</p>
+                        )}
+                        <p className={(p.precoAntigo && Number(p.precoAntigo) > 0 ? "mt-0.5" : "mt-5") + " text-4xl font-extrabold tracking-tight"}>
+                          {formatBRL(Number(p.preco))}
+                          <span className="text-base font-medium text-[var(--muted)]">/{p.periodicidade === "anual" ? "ano" : "mês"}</span>
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--muted)]">{p.limiteEmpresas < 0 ? "Empresas ilimitadas" : `${p.limiteEmpresas} empresa(s)`}</p>
+                        <ul className="mt-6 flex-1 space-y-2.5 text-sm">
+                          {p.beneficios.map((b, j) => (
+                            <li key={j} className="flex gap-2"><span className="text-[var(--success)]">✓</span><span className="text-slate-600">{b.chave === "tudo_anterior" ? `Tudo do ${nomePlanoAnterior(p.ordem) ?? "plano anterior"}` : b.nome}</span></li>
+                          ))}
+                        </ul>
+                        <Link href="/login" className={"mt-7 rounded-xl px-5 py-2.5 text-center text-sm font-semibold transition " + (destaque ? "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg shadow-violet-500/25 hover:-translate-y-0.5" : "bg-slate-100 text-slate-900 hover:bg-slate-200")}>
+                          Começar agora
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
           )}
         </div>
       </section>
