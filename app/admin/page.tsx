@@ -22,6 +22,7 @@ import UsuarioDetalhe from "./UsuarioDetalhe";
 const ROLES = [
   { value: "USER", label: "Usuário" },
   { value: "SUPORTE", label: "Suporte" },
+  { value: "CONTADOR", label: "Contador" },
   { value: "ADMIN", label: "Administrador" },
 ];
 
@@ -170,7 +171,7 @@ function NovoUsuarioModal({ aberto, onFechar, onCriado }: { aberto: boolean; onF
   async function salvar() {
     setSalvando(true);
     setErro(null);
-    const r = await criarUsuario({ email, senha, nome, role: role as "USER" | "SUPORTE" | "ADMIN" });
+    const r = await criarUsuario({ email, senha, nome, role: role as "USER" | "SUPORTE" | "ADMIN" | "CONTADOR" });
     setSalvando(false);
     if (!r.ok) { setErro(r.erro); return; }
     setEmail(""); setSenha(""); setNome(""); setRole("USER");

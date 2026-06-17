@@ -55,15 +55,18 @@ export default function Sidebar() {
     obterMinhasFeatures().then(setFeatures).catch(() => setFeatures([]));
   }, []);
 
-  const admin = role === "ADMIN" || role === "SUPORTE";
+  // Acesso total às funcionalidades (admin, suporte e contador).
+  const acessoTotal = role === "ADMIN" || role === "SUPORTE" || role === "CONTADOR";
+  // Painel administrativo: só admin/suporte (contador NÃO).
+  const painelAdmin = role === "ADMIN" || role === "SUPORTE";
 
-  // Filtra itens pelas features do plano (admin vê tudo; enquanto carrega, mostra tudo).
-  const podeVer = (it: Item) => admin || !it.feature || features === null || features.includes(it.feature);
+  // Filtra itens pelas features do plano (acesso total vê tudo; enquanto carrega, mostra tudo).
+  const podeVer = (it: Item) => acessoTotal || !it.feature || features === null || features.includes(it.feature);
 
   const gruposRender: Grupo[] = grupos
     .map((g) => {
       let itens = g.itens.filter(podeVer);
-      if (admin && g.titulo === "Sistema") {
+      if (painelAdmin && g.titulo === "Sistema") {
         itens = [...itens, { href: "/admin", label: "Painel administrativo", icon: <IconShield /> }];
       }
       return { ...g, itens };

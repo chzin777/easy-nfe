@@ -30,6 +30,7 @@ enum Role {
   USER
   SUPORTE
   ADMIN
+  CONTADOR
 }
 
 enum StatusLicenca {

@@ -14,7 +14,7 @@ export type UsuarioResumo = {
   id: string;
   email: string;
   nome: string;
-  role: "USER" | "SUPORTE" | "ADMIN";
+  role: "USER" | "SUPORTE" | "ADMIN" | "CONTADOR";
   ativo: boolean;
   plano: string | null;
   statusLicenca: string | null;
@@ -47,7 +47,7 @@ export type UsuarioDetalhe = {
   id: string;
   email: string;
   nome: string;
-  role: "USER" | "SUPORTE" | "ADMIN";
+  role: "USER" | "SUPORTE" | "ADMIN" | "CONTADOR";
   ativo: boolean;
   criadoEm: string;
   licenca: { planoId: string | null; plano: string | null; status: string; validadeEm: string | null } | null;
@@ -106,7 +106,7 @@ export async function criarUsuario(input: {
   email: string;
   senha: string;
   nome: string;
-  role: "USER" | "SUPORTE" | "ADMIN";
+  role: "USER" | "SUPORTE" | "ADMIN" | "CONTADOR";
 }): Promise<Resultado> {
   try {
     // Criar ADMIN/SUPORTE exige ser admin master.
@@ -144,7 +144,7 @@ export async function criarUsuario(input: {
 
 export async function atualizarUsuario(
   userId: string,
-  input: { nome: string; email: string; role: "USER" | "SUPORTE" | "ADMIN"; ativo: boolean },
+  input: { nome: string; email: string; role: "USER" | "SUPORTE" | "ADMIN" | "CONTADOR"; ativo: boolean },
 ): Promise<Resultado> {
   try {
     if (input.role === "ADMIN" || input.role === "SUPORTE") await exigirAdminMaster();

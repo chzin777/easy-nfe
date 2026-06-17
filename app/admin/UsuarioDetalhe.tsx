@@ -18,6 +18,7 @@ import {
 const ROLES = [
   { value: "USER", label: "Usuário" },
   { value: "SUPORTE", label: "Suporte" },
+  { value: "CONTADOR", label: "Contador" },
   { value: "ADMIN", label: "Administrador" },
 ];
 const STATUS_LIC = ["TRIAL", "ATIVA", "EXPIRADA", "SUSPENSA", "CANCELADA"].map((v) => ({ value: v, label: v }));
@@ -82,7 +83,7 @@ function Conta({ d, onMudou, flash }: Sub) {
 
   async function salvar() {
     setErro(null);
-    const r = await atualizarUsuario(d.id, { nome, email, role: role as "USER" | "SUPORTE" | "ADMIN", ativo });
+    const r = await atualizarUsuario(d.id, { nome, email, role: role as "USER" | "SUPORTE" | "ADMIN" | "CONTADOR", ativo });
     if (!r.ok) { setErro(r.erro); return; }
     flash("Conta atualizada."); onMudou();
   }

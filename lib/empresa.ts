@@ -2,8 +2,10 @@ import "server-only";
 import { prisma } from "./prisma";
 import { lerSessao, lerSessaoCompleta, lerEmpresaAtiva } from "./auth";
 
+// Acesso total às funcionalidades + qualquer empresa. NÃO implica painel admin.
+// CONTADOR tem o mesmo acesso operacional de admin, mas sem o painel administrativo.
 export function isAdminRole(role: string): boolean {
-  return role === "ADMIN" || role === "SUPORTE";
+  return role === "ADMIN" || role === "SUPORTE" || role === "CONTADOR";
 }
 
 // userId da sessão ou erro.
