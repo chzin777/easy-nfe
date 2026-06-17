@@ -100,6 +100,7 @@ model Beneficio {
   descricao String?
   ordem     Int     @default(0)
   ativo     Boolean @default(true)
+  oculto    Boolean @default(false) // não aparece no catálogo (aba Benefícios), só no modal de plano
 
   planos    Plano[]
   createdAt DateTime @default(now())

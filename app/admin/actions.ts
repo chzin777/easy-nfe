@@ -309,6 +309,7 @@ const slug = (s: string) =>
 export async function listarBeneficiosAdmin(): Promise<Required<BeneficioDados>[]> {
   await exigirAdmin();
   const rows = await prisma.beneficio.findMany({
+    where: { oculto: false },
     orderBy: { ordem: "asc" },
     include: { _count: { select: { planos: true } } },
   });

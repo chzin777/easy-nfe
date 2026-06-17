@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence, type Variants } from "motion/react";
 import { Badge, Button, Card, Field, Input, Select } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
+import Stepper, { Step } from "@/app/ui/Stepper";
+import Tabs from "@/app/ui/Tabs";
 import { formatBRL, formatData } from "@/lib/format";
 import {
   listarUsuarios, criarUsuario, type UsuarioResumo,
@@ -182,6 +184,19 @@ function NovoUsuarioModal({ aberto, onFechar, onCriado }: { aberto: boolean; onF
   );
 }
 
+// Nome do plano de nível imediatamente anterior (menor ordem) ao informado.
+function nomePlanoAnterior(planos: Required<PlanoDados>[], ordem: number, selfId?: string): string | undefined {
+  return planos
+    .filter((p) => p.ordem < ordem && p.id !== selfId)
+    .sort((a, b) => b.ordem - a.ordem)[0]?.nome;
+}
+
+// Rótulo do benefício, resolvendo o especial "tudo_anterior" dinamicamente.
+function rotuloBeneficio(b: Beneficio, prevNome?: string): string {
+  if (b.chave === "tudo_anterior") return `Tudo do ${prevNome ?? "plano anterior"}`;
+  return b.nome;
+}
+
 function AbaPlanos() {
   const [planos, setPlanos] = useState<Required<PlanoDados>[]>([]);
   const [beneficios, setBeneficios] = useState<Beneficio[]>([]);
@@ -195,7 +210,7 @@ function AbaPlanos() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void recarregar(); }, []);
 
-  const nomePorId = new Map(beneficios.map((b) => [b.id, b.nome]));
+  const porId = new Map(beneficios.map((b) => [b.id, b]));
   const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, beneficioIds: [], ativo: true, ordem: planos.length };
 
   return (
@@ -206,38 +221,46 @@ function AbaPlanos() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {planos.map((p) => (
-          <Card key={p.id} className="flex flex-col p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="font-semibold">{p.nome}</p>
-                <p className="text-xs text-[var(--muted)]">{p.periodicidade} · {p.limiteEmpresas < 0 ? "∞" : p.limiteEmpresas} empresa(s)</p>
+        {planos.map((p) => {
+          const prev = nomePlanoAnterior(planos, p.ordem, p.id);
+          return (
+            <Card key={p.id} className="flex flex-col p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-semibold">{p.nome}</p>
+                  <p className="text-xs text-[var(--muted)]">{p.periodicidade} · {p.limiteEmpresas < 0 ? "∞" : p.limiteEmpresas} empresa(s)</p>
+                </div>
+                {!p.ativo && <Badge tom="neutral">inativo</Badge>}
               </div>
-              {!p.ativo && <Badge tom="neutral">inativo</Badge>}
-            </div>
-            <p className="mt-2 text-2xl font-bold text-[var(--primary)]">{formatBRL(p.preco)}</p>
-            {p.descricao && <p className="mt-1 text-sm text-[var(--muted)]">{p.descricao}</p>}
-            <ul className="mt-3 flex-1 space-y-1 text-sm">
-              {p.beneficioIds.map((id) => <li key={id} className="flex gap-1.5"><span className="text-[var(--success)]">✓</span>{nomePorId.get(id) ?? id}</li>)}
-            </ul>
-            <Button variante="secondary" className="mt-4" onClick={() => setEdit(p)}>Editar</Button>
-          </Card>
-        ))}
+              <p className="mt-2 text-2xl font-bold text-[var(--primary)]">{formatBRL(p.preco)}</p>
+              {p.descricao && <p className="mt-1 text-sm text-[var(--muted)]">{p.descricao}</p>}
+              <ul className="mt-3 flex-1 space-y-1 text-sm">
+                {p.beneficioIds.map((id) => {
+                  const b = porId.get(id);
+                  return <li key={id} className="flex gap-1.5"><span className="text-[var(--success)]">✓</span>{b ? rotuloBeneficio(b, prev) : id}</li>;
+                })}
+              </ul>
+              <Button variante="secondary" className="mt-4" onClick={() => setEdit(p)}>Editar</Button>
+            </Card>
+          );
+        })}
       </div>
 
-      {edit && <PlanoModal inicial={edit} catalogo={beneficios} onFechar={() => setEdit(null)} onSalvo={() => { setEdit(null); recarregar(); }} />}
+      {edit && <PlanoModal inicial={edit} catalogo={beneficios} planos={planos} onFechar={() => setEdit(null)} onSalvo={() => { setEdit(null); recarregar(); }} />}
     </div>
   );
 }
 
-function PlanoModal({ inicial, catalogo, onFechar, onSalvo }: { inicial: PlanoDados; catalogo: Beneficio[]; onFechar: () => void; onSalvo: () => void }) {
+function PlanoModal({ inicial, catalogo, planos, onFechar, onSalvo }: { inicial: PlanoDados; catalogo: Beneficio[]; planos: Required<PlanoDados>[]; onFechar: () => void; onSalvo: () => void }) {
   const [p, setP] = useState<PlanoDados>(inicial);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [arrastando, setArrastando] = useState<string | null>(null);
+  const editando = !!p.id;
 
   function set<K extends keyof PlanoDados>(k: K, v: PlanoDados[K]) { setP((s) => ({ ...s, [k]: v })); }
 
+  const prevNome = nomePlanoAnterior(planos, p.ordem, p.id);
   const noPlano = p.beneficioIds.map((id) => catalogo.find((b) => b.id === id)).filter(Boolean) as Beneficio[];
   const disponiveis = catalogo.filter((b) => !p.beneficioIds.includes(b.id));
 
@@ -260,89 +283,99 @@ function PlanoModal({ inicial, catalogo, onFechar, onSalvo }: { inicial: PlanoDa
     onSalvo();
   }
 
-  return (
-    <Modal aberto onFechar={onFechar} titulo={p.id ? "Editar plano" : "Novo plano"} largura="max-w-3xl"
-      rodape={
-        <div className="flex w-full items-center justify-between">
-          {p.id ? <Button variante="ghost" className="text-[var(--danger)]" onClick={excluir} disabled={salvando}>Excluir</Button> : <span />}
-          <div className="flex gap-2">
-            <Button variante="secondary" onClick={onFechar} disabled={salvando}>Cancelar</Button>
-            <Button onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</Button>
-          </div>
-        </div>
-      }
-    >
-      <div className="space-y-5">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Nome" required className="col-span-2"><Input value={p.nome} onChange={(e) => set("nome", e.target.value)} /></Field>
-          <Field label="Preço (R$)"><Input type="number" step="0.01" min="0" value={p.preco} onChange={(e) => set("preco", Number(e.target.value))} /></Field>
-          <Field label="Periodicidade"><Select opcoes={[{ value: "mensal", label: "Mensal" }, { value: "anual", label: "Anual" }]} value={p.periodicidade} onChange={(e) => set("periodicidade", e.target.value)} /></Field>
-          <Field label="Limite de empresas" hint="-1 = ilimitado"><Input type="number" value={p.limiteEmpresas} onChange={(e) => set("limiteEmpresas", Number(e.target.value))} /></Field>
-          <Field label="Usuários por empresa" hint="-1 = ilimitado"><Input type="number" value={p.limiteUsuarios} onChange={(e) => set("limiteUsuarios", Number(e.target.value))} /></Field>
-          <Field label="Ordem"><Input type="number" value={p.ordem} onChange={(e) => set("ordem", Number(e.target.value))} /></Field>
-          <Field label="Descrição" className="col-span-2"><Input value={p.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
-        </div>
-
-        {/* Benefícios: arrastar do catálogo (direita) para o plano (esquerda) */}
-        <div>
-          <p className="mb-2 text-sm font-semibold">Benefícios do plano <span className="font-normal text-[var(--muted)]">— arraste ou clique para mover</span></p>
-          <div className="grid grid-cols-2 gap-3">
-            {/* No plano */}
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.preventDefault(); if (arrastando) { adicionar(arrastando); setArrastando(null); } }}
-              className="min-h-[180px] rounded-lg border-2 border-dashed border-[var(--primary)]/30 bg-[var(--primary-soft)]/40 p-2"
-            >
-              <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--primary)]">No plano ({noPlano.length})</p>
-              {noPlano.length === 0 && <p className="px-1 py-6 text-center text-xs text-[var(--muted)]">Arraste benefícios para cá.</p>}
-              <ul className="space-y-1.5">
-                {noPlano.map((b) => (
-                  <li
-                    key={b.id}
-                    draggable
-                    onDragStart={() => setArrastando(b.id)}
-                    onClick={() => remover(b.id)}
-                    className="flex cursor-grab items-center justify-between rounded-md border border-[var(--border)] bg-white px-2.5 py-1.5 text-sm active:cursor-grabbing"
-                  >
-                    <span>{b.nome}</span>
-                    <span className="text-xs text-[var(--danger)]">✕</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Disponíveis */}
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.preventDefault(); if (arrastando) { remover(arrastando); setArrastando(null); } }}
-              className="min-h-[180px] rounded-lg border-2 border-dashed border-[var(--border)] bg-slate-50 p-2"
-            >
-              <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Disponíveis ({disponiveis.length})</p>
-              {disponiveis.length === 0 && <p className="px-1 py-6 text-center text-xs text-[var(--muted)]">Todos no plano.</p>}
-              <ul className="space-y-1.5">
-                {disponiveis.map((b) => (
-                  <li
-                    key={b.id}
-                    draggable
-                    onDragStart={() => setArrastando(b.id)}
-                    onClick={() => adicionar(b.id)}
-                    className="flex cursor-grab items-center justify-between rounded-md border border-[var(--border)] bg-white px-2.5 py-1.5 text-sm active:cursor-grabbing hover:border-[var(--primary)]"
-                  >
-                    <span>{b.nome}</span>
-                    <span className="text-xs text-[var(--primary)]">+</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={p.ativo} onChange={(e) => set("ativo", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
-          Ativo (exibir na landing page)
-        </label>
-        {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
+  const dados = (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Nome" required className="col-span-2"><Input value={p.nome} onChange={(e) => set("nome", e.target.value)} /></Field>
+        <Field label="Preço (R$)"><Input type="number" step="0.01" min="0" value={p.preco} onChange={(e) => set("preco", Number(e.target.value))} /></Field>
+        <Field label="Periodicidade"><Select opcoes={[{ value: "mensal", label: "Mensal" }, { value: "anual", label: "Anual" }]} value={p.periodicidade} onChange={(e) => set("periodicidade", e.target.value)} /></Field>
+        <Field label="Limite de empresas" hint="-1 = ilimitado"><Input type="number" value={p.limiteEmpresas} onChange={(e) => set("limiteEmpresas", Number(e.target.value))} /></Field>
+        <Field label="Usuários por empresa" hint="-1 = ilimitado"><Input type="number" value={p.limiteUsuarios} onChange={(e) => set("limiteUsuarios", Number(e.target.value))} /></Field>
+        <Field label="Ordem"><Input type="number" value={p.ordem} onChange={(e) => set("ordem", Number(e.target.value))} /></Field>
+        <Field label="Descrição" className="col-span-2"><Input value={p.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
       </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={p.ativo} onChange={(e) => set("ativo", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+        Ativo (exibir na landing page)
+      </label>
+    </div>
+  );
+
+  const beneficiosUI = (
+    <div>
+      <p className="mb-2 text-sm font-semibold">Benefícios do plano <span className="font-normal text-[var(--muted)]">— arraste ou clique para mover</span></p>
+      <div className="grid grid-cols-2 gap-3">
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); if (arrastando) { adicionar(arrastando); setArrastando(null); } }}
+          className="min-h-[180px] rounded-lg border-2 border-dashed border-[var(--primary)]/30 bg-[var(--primary-soft)]/40 p-2"
+        >
+          <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--primary)]">No plano ({noPlano.length})</p>
+          {noPlano.length === 0 && <p className="px-1 py-6 text-center text-xs text-[var(--muted)]">Arraste benefícios para cá.</p>}
+          <ul className="space-y-1.5">
+            {noPlano.map((b) => (
+              <li key={b.id} draggable onDragStart={() => setArrastando(b.id)} onClick={() => remover(b.id)}
+                className="flex cursor-grab items-center justify-between rounded-md border border-[var(--border)] bg-white px-2.5 py-1.5 text-sm active:cursor-grabbing">
+                <span>{rotuloBeneficio(b, prevNome)}</span>
+                <span className="text-xs text-[var(--danger)]">✕</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); if (arrastando) { remover(arrastando); setArrastando(null); } }}
+          className="min-h-[180px] rounded-lg border-2 border-dashed border-[var(--border)] bg-slate-50 p-2"
+        >
+          <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Disponíveis ({disponiveis.length})</p>
+          {disponiveis.length === 0 && <p className="px-1 py-6 text-center text-xs text-[var(--muted)]">Todos no plano.</p>}
+          <ul className="space-y-1.5">
+            {disponiveis.map((b) => (
+              <li key={b.id} draggable onDragStart={() => setArrastando(b.id)} onClick={() => adicionar(b.id)}
+                className="flex cursor-grab items-center justify-between rounded-md border border-[var(--border)] bg-white px-2.5 py-1.5 text-sm active:cursor-grabbing hover:border-[var(--primary)]">
+                <span>{rotuloBeneficio(b, prevNome)}</span>
+                <span className="text-xs text-[var(--primary)]">+</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Edição → abas (igual ao "Editar cliente"). Criação → stepper (igual ao "Novo cliente").
+  if (editando) {
+    return (
+      <Modal aberto onFechar={onFechar} titulo="Editar plano" largura="max-w-3xl"
+        rodape={
+          <div className="flex w-full items-center justify-between">
+            <Button variante="ghost" className="text-[var(--danger)]" onClick={excluir} disabled={salvando}>Excluir</Button>
+            <div className="flex gap-2">
+              <Button variante="secondary" onClick={onFechar} disabled={salvando}>Cancelar</Button>
+              <Button onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar alterações"}</Button>
+            </div>
+          </div>
+        }
+      >
+        <Tabs
+          alturaConteudo="420px"
+          abas={[
+            { id: "dados", label: "Dados", content: dados },
+            { id: "beneficios", label: "Benefícios", content: beneficiosUI },
+          ]}
+        />
+        {erro && <p className="mt-2 text-sm font-medium text-[var(--danger)]">{erro}</p>}
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal aberto onFechar={onFechar} titulo="Novo plano" largura="max-w-3xl">
+      <Stepper completeButtonText="Cadastrar plano" onFinalStepCompleted={salvar} canProceed={(s) => (s === 1 ? p.nome.trim() !== "" : true)}>
+        <Step>{dados}</Step>
+        <Step>{beneficiosUI}</Step>
+      </Stepper>
+      {erro && <p className="mt-2 text-sm font-medium text-[var(--danger)]">{erro}</p>}
     </Modal>
   );
 }
