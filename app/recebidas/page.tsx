@@ -23,6 +23,7 @@ import {
   manifestar,
   baixarXmlRecebida,
   diagnosticarCertificado,
+  testarConexaoSefaz,
   type RecebidaUI,
   type ResumoSinc,
 } from "./actions";
@@ -124,6 +125,21 @@ export default function NotasRecebidasPage() {
         : "❌ SEM cadeia intermediária no PFX — o AN rejeita com 403. Reexporte o A1 incluindo a cadeia completa.",
     );
     setDiag(linhas);
+  }
+
+  async function testarConexao() {
+    setDiag(["Testando conexão mTLS com a SEFAZ-GO (Status do Serviço)…"]);
+    const r = await testarConexaoSefaz();
+    if (r.erro) {
+      setDiag([`Falha mTLS: ${r.erro}`, "→ Se for 403 aqui também, o mTLS não funciona neste host."]);
+      return;
+    }
+    setDiag([
+      `Status SEFAZ-GO: cStat ${r.cStat ?? "—"} · ${r.xMotivo ?? "—"}`,
+      r.cStat === "107"
+        ? "✓ mTLS OK! O certificado é aceito. Logo o 403 do DFe é específico do Ambiente Nacional."
+        : "⚠ Resposta inesperada — veja cStat/xMotivo acima.",
+    ]);
   }
 
   function abrirManifesto(d: RecebidaUI) {
@@ -251,6 +267,9 @@ export default function NotasRecebidasPage() {
           <div className="flex items-center gap-2">
             <Button variante="secondary" onClick={diagnosticar}>
               Diagnosticar certificado
+            </Button>
+            <Button variante="secondary" onClick={testarConexao}>
+              Testar conexão
             </Button>
             <Button onClick={sincronizar} disabled={sincronizando}>
               {sincronizando ? "Sincronizando…" : "Sincronizar com SEFAZ"}

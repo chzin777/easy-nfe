@@ -1,7 +1,7 @@
 "use server";
 
 import forge from "node-forge";
-import { carregarCertificado } from "@/lib/nfe";
+import { carregarCertificado, consultarStatus } from "@/lib/nfe";
 import {
   consultarDFe,
   manifestarDestinatario,
@@ -349,6 +349,24 @@ export async function diagnosticarCertificado(): Promise<DiagnosticoCert> {
     const msg = e instanceof Error ? e.message : String(e);
     if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
     return { ok: false, erro: msg };
+  }
+}
+
+// Teste de conexão mTLS: chama o Status do Serviço da SEFAZ-GO (mesmo caminho da
+// emissão). Isola se o problema é o mTLS em si (Vercel) ou só o Ambiente Nacional.
+export async function testarConexaoSefaz(): Promise<{ ok: boolean; cStat: string | null; xMotivo: string | null; erro?: string }> {
+  try {
+    const empresaId = await exigirEmpresa();
+    const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
+    const cUF = UF_IBGE[empresa.uf];
+    if (!cUF) return { ok: false, cStat: null, xMotivo: null, erro: `UF inválida: ${empresa.uf}` };
+    const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
+    const cert = carregarCertificado(pfxBase64, senha);
+    const r = await consultarStatus(cert, empresa.ambiente === "PRODUCAO" ? "1" : "2", cUF);
+    return { ok: r.ok, cStat: r.cStat, xMotivo: r.xMotivo };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, cStat: null, xMotivo: null, erro: msg };
   }
 }
 
