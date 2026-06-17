@@ -8,7 +8,8 @@ import Aurora from "./ui/Aurora";
 import Reveal from "./ui/Reveal";
 import ScrollVelocity from "./ui/ScrollVelocity";
 
-const WPP_VENDAS = "https://wa.me/5562996183309?text=" + encodeURIComponent("Olá! Quero falar sobre um plano do easy-nfe.");
+const WPP_VENDAS = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Quero falar sobre um plano do easy-nfe.");
+const WPP_PARCEIRO = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Sou contador(a) e quero ser parceiro(a) do easy-nfe. Gostaria de saber como funciona o programa de parcerias para contadores.");
 
 const RECURSOS = [
   { titulo: "Emissão de NF-e", desc: "Modelo 55 com autorização síncrona na SEFAZ em segundos.", icon: <IFile /> },
@@ -94,12 +95,13 @@ export default async function Landing() {
             <span className="relative h-8 w-8 shrink-0">
               <Image src="/logo-nobg.png" alt="easy-nfe" fill className="object-contain" />
             </span>
-            <span className="text-base font-bold tracking-tight">easy-nfe</span>
+            <span className="text-base font-bold tracking-tight">Easy NFe</span>
           </div>
           <div className="hidden items-center gap-8 text-sm text-slate-300 sm:flex">
             <a href="#recursos" className="transition hover:text-white">Recursos</a>
             <a href="#como-funciona" className="transition hover:text-white">Como funciona</a>
             <a href="#planos" className="transition hover:text-white">Planos</a>
+            <a href="#parceiros" className="transition hover:text-white">Parceiros</a>
             <a href="#faq" className="transition hover:text-white">FAQ</a>
           </div>
           <Link href="/login" className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white ring-1 ring-white/15 transition hover:bg-white/20">
@@ -221,6 +223,62 @@ export default async function Landing() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Parcerias com contadores */}
+      <section id="parceiros" className="bg-slate-50 py-24">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-gradient-to-br from-slate-900 to-slate-800 p-10 text-white sm:p-14">
+            <div className="grid items-center gap-10 lg:grid-cols-2">
+              <Reveal>
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-violet-300">
+                  Para contadores
+                </span>
+                <h2 className="mt-4 text-3xl font-bold tracking-tight">Seja parceiro contábil do easy-nfe</h2>
+                <p className="mt-3 text-slate-300">
+                  Indique o easy-nfe para seus clientes e ganhe comissão recorrente. Seus clientes emitem NF-e em segundos
+                  e você acompanha tudo com mais agilidade — menos planilha, menos retrabalho.
+                </p>
+                <ul className="mt-6 space-y-2.5 text-sm">
+                  {[
+                    "Comissão recorrente por cliente ativo",
+                    "Painel e suporte dedicados ao parceiro",
+                    "Condições especiais para a sua carteira",
+                    "Onboarding e treinamento da sua equipe",
+                  ].map((t) => (
+                    <li key={t} className="flex gap-2"><span className="text-violet-400">✓</span><span className="text-slate-200">{t}</span></li>
+                  ))}
+                </ul>
+                <a
+                  href={WPP_PARCEIRO}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-8 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:-translate-y-0.5"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm5.8 14.16c-.24.68-1.42 1.32-1.95 1.36-.5.04-.97.22-3.27-.68-2.77-1.09-4.53-3.92-4.66-4.1-.14-.18-1.13-1.5-1.13-2.86 0-1.36.71-2.03.97-2.31.24-.27.54-.34.71-.34.18 0 .36 0 .51.01.16.01.39-.06.6.46.24.55.81 1.91.88 2.05.07.14.12.3.02.48-.09.18-.14.3-.27.46-.14.16-.29.36-.41.48-.14.14-.28.29-.12.56.16.27.71 1.17 1.53 1.9 1.05.94 1.94 1.23 2.21 1.37.27.14.43.12.59-.07.16-.18.68-.79.86-1.06.18-.27.36-.22.6-.13.24.09 1.55.73 1.81.86.27.14.45.2.51.31.07.11.07.64-.17 1.32Z" /></svg>
+                  Quero ser parceiro
+                </a>
+              </Reveal>
+              <Reveal className="hidden lg:block">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-8 backdrop-blur">
+                  <div className="grid grid-cols-2 gap-6 text-center">
+                    {[
+                      { n: "Recorrente", l: "Comissão por cliente" },
+                      { n: "Sem custo", l: "Para começar" },
+                      { n: "Suporte", l: "Humano e dedicado" },
+                      { n: "7 dias", l: "Grátis pros clientes" },
+                    ].map((s) => (
+                      <div key={s.l}>
+                        <p className="text-2xl font-extrabold text-violet-300">{s.n}</p>
+                        <p className="mt-1 text-xs text-slate-400">{s.l}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </Reveal>
+            </div>
           </div>
         </div>
       </section>
