@@ -10,7 +10,7 @@ import {
   lerSessaoCompleta,
 } from "@/lib/auth";
 
-export type AuthResultado = { erro: string } | { ok: true };
+export type AuthResultado = { erro: string } | { ok: true; destino: string };
 
 // Papel do usuário logado (p/ a UI decidir mostrar link do painel admin).
 export async function papelAtual(): Promise<string | null> {
@@ -49,19 +49,18 @@ export async function entrar(
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const senha = String(formData.get("senha") ?? "");
 
-  let destino: string;
   try {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !user.ativo || !(await verificarSenha(senha, user.senhaHash))) {
       return { erro: "E-mail ou senha incorretos." };
     }
     await criarSessao(user.id, user.role);
-    destino = await aposLogin(user.id, user.role);
+    const destino = await aposLogin(user.id, user.role);
+    // Navegação feita no cliente (evita re-render do destino dentro da action).
+    return { ok: true, destino };
   } catch (e) {
     return { erro: e instanceof Error ? e.message : String(e) };
   }
-  // redirect() lança NEXT_REDIRECT — fica fora do try p/ não ser capturado.
-  redirect(destino);
 }
 
 export async function sair(): Promise<void> {

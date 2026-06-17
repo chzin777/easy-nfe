@@ -29,11 +29,23 @@ const STATUS_UI: Record<string, ResumoDashboard["recentes"][number]["status"]> =
   REJEITADA: "rejeitada", DENEGADA: "denegada",
 };
 
+const RESUMO_VAZIO: ResumoDashboard = {
+  produtos: 0, clientes: 0, transportadoras: 0, notasAutorizadas: 0, faturado: 0,
+  recentes: [], serieMensal: [], distribuicaoStatus: [],
+};
+
 export async function resumoDashboard(): Promise<ResumoDashboard> {
-  const empresaId = await empresaAtivaId();
-  if (!empresaId) {
-    return { produtos: 0, clientes: 0, transportadoras: 0, notasAutorizadas: 0, faturado: 0, recentes: [], serieMensal: [], distribuicaoStatus: [] };
+  try {
+    return await resumoInterno();
+  } catch {
+    // Nunca derruba o render do painel por falha de consulta.
+    return RESUMO_VAZIO;
   }
+}
+
+async function resumoInterno(): Promise<ResumoDashboard> {
+  const empresaId = await empresaAtivaId();
+  if (!empresaId) return RESUMO_VAZIO;
 
   // Janela dos últimos 6 meses para a série temporal.
   const agora = new Date();

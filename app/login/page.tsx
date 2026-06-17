@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Image from "next/image";
 import { Button, Field, Input } from "@/app/ui/primitives";
 import { entrar, type AuthResultado } from "../auth/actions";
@@ -14,6 +14,11 @@ export default function LoginPage() {
   // Controlados p/ preservar o que foi digitado quando o login falha.
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+
+  // Sucesso → navega no cliente (evita re-render do destino dentro da server action).
+  useEffect(() => {
+    if (estado && "ok" in estado) window.location.href = estado.destino;
+  }, [estado]);
 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
