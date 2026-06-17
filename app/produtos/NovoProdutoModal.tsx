@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Field, Input, Select, Textarea, SectionTitle } from "@/app/ui/primitives";
-import Modal from "@/app/ui/Modal";
+import StepperModal from "@/app/ui/StepperModal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import { ORIGENS, UNIDADES } from "@/lib/mock-data";
 import type { Produto } from "@/lib/types";
@@ -44,7 +44,7 @@ export default function NovoProdutoModal({
   }
 
   return (
-    <Modal aberto onFechar={onFechar} titulo="Novo produto" largura="max-w-2xl">
+    <StepperModal onFechar={onFechar} largura="max-w-2xl">
       <Stepper
         completeButtonText="Cadastrar produto"
         onFinalStepCompleted={salvar}
@@ -83,6 +83,6 @@ export default function NovoProdutoModal({
         </Step>
       </Stepper>
       {erro && <p className="mt-2 text-sm font-medium text-[var(--danger)]">{erro}</p>}
-    </Modal>
+    </StepperModal>
   );
 }

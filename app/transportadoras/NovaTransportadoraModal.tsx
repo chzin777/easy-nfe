@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Field, Input, Select, SectionTitle } from "@/app/ui/primitives";
-import Modal from "@/app/ui/Modal";
+import StepperModal from "@/app/ui/StepperModal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import { ContatoFields, EnderecoFields } from "@/app/ui/PessoaFields";
 import { TIPOS_TRANSPORTE } from "@/lib/mock-data";
@@ -39,7 +39,7 @@ export default function NovaTransportadoraModal({
   }
 
   return (
-    <Modal aberto onFechar={onFechar} titulo="Nova transportadora" largura="max-w-2xl">
+    <StepperModal onFechar={onFechar} largura="max-w-2xl">
       <Stepper
         completeButtonText="Cadastrar transportadora"
         onFinalStepCompleted={salvar}
@@ -70,6 +70,6 @@ export default function NovaTransportadoraModal({
         </Step>
       </Stepper>
       {erro && <p className="mt-2 text-sm font-medium text-[var(--danger)]">{erro}</p>}
-    </Modal>
+    </StepperModal>
   );
 }

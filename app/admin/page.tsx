@@ -5,6 +5,7 @@ import { motion, AnimatePresence, type Variants } from "motion/react";
 import { Badge, Button, Card, Field, Input, Select } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Stepper, { Step } from "@/app/ui/Stepper";
+import StepperModal from "@/app/ui/StepperModal";
 import Tabs from "@/app/ui/Tabs";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { FEATURES } from "@/lib/features";
@@ -328,13 +329,6 @@ function PlanoModal({ inicial, catalogo, planos, categorias, onFechar, onSalvo }
   const [arrastando, setArrastando] = useState<string | null>(null);
   const editando = !!p.id;
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onFechar(); };
-    window.addEventListener("keydown", handler);
-    document.body.style.overflow = "hidden";
-    return () => { window.removeEventListener("keydown", handler); document.body.style.overflow = ""; };
-  }, [onFechar]);
-
   function set<K extends keyof PlanoDados>(k: K, v: PlanoDados[K]) { setP((s) => ({ ...s, [k]: v })); }
 
   // ordem automática = nº de planos já na categoria escolhida + 1.
@@ -489,25 +483,13 @@ function PlanoModal({ inicial, catalogo, planos, categorias, onFechar, onSalvo }
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-sm sm:p-8"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onFechar(); }}
-    >
-      <div className="relative my-auto w-full max-w-3xl">
-        <button
-          onClick={onFechar}
-          aria-label="Fechar"
-          className="absolute right-3 top-3 z-10 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-        </button>
-        <Stepper completeButtonText="Cadastrar plano" onFinalStepCompleted={salvar} canProceed={(s) => (s === 1 ? p.nome.trim() !== "" : true)}>
-          <Step>{dados}</Step>
-          <Step>{beneficiosUI}</Step>
-        </Stepper>
-        {erro && <p className="mt-2 text-sm font-medium text-[var(--danger)]">{erro}</p>}
-      </div>
-    </div>
+    <StepperModal onFechar={onFechar} largura="max-w-3xl">
+      <Stepper completeButtonText="Cadastrar plano" onFinalStepCompleted={salvar} canProceed={(s) => (s === 1 ? p.nome.trim() !== "" : true)}>
+        <Step>{dados}</Step>
+        <Step>{beneficiosUI}</Step>
+      </Stepper>
+      {erro && <p className="mt-2 text-sm font-medium text-[var(--danger)]">{erro}</p>}
+    </StepperModal>
   );
 }
 
