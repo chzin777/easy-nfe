@@ -144,9 +144,9 @@ const DIFERENCIAIS: { titulo: string; desc: string; icon: ReactNode; disponivel:
   },
   {
     titulo: "Captura de notas recebidas (DFe)",
-    desc: "Baixamos da SEFAZ todas as notas emitidas contra o seu CNPJ e fazemos a manifestação do destinatário automática. Você nunca perde uma nota — nem leva multa.",
+    desc: "Baixamos da SEFAZ todas as notas emitidas contra o seu CNPJ e você faz a manifestação do destinatário num clique. Você nunca perde uma nota — nem leva multa.",
     icon: <Svg d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" extra={<path d="m9 11 2 2 4-4" />} />,
-    disponivel: false,
+    disponivel: true,
     tags: ["Manifestação", "DF-e", "Compliance"],
   },
   {

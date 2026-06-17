@@ -1,6 +1,8 @@
 import https from "node:https";
 import { gunzipSync } from "node:zlib";
 import type { Certificado } from "./cert";
+import { dataHoraBrasilia } from "./chave";
+import { assinar } from "./sign";
 
 // Distribuição DFe — Ambiente Nacional (puxa documentos emitidos contra o CNPJ).
 const ENDPOINT = {
@@ -8,6 +10,13 @@ const ENDPOINT = {
   "2": "https://hom.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx",
 } as const;
 const WSDL_NS = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe";
+
+// Recepção de Evento — Ambiente Nacional (manifestação do destinatário, cOrgao 91).
+const ENDPOINT_EVENTO = {
+  "1": "https://www1.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx",
+  "2": "https://hom.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx",
+} as const;
+const WSDL_NS_EVENTO = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4";
 
 export type DocDFe = { nsu: string; schema: string; xml: string };
 export type ResultadoDFe = {
@@ -24,13 +33,21 @@ function extrai(body: string, tag: string): string | null {
   return m ? m[1].trim() : null;
 }
 
-function soap(tpAmb: "1" | "2", inner: string, cert: Certificado): Promise<string> {
+// POST SOAP 1.2 via mTLS para um endpoint do Ambiente Nacional. `operacao` é a
+// tag-operação do WSDL (nfeDistDFeInteresse / nfeRecepcaoEvento) que envolve o nfeDadosMsg.
+function soapAN(
+  url: string,
+  wsdlNs: string,
+  operacao: string,
+  inner: string,
+  cert: Certificado,
+): Promise<string> {
   const envelope =
     `<?xml version="1.0" encoding="utf-8"?>` +
     `<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">` +
-    `<soap:Body><nfeDistDFeInteresse xmlns="${WSDL_NS}"><nfeDadosMsg>${inner}</nfeDadosMsg></nfeDistDFeInteresse></soap:Body>` +
+    `<soap:Body><${operacao} xmlns="${wsdlNs}"><nfeDadosMsg>${inner}</nfeDadosMsg></${operacao}></soap:Body>` +
     `</soap:Envelope>`;
-  const u = new URL(ENDPOINT[tpAmb]);
+  const u = new URL(url);
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
@@ -49,6 +66,10 @@ function soap(tpAmb: "1" | "2", inner: string, cert: Certificado): Promise<strin
     req.write(envelope);
     req.end();
   });
+}
+
+function soap(tpAmb: "1" | "2", inner: string, cert: Certificado): Promise<string> {
+  return soapAN(ENDPOINT[tpAmb], WSDL_NS, "nfeDistDFeInteresse", inner, cert);
 }
 
 // Consulta documentos a partir do último NSU conhecido (lote de até 50 por chamada).
@@ -83,4 +104,69 @@ export async function consultarDFe(
 
   // 138 = documentos localizados, 137 = nenhum documento novo.
   return { ok: cStat === "138" || cStat === "137", cStat, xMotivo, ultNSU, maxNSU, docs };
+}
+
+// ----------------------------------------------------------------------------
+// Manifestação do destinatário (eventos 2102xx) — Ambiente Nacional, cOrgao 91.
+// ----------------------------------------------------------------------------
+export type TipoManifesto = "210200" | "210210" | "210220" | "210240";
+
+const DESC_MANIFESTO: Record<TipoManifesto, string> = {
+  "210200": "Confirmacao da Operacao",
+  "210210": "Ciencia da Operacao",
+  "210220": "Desconhecimento da Operacao",
+  "210240": "Operacao nao Realizada",
+};
+
+export type ResultadoManifesto = {
+  ok: boolean;
+  cStat: string | null;
+  xMotivo: string | null;
+  nProt: string | null;
+};
+
+// Envia a manifestação do destinatário sobre uma NF-e (chave de 44 dígitos).
+// 210240 (Operação não Realizada) exige justificativa de 15 a 255 caracteres.
+export async function manifestarDestinatario(
+  cert: Certificado,
+  params: {
+    tpAmb: "1" | "2";
+    cnpj: string;
+    chave: string;
+    tipo: TipoManifesto;
+    justificativa?: string;
+  },
+): Promise<ResultadoManifesto> {
+  const cnpj = params.cnpj.replace(/\D/g, "");
+  const dh = dataHoraBrasilia();
+  const nSeq = "1";
+  const idEvento = `ID${params.tipo}${params.chave}${nSeq.padStart(2, "0")}`;
+
+  const xJust =
+    params.tipo === "210240"
+      ? `<xJust>${(params.justificativa ?? "").replace(/[<>&]/g, " ")}</xJust>`
+      : "";
+
+  const infEvento =
+    `<infEvento Id="${idEvento}">` +
+    `<cOrgao>91</cOrgao><tpAmb>${params.tpAmb}</tpAmb><CNPJ>${cnpj}</CNPJ>` +
+    `<chNFe>${params.chave}</chNFe><dhEvento>${dh}</dhEvento><tpEvento>${params.tipo}</tpEvento>` +
+    `<nSeqEvento>${nSeq}</nSeqEvento><verEvento>1.00</verEvento>` +
+    `<detEvento versao="1.00"><descEvento>${DESC_MANIFESTO[params.tipo]}</descEvento>${xJust}</detEvento>` +
+    `</infEvento>`;
+  const evento = `<evento versao="1.00" xmlns="http://www.portalfiscal.inf.br/nfe">${infEvento}</evento>`;
+  const eventoAssinado = assinar(evento, idEvento, cert, "infEvento");
+  const envEvento =
+    `<envEvento versao="1.00" xmlns="http://www.portalfiscal.inf.br/nfe">` +
+    `<idLote>1</idLote>${eventoAssinado}</envEvento>`;
+
+  const body = await soapAN(ENDPOINT_EVENTO[params.tpAmb], WSDL_NS_EVENTO, "nfeRecepcaoEvento", envEvento, cert);
+
+  // O retorno traz o status do lote e, dentro de retEvento, o status do evento.
+  const retEvento = body.match(/<retEvento[\s\S]*?<\/retEvento>/)?.[0] ?? body;
+  const cStat = extrai(retEvento, "cStat");
+  const xMotivo = extrai(retEvento, "xMotivo");
+  const nProt = extrai(retEvento, "nProt");
+  // 135 = registrado e vinculado, 136 = registrado (não vinculado — nota ainda não na base).
+  return { ok: cStat === "135" || cStat === "136", cStat, xMotivo, nProt };
 }

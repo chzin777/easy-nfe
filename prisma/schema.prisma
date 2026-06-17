@@ -214,7 +214,13 @@ model Emitente {
   certTitular   String?
   certValidoAte DateTime?
 
+  // Distribuição DFe — cursor do último NSU consultado na SEFAZ (Ambiente Nacional).
+  dfeUltNSU     String?
+  dfeMaxNSU     String?
+  dfeSincNSUEm  DateTime?
+
   notas         Nota[]
+  notasRecebidas NotaRecebida[]
   produtos      Produto[]
   clientes      Cliente[]
   transportadoras Transportadora[]
@@ -405,4 +411,48 @@ model ItemNota {
   valorTotal    Decimal  @db.Decimal(15, 2)
 
   @@map("itens_nota")
+}
+
+// ----------------------------------------------------------------------------
+// Notas recebidas (Distribuição DFe) — documentos emitidos CONTRA o CNPJ da
+// empresa, baixados da SEFAZ. Inclui resumos (NFe), notas completas (procNFe)
+// e eventos. A manifestação do destinatário é registrada aqui.
+// ----------------------------------------------------------------------------
+enum ManifestacaoTipo {
+  PENDENTE        // ainda não manifestada
+  CIENCIA         // 210210 — Ciência da Operação
+  CONFIRMACAO     // 210200 — Confirmação da Operação
+  DESCONHECIMENTO // 210220 — Desconhecimento da Operação
+  NAO_REALIZADA   // 210240 — Operação não Realizada
+}
+
+model NotaRecebida {
+  id            String   @id @default(uuid())
+
+  empresaId     String
+  empresa       Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  nsu           String   // NSU do documento na Distribuição DFe
+  schema        String   // ex.: "resNFe_v1.01.xsd", "procNFe_v4.00.xsd", "resEvento_v1.01.xsd"
+  tipoDoc       String   // "resumo" | "nfe" | "evento"
+
+  chaveAcesso   String?  // chNFe (44 dígitos) quando aplicável
+  emitenteCnpj  String?
+  emitenteNome  String?
+  valorTotal    Decimal? @db.Decimal(15, 2)
+  emitidaEm     DateTime?
+  descricao     String?  // descEvento / situação, p/ documentos de evento
+
+  xml           String   @db.Text // XML bruto do documento (resumo ou nota completa)
+
+  manifestacao  ManifestacaoTipo @default(PENDENTE)
+  manifestadaEm DateTime?
+  protocoloManifesto String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([empresaId, nsu])
+  @@index([empresaId, chaveAcesso])
+  @@map("notas_recebidas")
 }
