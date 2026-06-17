@@ -29,6 +29,7 @@ const grupos: Grupo[] = [
     itens: [
       { href: "/notas/nova", label: "Emitir nova nota", icon: <IconPlus /> },
       { href: "/notas", label: "Notas emitidas", icon: <IconList /> },
+      { href: "/notas/recebidas", label: "Notas recebidas", icon: <IconImport /> },
       { href: "/importar", label: "Importar XML", icon: <IconImport /> },
     ],
   },
