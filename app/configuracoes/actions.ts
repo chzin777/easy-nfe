@@ -329,7 +329,8 @@ export type EquipeInfo = {
   permitido: boolean; // plano permite equipe (>1 ou ilimitado)
 };
 
-async function exigirDono(uid: string, empresaId: string) {
+async function exigirDono(uid: string, role: string, empresaId: string) {
+  if (isAdminRole(role)) return; // admin/suporte gerenciam qualquer empresa
   const acesso = await prisma.acessoEmpresa.findUnique({
     where: { userId_empresaId: { userId: uid, empresaId } },
     select: { papel: true },
@@ -338,14 +339,17 @@ async function exigirDono(uid: string, empresaId: string) {
 }
 
 export async function listarEquipe(): Promise<EquipeInfo> {
-  const { uid } = await exigirSessao();
+  const { uid, role } = await exigirSessao();
   const empresaId = await exigirEmpresa();
   const acessos = await prisma.acessoEmpresa.findMany({
     where: { empresaId },
     include: { user: { select: { id: true, email: true, nome: true } } },
     orderBy: { createdAt: "asc" },
   });
+  const admin = isAdminRole(role);
   const lim = await limiteEquipe(uid, empresaId);
+  // Admin/suporte: equipe sempre liberada, sem limite.
+  const limite = admin ? -1 : lim.limite;
   return {
     membros: acessos.map((a) => ({
       userId: a.user.id,
@@ -354,10 +358,10 @@ export async function listarEquipe(): Promise<EquipeInfo> {
       papel: a.papel,
       voce: a.user.id === uid,
     })),
-    limite: lim.limite,
+    limite,
     usados: lim.usados,
-    podeAdicionar: lim.podeAdicionar,
-    permitido: lim.limite < 0 || lim.limite > 1,
+    podeAdicionar: admin || lim.podeAdicionar,
+    permitido: admin || limite < 0 || limite > 1,
   };
 }
 
@@ -367,14 +371,16 @@ export async function adicionarMembro(input: {
   senha: string;
 }): Promise<{ ok: true } | { ok: false; erro: string }> {
   try {
-    const { uid } = await exigirSessao();
+    const { uid, role } = await exigirSessao();
     const empresaId = await exigirEmpresa();
-    await exigirDono(uid, empresaId);
+    await exigirDono(uid, role, empresaId);
 
-    const lim = await limiteEquipe(uid, empresaId);
-    const permitido = lim.limite < 0 || lim.limite > 1;
-    if (!permitido) return { ok: false, erro: "Seu plano não inclui equipe. Faça upgrade para adicionar usuários." };
-    if (!lim.podeAdicionar) return { ok: false, erro: `Seu plano permite ${lim.limite} membro(s) por empresa e você já tem ${lim.usados}.` };
+    if (!isAdminRole(role)) {
+      const lim = await limiteEquipe(uid, empresaId);
+      const permitido = lim.limite < 0 || lim.limite > 1;
+      if (!permitido) return { ok: false, erro: "Seu plano não inclui equipe. Faça upgrade para adicionar usuários." };
+      if (!lim.podeAdicionar) return { ok: false, erro: `Seu plano permite ${lim.limite} membro(s) por empresa e você já tem ${lim.usados}.` };
+    }
 
     const email = input.email.trim().toLowerCase();
     if (!emailValido(email)) return { ok: false, erro: "E-mail inválido." };
@@ -401,9 +407,9 @@ export async function adicionarMembro(input: {
 
 export async function removerMembro(userId: string): Promise<{ ok: true } | { ok: false; erro: string }> {
   try {
-    const { uid } = await exigirSessao();
+    const { uid, role } = await exigirSessao();
     const empresaId = await exigirEmpresa();
-    await exigirDono(uid, empresaId);
+    await exigirDono(uid, role, empresaId);
     // Não remove o dono.
     await prisma.acessoEmpresa.deleteMany({ where: { userId, empresaId, papel: { not: "dono" } } });
     return { ok: true };
