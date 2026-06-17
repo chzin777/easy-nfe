@@ -270,6 +270,17 @@ export async function salvarCertificado(
   const info = await inspecionarCertificado(pfxBase64, senha);
   if (!info.ok) return { ok: false, erro: info.erro };
 
+  // Trava de segurança: o CNPJ do certificado deve bater com o da empresa.
+  const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId }, select: { cnpj: true } });
+  const cnpjCert = (info.cnpj || "").replace(/\D/g, "");
+  const cnpjEmpresa = empresa.cnpj.replace(/\D/g, "");
+  if (cnpjCert && cnpjEmpresa && cnpjCert !== cnpjEmpresa) {
+    return {
+      ok: false,
+      erro: `O certificado é do CNPJ ${info.cnpj}, mas esta empresa é ${cnpjEmpresa}. Use o certificado correto.`,
+    };
+  }
+
   const blob = encriptar(JSON.stringify({ pfxBase64, senha }));
   await prisma.emitente.update({
     where: { id: empresaId },

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Button, Field, Input, Select, Textarea } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
+import Flutuante from "@/app/ui/Flutuante";
 import { ORIGENS, UNIDADES } from "@/lib/mock-data";
 import { formatBRL } from "@/lib/format";
 import type { Produto } from "@/lib/types";
@@ -36,15 +37,7 @@ export default function ProdutoPicker({
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
   const [modal, setModal] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function fora(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false);
-    }
-    document.addEventListener("mousedown", fora);
-    return () => document.removeEventListener("mousedown", fora);
-  }, []);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   const sel = produtos.find((p) => p.id === value);
   const q = busca.trim().toLowerCase();
@@ -53,8 +46,9 @@ export default function ProdutoPicker({
     : produtos;
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setAberto((v) => !v)}
         className={
@@ -68,8 +62,8 @@ export default function ProdutoPicker({
         <svg className={"shrink-0 text-slate-400 transition-transform " + (aberto ? "rotate-180" : "")} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
       </button>
 
-      {aberto && (
-        <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-xl">
+      <Flutuante anchorRef={btnRef} aberto={aberto} onFechar={() => setAberto(false)}>
+        <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-xl">
           <div className="border-b border-[var(--border)] p-2">
             <input
               autoFocus
@@ -109,7 +103,7 @@ export default function ProdutoPicker({
             Cadastrar novo produto
           </button>
         </div>
-      )}
+      </Flutuante>
 
       {modal && <NovoProdutoModal onFechar={() => setModal(false)} onCriado={(p) => { setModal(false); onCriado(p); }} />}
     </div>
