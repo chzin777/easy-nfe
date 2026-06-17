@@ -290,6 +290,71 @@ export async function listarBeneficios(): Promise<Beneficio[]> {
   return rows.map((b) => ({ id: b.id, chave: b.chave, nome: b.nome }));
 }
 
+// ----------------------------------------------------------------------------
+// CRUD do catálogo de benefícios
+// ----------------------------------------------------------------------------
+export type BeneficioDados = {
+  id?: string;
+  chave: string;
+  nome: string;
+  descricao: string;
+  ordem: number;
+  ativo: boolean;
+  emUso?: number; // planos que usam (read-only)
+};
+
+const slug = (s: string) =>
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+
+export async function listarBeneficiosAdmin(): Promise<Required<BeneficioDados>[]> {
+  await exigirAdmin();
+  const rows = await prisma.beneficio.findMany({
+    orderBy: { ordem: "asc" },
+    include: { _count: { select: { planos: true } } },
+  });
+  return rows.map((b) => ({
+    id: b.id,
+    chave: b.chave,
+    nome: b.nome,
+    descricao: b.descricao ?? "",
+    ordem: b.ordem,
+    ativo: b.ativo,
+    emUso: b._count.planos,
+  }));
+}
+
+export async function salvarBeneficio(dados: BeneficioDados): Promise<Resultado> {
+  try {
+    await exigirAdmin();
+    if (!dados.nome.trim()) return { ok: false, erro: "Nome é obrigatório." };
+    const chave = (dados.chave.trim() ? slug(dados.chave) : slug(dados.nome)) || slug(dados.nome);
+    if (!chave) return { ok: false, erro: "Não foi possível gerar a chave." };
+
+    const conflito = await prisma.beneficio.findUnique({ where: { chave }, select: { id: true } });
+    if (conflito && conflito.id !== dados.id) return { ok: false, erro: `Já existe um benefício com a chave "${chave}".` };
+
+    const data = { chave, nome: dados.nome, descricao: dados.descricao || null, ordem: dados.ordem, ativo: dados.ativo };
+    if (dados.id) {
+      await prisma.beneficio.update({ where: { id: dados.id }, data });
+      return { ok: true, id: dados.id };
+    }
+    const b = await prisma.beneficio.create({ data });
+    return { ok: true, id: b.id };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function excluirBeneficio(id: string): Promise<Resultado> {
+  try {
+    await exigirAdminMaster();
+    await prisma.beneficio.delete({ where: { id } });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function listarPlanos(): Promise<Required<PlanoDados>[]> {
   await exigirAdmin();
   const rows = await prisma.plano.findMany({

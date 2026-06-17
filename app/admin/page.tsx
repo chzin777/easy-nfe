@@ -9,6 +9,7 @@ import {
   listarUsuarios, criarUsuario, type UsuarioResumo,
   listarPlanos, salvarPlano, excluirPlano, type PlanoDados,
   listarBeneficios, type Beneficio,
+  listarBeneficiosAdmin, salvarBeneficio, excluirBeneficio, type BeneficioDados,
 } from "./actions";
 import UsuarioDetalhe from "./UsuarioDetalhe";
 
@@ -22,8 +23,13 @@ const tomLicenca: Record<string, "success" | "danger" | "warning" | "neutral" | 
   ATIVA: "success", TRIAL: "primary", EXPIRADA: "danger", SUSPENSA: "warning", CANCELADA: "neutral",
 };
 
-const ABAS = ["usuarios", "planos"] as const;
+const ABAS = ["usuarios", "planos", "beneficios"] as const;
 type Aba = (typeof ABAS)[number];
+const ABA_LABEL: Record<Aba, string> = {
+  usuarios: "Usuários & Licenças",
+  planos: "Planos",
+  beneficios: "Benefícios",
+};
 
 const abaVariants: Variants = {
   enter: (dir: number) => ({ x: dir >= 0 ? "100%" : "-100%", opacity: 0 }),
@@ -55,7 +61,7 @@ export default function AdminPage() {
             onClick={() => trocar(a)}
             className={"rounded-md px-4 py-1.5 transition " + (aba === a ? "bg-white text-[var(--primary)] shadow-sm" : "text-slate-500")}
           >
-            {a === "usuarios" ? "Usuários & Licenças" : "Planos"}
+            {ABA_LABEL[a]}
           </button>
         ))}
       </div>
@@ -71,7 +77,7 @@ export default function AdminPage() {
             exit="exit"
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           >
-            {aba === "usuarios" ? <AbaUsuarios /> : <AbaPlanos />}
+            {aba === "usuarios" ? <AbaUsuarios /> : aba === "planos" ? <AbaPlanos /> : <AbaBeneficios />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -335,6 +341,109 @@ function PlanoModal({ inicial, catalogo, onFechar, onSalvo }: { inicial: PlanoDa
           <input type="checkbox" checked={p.ativo} onChange={(e) => set("ativo", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
           Ativo (exibir na landing page)
         </label>
+        {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
+      </div>
+    </Modal>
+  );
+}
+
+function AbaBeneficios() {
+  const [itens, setItens] = useState<Required<BeneficioDados>[]>([]);
+  const [edit, setEdit] = useState<BeneficioDados | null>(null);
+
+  async function recarregar() { setItens(await listarBeneficiosAdmin()); }
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void recarregar(); }, []);
+
+  const vazio: BeneficioDados = { chave: "", nome: "", descricao: "", ordem: itens.length + 1, ativo: true };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-[var(--muted)]">{itens.length} benefício(s) no catálogo. Use-os ao montar os planos.</p>
+        <Button onClick={() => setEdit(vazio)}>+ Novo benefício</Button>
+      </div>
+
+      <Card className="overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[var(--border)] bg-slate-50 text-left text-xs uppercase tracking-wider text-[var(--muted)]">
+              <th className="px-4 py-2.5">Nome</th>
+              <th className="px-4 py-2.5">Chave</th>
+              <th className="px-4 py-2.5 text-center">Ordem</th>
+              <th className="px-4 py-2.5 text-center">Em uso</th>
+              <th className="px-4 py-2.5 text-center">Ativo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {itens.length === 0 ? (
+              <tr><td colSpan={5} className="px-4 py-10 text-center text-[var(--muted)]">Nenhum benefício.</td></tr>
+            ) : itens.map((b) => (
+              <tr key={b.id} onClick={() => setEdit(b)} className="cursor-pointer border-b border-[var(--border)] last:border-0 hover:bg-slate-50">
+                <td className="px-4 py-3">
+                  <p className="font-medium">{b.nome}</p>
+                  {b.descricao && <p className="text-xs text-[var(--muted)]">{b.descricao}</p>}
+                </td>
+                <td className="px-4 py-3"><code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs">{b.chave}</code></td>
+                <td className="px-4 py-3 text-center">{b.ordem}</td>
+                <td className="px-4 py-3 text-center">{b.emUso}</td>
+                <td className="px-4 py-3 text-center">{b.ativo ? "✓" : "✗"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+
+      {edit && <BeneficioModal inicial={edit} onFechar={() => setEdit(null)} onSalvo={() => { setEdit(null); recarregar(); }} />}
+    </div>
+  );
+}
+
+function BeneficioModal({ inicial, onFechar, onSalvo }: { inicial: BeneficioDados; onFechar: () => void; onSalvo: () => void }) {
+  const [b, setB] = useState<BeneficioDados>(inicial);
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  function set<K extends keyof BeneficioDados>(k: K, v: BeneficioDados[K]) { setB((s) => ({ ...s, [k]: v })); }
+
+  async function salvar() {
+    setSalvando(true); setErro(null);
+    const r = await salvarBeneficio(b);
+    setSalvando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    onSalvo();
+  }
+  async function excluir() {
+    if (!b.id) return;
+    setSalvando(true);
+    const r = await excluirBeneficio(b.id);
+    setSalvando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    onSalvo();
+  }
+
+  return (
+    <Modal aberto onFechar={onFechar} titulo={b.id ? "Editar benefício" : "Novo benefício"} largura="max-w-lg"
+      rodape={
+        <div className="flex w-full items-center justify-between">
+          {b.id ? <Button variante="ghost" className="text-[var(--danger)]" onClick={excluir} disabled={salvando}>Excluir</Button> : <span />}
+          <div className="flex gap-2">
+            <Button variante="secondary" onClick={onFechar} disabled={salvando}>Cancelar</Button>
+            <Button onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="Nome" required><Input value={b.nome} onChange={(e) => set("nome", e.target.value)} placeholder="Ex.: Integração com WhatsApp" /></Field>
+        <Field label="Chave" hint="Identificador único; deixe vazio para gerar do nome"><Input value={b.chave} onChange={(e) => set("chave", e.target.value)} placeholder="whatsapp" /></Field>
+        <Field label="Descrição (opcional)"><Input value={b.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Ordem"><Input type="number" value={b.ordem} onChange={(e) => set("ordem", Number(e.target.value))} /></Field>
+          <label className="flex items-end gap-2 pb-2.5 text-sm">
+            <input type="checkbox" checked={b.ativo} onChange={(e) => set("ativo", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+            Ativo
+          </label>
+        </div>
         {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
       </div>
     </Modal>
