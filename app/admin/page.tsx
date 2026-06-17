@@ -483,11 +483,17 @@ function PlanoModal({ inicial, catalogo, planos, categorias, onFechar, onSalvo }
   }
 
   return (
-    <StepperModal onFechar={onFechar} largura="max-w-3xl">
-      <Stepper completeButtonText="Cadastrar plano" onFinalStepCompleted={salvar} canProceed={(s) => (s === 1 ? p.nome.trim() !== "" : true)}>
-        <Step>{dados}</Step>
-        <Step>{beneficiosUI}</Step>
-      </Stepper>
+    <StepperModal onFechar={salvando ? () => {} : onFechar} largura="max-w-3xl">
+      {salvando ? (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-16 shadow-2xl">
+          <LightningLoader texto="Cadastrando plano…" />
+        </div>
+      ) : (
+        <Stepper completeButtonText="Cadastrar plano" onFinalStepCompleted={salvar} canProceed={(s) => (s === 1 ? p.nome.trim() !== "" : true)}>
+          <Step>{dados}</Step>
+          <Step>{beneficiosUI}</Step>
+        </Stepper>
+      )}
       {erro && <p className="mt-2 text-sm font-medium text-[var(--danger)]">{erro}</p>}
     </StepperModal>
   );
