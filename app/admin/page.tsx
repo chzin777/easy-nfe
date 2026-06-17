@@ -14,7 +14,7 @@ import {
   listarPlanos, salvarPlano, excluirPlano, type PlanoDados,
   listarBeneficios, type Beneficio,
   listarBeneficiosAdmin, salvarBeneficio, excluirBeneficio, type BeneficioDados,
-  listarCategorias, criarCategoria, type CategoriaPlano,
+  listarCategorias, criarCategoria, renomearCategoria, type CategoriaPlano,
 } from "./actions";
 import UsuarioDetalhe from "./UsuarioDetalhe";
 
@@ -210,6 +210,7 @@ function AbaPlanos() {
   const [categorias, setCategorias] = useState<CategoriaPlano[]>([]);
   const [edit, setEdit] = useState<PlanoDados | null>(null);
   const [novaCat, setNovaCat] = useState(false);
+  const [editCat, setEditCat] = useState<CategoriaPlano | null>(null);
   const [carregando, setCarregando] = useState(true);
 
   async function recarregar() {
@@ -289,18 +290,33 @@ function AbaPlanos() {
       ) : planos.length === 0 ? (
         <p className="py-10 text-center text-sm text-[var(--muted)]">Nenhum plano. Crie o primeiro.</p>
       ) : (
-        grupos.map((g) => (
-          <div key={g.categoria || "_sem_"}>
-            <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">{g.categoria || "Sem categoria"}</p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {g.itens.map(cardPlano)}
+        grupos.map((g) => {
+          const cat = categorias.find((c) => c.nome === g.categoria);
+          return (
+            <div key={g.categoria || "_sem_"}>
+              <div className="mb-2 flex items-center gap-1.5">
+                <p className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">{g.categoria || "Sem categoria"}</p>
+                {cat && (
+                  <button
+                    onClick={() => setEditCat(cat)}
+                    title="Renomear categoria"
+                    className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-[var(--primary)]"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {g.itens.map(cardPlano)}
+              </div>
             </div>
-          </div>
-        ))
+          );
+        })
       )}
 
       {edit && <PlanoModal inicial={edit} catalogo={beneficios} planos={planos} categorias={categorias} onFechar={() => setEdit(null)} onSalvo={() => { setEdit(null); recarregar(); }} />}
       {novaCat && <NovaCategoriaModal onFechar={() => setNovaCat(false)} onCriada={() => { setNovaCat(false); recarregar(); }} />}
+      {editCat && <NovaCategoriaModal inicial={editCat} onFechar={() => setEditCat(null)} onCriada={() => { setEditCat(null); recarregar(); }} />}
     </div>
   );
 }
@@ -312,7 +328,23 @@ function PlanoModal({ inicial, catalogo, planos, categorias, onFechar, onSalvo }
   const [arrastando, setArrastando] = useState<string | null>(null);
   const editando = !!p.id;
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onFechar(); };
+    window.addEventListener("keydown", handler);
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", handler); document.body.style.overflow = ""; };
+  }, [onFechar]);
+
   function set<K extends keyof PlanoDados>(k: K, v: PlanoDados[K]) { setP((s) => ({ ...s, [k]: v })); }
+
+  // ordem automática = nº de planos já na categoria escolhida + 1.
+  function setCategoria(cat: string) {
+    const ord = planos.filter((x) => x.categoria === cat && x.id !== p.id).length + 1;
+    setP((s) => ({ ...s, categoria: cat, ordem: ord }));
+  }
+
+  const ilimitadoEmpresas = p.limiteEmpresas < 0;
+  const ilimitadoUsuarios = p.limiteUsuarios < 0;
 
   const prevNome = nomePlanoAnterior(planos, p.ordem, p.id);
   const noPlano = p.beneficioIds.map((id) => catalogo.find((b) => b.id === id)).filter(Boolean) as Beneficio[];
@@ -345,21 +377,42 @@ function PlanoModal({ inicial, catalogo, planos, categorias, onFechar, onSalvo }
           <Select
             opcoes={[{ value: "", label: "— sem categoria —" }, ...categorias.map((c) => ({ value: c.nome, label: c.nome }))]}
             value={p.categoria}
-            onChange={(e) => set("categoria", e.target.value)}
+            onChange={(e) => setCategoria(e.target.value)}
           />
         </Field>
-        <Field label="Preço de (riscado)" hint="0 = sem promoção"><Input type="number" step="0.01" min="0" value={p.precoAntigo} onChange={(e) => set("precoAntigo", Number(e.target.value))} /></Field>
-        <Field label="Preço (R$)"><Input type="number" step="0.01" min="0" value={p.preco} onChange={(e) => set("preco", Number(e.target.value))} /></Field>
         <Field label="Periodicidade"><Select opcoes={[{ value: "mensal", label: "Mensal" }, { value: "anual", label: "Anual" }]} value={p.periodicidade} onChange={(e) => set("periodicidade", e.target.value)} /></Field>
-        <Field label="Ordem"><Input type="number" value={p.ordem} onChange={(e) => set("ordem", Number(e.target.value))} /></Field>
-        <Field label="Limite de empresas" hint="-1 = ilimitado"><Input type="number" value={p.limiteEmpresas} onChange={(e) => set("limiteEmpresas", Number(e.target.value))} /></Field>
-        <Field label="Usuários por empresa" hint="-1 = ilimitado"><Input type="number" value={p.limiteUsuarios} onChange={(e) => set("limiteUsuarios", Number(e.target.value))} /></Field>
-        <Field label="Descrição" className="col-span-2"><Input value={p.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
+        <Field label="Ordem" hint="Automática pela categoria"><Input type="number" value={p.ordem} onChange={(e) => set("ordem", Number(e.target.value))} /></Field>
       </div>
+
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={p.sobConsulta} onChange={(e) => set("sobConsulta", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
         Sob consulta (sem preço fixo — landing mostra “Fale com vendedores”)
       </label>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Preço de (riscado)" hint="0 = sem promoção"><Input type="number" step="0.01" min="0" value={p.precoAntigo} disabled={p.sobConsulta} onChange={(e) => set("precoAntigo", Number(e.target.value))} /></Field>
+        <Field label="Preço (R$)"><Input type="number" step="0.01" min="0" value={p.preco} disabled={p.sobConsulta} onChange={(e) => set("preco", Number(e.target.value))} /></Field>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Limite de empresas">
+          <Input type="number" min="1" value={ilimitadoEmpresas ? "" : p.limiteEmpresas} disabled={ilimitadoEmpresas} placeholder={ilimitadoEmpresas ? "Ilimitado" : ""} onChange={(e) => set("limiteEmpresas", Number(e.target.value))} />
+          <label className="mt-1.5 flex items-center gap-2 text-xs text-[var(--muted)]">
+            <input type="checkbox" checked={ilimitadoEmpresas} onChange={(e) => set("limiteEmpresas", e.target.checked ? -1 : 1)} className="h-3.5 w-3.5 accent-[var(--primary)]" />
+            Ilimitado
+          </label>
+        </Field>
+        <Field label="Usuários por empresa">
+          <Input type="number" min="1" value={ilimitadoUsuarios ? "" : p.limiteUsuarios} disabled={ilimitadoUsuarios} placeholder={ilimitadoUsuarios ? "Ilimitado" : ""} onChange={(e) => set("limiteUsuarios", Number(e.target.value))} />
+          <label className="mt-1.5 flex items-center gap-2 text-xs text-[var(--muted)]">
+            <input type="checkbox" checked={ilimitadoUsuarios} onChange={(e) => set("limiteUsuarios", e.target.checked ? -1 : 1)} className="h-3.5 w-3.5 accent-[var(--primary)]" />
+            Ilimitado
+          </label>
+        </Field>
+      </div>
+
+      <Field label="Descrição"><Input value={p.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
+
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={p.ativo} onChange={(e) => set("ativo", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
         Ativo (exibir na landing page)
@@ -436,13 +489,25 @@ function PlanoModal({ inicial, catalogo, planos, categorias, onFechar, onSalvo }
   }
 
   return (
-    <Modal aberto onFechar={onFechar} titulo="Novo plano" largura="max-w-3xl">
-      <Stepper completeButtonText="Cadastrar plano" onFinalStepCompleted={salvar} canProceed={(s) => (s === 1 ? p.nome.trim() !== "" : true)}>
-        <Step>{dados}</Step>
-        <Step>{beneficiosUI}</Step>
-      </Stepper>
-      {erro && <p className="mt-2 text-sm font-medium text-[var(--danger)]">{erro}</p>}
-    </Modal>
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-sm sm:p-8"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onFechar(); }}
+    >
+      <div className="relative my-auto w-full max-w-3xl">
+        <button
+          onClick={onFechar}
+          aria-label="Fechar"
+          className="absolute right-3 top-3 z-10 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+        </button>
+        <Stepper completeButtonText="Cadastrar plano" onFinalStepCompleted={salvar} canProceed={(s) => (s === 1 ? p.nome.trim() !== "" : true)}>
+          <Step>{dados}</Step>
+          <Step>{beneficiosUI}</Step>
+        </Stepper>
+        {erro && <p className="mt-2 text-sm font-medium text-[var(--danger)]">{erro}</p>}
+      </div>
+    </div>
   );
 }
 
@@ -584,25 +649,26 @@ function BeneficioModal({ inicial, onFechar, onSalvo }: { inicial: BeneficioDado
   );
 }
 
-function NovaCategoriaModal({ onFechar, onCriada }: { onFechar: () => void; onCriada: () => void }) {
-  const [nome, setNome] = useState("");
+function NovaCategoriaModal({ inicial, onFechar, onCriada }: { inicial?: CategoriaPlano; onFechar: () => void; onCriada: () => void }) {
+  const editando = !!inicial;
+  const [nome, setNome] = useState(inicial?.nome ?? "");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   async function salvar() {
     setSalvando(true); setErro(null);
-    const r = await criarCategoria(nome);
+    const r = editando ? await renomearCategoria(inicial.id, nome) : await criarCategoria(nome);
     setSalvando(false);
     if (!r.ok) { setErro(r.erro); return; }
     onCriada();
   }
 
   return (
-    <Modal aberto onFechar={onFechar} titulo="Nova categoria" largura="max-w-sm"
+    <Modal aberto onFechar={onFechar} titulo={editando ? "Renomear categoria" : "Nova categoria"} largura="max-w-sm"
       rodape={
         <>
           <Button variante="secondary" onClick={onFechar} disabled={salvando}>Cancelar</Button>
-          <Button onClick={salvar} disabled={salvando || !nome.trim()}>{salvando ? "Criando…" : "Criar"}</Button>
+          <Button onClick={salvar} disabled={salvando || !nome.trim()}>{salvando ? "Salvando…" : editando ? "Salvar" : "Criar"}</Button>
         </>
       }
     >

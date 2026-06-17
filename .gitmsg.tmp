@@ -1,0 +1,10 @@
+feat(admin): renomear categoria + UX do modal de plano
+
+- Renomear categoria: action renomearCategoria (reaponta planos) + botao lapis por grupo
+- PlanoModal: ordem automatica pela categoria (nº de planos + 1)
+- Limite de empresas/usuarios: checkbox "Ilimitado" no lugar de digitar -1
+- "Sob consulta" movido para antes dos precos e desabilita os campos quando ativo
+- Modal "Novo plano": Stepper passa a SER o modal (sem card dentro de card),
+  com backdrop, botao fechar, Esc e scroll-lock
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

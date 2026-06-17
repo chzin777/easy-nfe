@@ -313,6 +313,27 @@ export async function criarCategoria(nome: string): Promise<Resultado> {
   }
 }
 
+export async function renomearCategoria(id: string, nome: string): Promise<Resultado> {
+  try {
+    await exigirAdmin();
+    const n = nome.trim();
+    if (!n) return { ok: false, erro: "Nome da categoria é obrigatório." };
+    const atual = await prisma.categoriaPlano.findUnique({ where: { id } });
+    if (!atual) return { ok: false, erro: "Categoria não encontrada." };
+    if (atual.nome === n) return { ok: true };
+    const colisao = await prisma.categoriaPlano.findUnique({ where: { nome: n } });
+    if (colisao) return { ok: false, erro: "Já existe uma categoria com este nome." };
+    // renomeia e reaponta os planos que usavam o nome antigo.
+    await prisma.$transaction([
+      prisma.categoriaPlano.update({ where: { id }, data: { nome: n } }),
+      prisma.plano.updateMany({ where: { categoria: atual.nome }, data: { categoria: n } }),
+    ]);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function excluirCategoria(id: string): Promise<Resultado> {
   try {
     await exigirAdmin();
