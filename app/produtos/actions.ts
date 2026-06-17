@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
+import { exigirFeature } from "@/lib/permissoes";
 import type { Produto } from "@/lib/types";
 
 type ProdutoRow = {
@@ -50,6 +51,7 @@ export async function listarProdutos(): Promise<Produto[]> {
 }
 
 export async function criarProduto(input: ProdutoInput): Promise<Produto> {
+  await exigirFeature("produtos");
   const empresaId = await exigirEmpresa();
   const p = await prisma.produto.create({
     data: {
@@ -71,6 +73,7 @@ export async function criarProduto(input: ProdutoInput): Promise<Produto> {
 }
 
 export async function atualizarProduto(id: string, input: ProdutoInput): Promise<Produto> {
+  await exigirFeature("produtos");
   const empresaId = await exigirEmpresa();
   // updateMany garante escopo por empresa (não atualiza produto de outra empresa).
   await prisma.produto.updateMany({
@@ -94,6 +97,7 @@ export async function atualizarProduto(id: string, input: ProdutoInput): Promise
 }
 
 export async function excluirProduto(id: string): Promise<void> {
+  await exigirFeature("produtos");
   const empresaId = await exigirEmpresa();
   await prisma.produto.deleteMany({ where: { id, empresaId } });
 }

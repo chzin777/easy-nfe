@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
 import { decriptar } from "@/lib/crypto";
 import { estadoLicencaUsuario } from "@/lib/licenca";
+import { exigirFeature } from "@/lib/permissoes";
 
 // Carrega o certificado A1 (PFX+senha) armazenado criptografado na empresa.
 function certDaEmpresa(certData: string | null): { pfxBase64: string; senha: string } {
@@ -68,6 +69,7 @@ export type EmitirResultado =
 // o cliente só envia ids + o certificado (que vive apenas na sessão do navegador).
 export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
   try {
+    await exigirFeature("emitir_nfe");
     const lic = await estadoLicencaUsuario();
     if (lic.bloqueado) return { ok: false, erro: lic.mensagem ?? "Licença expirada — emissão bloqueada." };
 
@@ -351,6 +353,7 @@ export type CancelarResultado =
 
 export async function cancelarNota(input: CancelarInput): Promise<CancelarResultado> {
   try {
+    await exigirFeature("nota_cancelar");
     const empresaId = await exigirEmpresa();
     if (input.justificativa.trim().length < 15) {
       return { ok: false, erro: "Justificativa deve ter ao menos 15 caracteres." };

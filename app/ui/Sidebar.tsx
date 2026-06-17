@@ -7,29 +7,30 @@ import { motion, AnimatePresence } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { listarEmpresas, trocarEmpresa, type EmpresaResumo } from "@/app/configuracoes/actions";
 import { sair, papelAtual } from "@/app/auth/actions";
+import { obterMinhasFeatures } from "@/app/permissoes-actions";
 
-type Item = { href: string; label: string; icon: ReactNode };
+type Item = { href: string; label: string; icon: ReactNode; feature?: string };
 type Grupo = { titulo: string; itens: Item[] };
 
 const grupos: Grupo[] = [
   {
     titulo: "Geral",
-    itens: [{ href: "/painel", label: "Dashboard", icon: <IconGrid /> }],
+    itens: [{ href: "/painel", label: "Dashboard", icon: <IconGrid />, feature: "dashboard" }],
   },
   {
     titulo: "Cadastros",
     itens: [
-      { href: "/produtos", label: "Produtos", icon: <IconBox /> },
-      { href: "/clientes", label: "Clientes", icon: <IconUser /> },
-      { href: "/transportadoras", label: "Transportadoras", icon: <IconTruck /> },
+      { href: "/produtos", label: "Produtos", icon: <IconBox />, feature: "produtos" },
+      { href: "/clientes", label: "Clientes", icon: <IconUser />, feature: "clientes" },
+      { href: "/transportadoras", label: "Transportadoras", icon: <IconTruck />, feature: "transportadoras" },
     ],
   },
   {
     titulo: "Emissão de notas",
     itens: [
-      { href: "/notas/nova", label: "Emitir nova nota", icon: <IconPlus /> },
-      { href: "/notas", label: "Notas emitidas", icon: <IconList /> },
-      { href: "/importar", label: "Importar XML", icon: <IconImport /> },
+      { href: "/notas/nova", label: "Emitir nova nota", icon: <IconPlus />, feature: "emitir_nfe" },
+      { href: "/notas", label: "Notas emitidas", icon: <IconList />, feature: "notas_listar" },
+      { href: "/importar", label: "Importar XML", icon: <IconImport />, feature: "importar_xml" },
     ],
   },
   {
@@ -46,22 +47,28 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [empresas, setEmpresas] = useState<EmpresaResumo[]>([]);
   const [role, setRole] = useState<string | null>(null);
+  const [features, setFeatures] = useState<string[] | null>(null);
 
   useEffect(() => {
     listarEmpresas().then(setEmpresas).catch(() => {});
     papelAtual().then(setRole).catch(() => {});
+    obterMinhasFeatures().then(setFeatures).catch(() => setFeatures([]));
   }, []);
 
   const admin = role === "ADMIN" || role === "SUPORTE";
 
-  // Acrescenta "Painel administrativo" ao grupo Sistema quando admin/suporte.
-  const gruposRender: Grupo[] = admin
-    ? grupos.map((g) =>
-        g.titulo === "Sistema"
-          ? { ...g, itens: [...g.itens, { href: "/admin", label: "Painel administrativo", icon: <IconShield /> }] }
-          : g,
-      )
-    : grupos;
+  // Filtra itens pelas features do plano (admin vê tudo; enquanto carrega, mostra tudo).
+  const podeVer = (it: Item) => admin || !it.feature || features === null || features.includes(it.feature);
+
+  const gruposRender: Grupo[] = grupos
+    .map((g) => {
+      let itens = g.itens.filter(podeVer);
+      if (admin && g.titulo === "Sistema") {
+        itens = [...itens, { href: "/admin", label: "Painel administrativo", icon: <IconShield /> }];
+      }
+      return { ...g, itens };
+    })
+    .filter((g) => g.itens.length > 0);
 
   // Item ativo = href mais específico (mais longo) que casa com a rota atual.
   // Evita que "/notas" marque ativo quando estamos em "/notas/nova".

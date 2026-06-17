@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
+import { exigirFeature } from "@/lib/permissoes";
 import type { Transportadora } from "@/lib/types";
 
 type Row = {
@@ -75,6 +76,7 @@ export async function listarTransportadoras(): Promise<Transportadora[]> {
 export async function criarTransportadora(
   input: TransportadoraInput,
 ): Promise<Transportadora> {
+  await exigirFeature("transportadoras");
   const empresaId = await exigirEmpresa();
   const t = await prisma.transportadora.create({ data: { empresaId, ...paraDados(input) } });
   return paraUI(t);
@@ -84,11 +86,13 @@ export async function atualizarTransportadora(
   id: string,
   input: TransportadoraInput,
 ): Promise<void> {
+  await exigirFeature("transportadoras");
   const empresaId = await exigirEmpresa();
   await prisma.transportadora.updateMany({ where: { id, empresaId }, data: paraDados(input) });
 }
 
 export async function excluirTransportadora(id: string): Promise<void> {
+  await exigirFeature("transportadoras");
   const empresaId = await exigirEmpresa();
   await prisma.transportadora.deleteMany({ where: { id, empresaId } });
 }

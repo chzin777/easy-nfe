@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
+import { exigirFeature } from "@/lib/permissoes";
 import type { Cliente } from "@/lib/types";
 
 type Row = {
@@ -73,17 +74,20 @@ export async function listarClientes(): Promise<Cliente[]> {
 }
 
 export async function criarCliente(input: ClienteInput): Promise<Cliente> {
+  await exigirFeature("clientes");
   const empresaId = await exigirEmpresa();
   const c = await prisma.cliente.create({ data: { empresaId, ...paraDados(input) } });
   return paraUI(c);
 }
 
 export async function atualizarCliente(id: string, input: ClienteInput): Promise<void> {
+  await exigirFeature("clientes");
   const empresaId = await exigirEmpresa();
   await prisma.cliente.updateMany({ where: { id, empresaId }, data: paraDados(input) });
 }
 
 export async function excluirCliente(id: string): Promise<void> {
+  await exigirFeature("clientes");
   const empresaId = await exigirEmpresa();
   await prisma.cliente.deleteMany({ where: { id, empresaId } });
 }
