@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import AvisoLicenca from "./AvisoLicenca";
-import { obterEstadoLicenca, type EstadoLicenca } from "@/app/licenca-actions";
+import { obterEstadoLicenca } from "@/app/licenca-actions";
+import type { EstadoLicenca } from "@/lib/licenca";
 import { sair } from "@/app/auth/actions";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
