@@ -6,6 +6,7 @@ import { Badge, Button, Card, Field, Input, Select } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import Tabs from "@/app/ui/Tabs";
+import LightningLoader from "@/app/ui/LightningLoader";
 import { FEATURES } from "@/lib/features";
 import { formatBRL, formatData } from "@/lib/format";
 import {
@@ -91,13 +92,15 @@ export default function AdminPage() {
 
 function AbaUsuarios() {
   const [usuarios, setUsuarios] = useState<UsuarioResumo[]>([]);
+  const [carregando, setCarregando] = useState(true);
   const [novo, setNovo] = useState(false);
   const [detalheId, setDetalheId] = useState<string | null>(null);
 
   async function recarregar() {
-    setUsuarios(await listarUsuarios());
+    try { setUsuarios(await listarUsuarios()); }
+    finally { setCarregando(false); }
   }
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+   
   useEffect(() => { void recarregar(); }, []);
 
   return (
@@ -121,7 +124,9 @@ function AbaUsuarios() {
             </tr>
           </thead>
           <tbody>
-            {usuarios.length === 0 ? (
+            {carregando ? (
+              <tr><td colSpan={7} className="px-4 py-8"><LightningLoader texto="Carregando usuários…" /></td></tr>
+            ) : usuarios.length === 0 ? (
               <tr><td colSpan={7} className="px-4 py-10 text-center text-[var(--muted)]">Nenhum usuário.</td></tr>
             ) : usuarios.map((u) => (
               <tr key={u.id} onClick={() => setDetalheId(u.id)} className="cursor-pointer border-b border-[var(--border)] last:border-0 hover:bg-slate-50">
@@ -205,14 +210,17 @@ function AbaPlanos() {
   const [categorias, setCategorias] = useState<CategoriaPlano[]>([]);
   const [edit, setEdit] = useState<PlanoDados | null>(null);
   const [novaCat, setNovaCat] = useState(false);
+  const [carregando, setCarregando] = useState(true);
 
   async function recarregar() {
-    const [pl, bs, cs] = await Promise.all([listarPlanos(), listarBeneficios(), listarCategorias()]);
-    setPlanos(pl);
-    setBeneficios(bs);
-    setCategorias(cs);
+    try {
+      const [pl, bs, cs] = await Promise.all([listarPlanos(), listarBeneficios(), listarCategorias()]);
+      setPlanos(pl);
+      setBeneficios(bs);
+      setCategorias(cs);
+    } finally { setCarregando(false); }
   }
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+   
   useEffect(() => { void recarregar(); }, []);
 
   const porId = new Map(beneficios.map((b) => [b.id, b]));
@@ -276,7 +284,9 @@ function AbaPlanos() {
         </div>
       </div>
 
-      {planos.length === 0 ? (
+      {carregando ? (
+        <LightningLoader texto="Carregando planos…" />
+      ) : planos.length === 0 ? (
         <p className="py-10 text-center text-sm text-[var(--muted)]">Nenhum plano. Crie o primeiro.</p>
       ) : (
         grupos.map((g) => (
@@ -439,9 +449,13 @@ function PlanoModal({ inicial, catalogo, planos, categorias, onFechar, onSalvo }
 function AbaBeneficios() {
   const [itens, setItens] = useState<Required<BeneficioDados>[]>([]);
   const [edit, setEdit] = useState<BeneficioDados | null>(null);
+  const [carregando, setCarregando] = useState(true);
 
-  async function recarregar() { setItens(await listarBeneficiosAdmin()); }
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  async function recarregar() {
+    try { setItens(await listarBeneficiosAdmin()); }
+    finally { setCarregando(false); }
+  }
+   
   useEffect(() => { void recarregar(); }, []);
 
   const vazio: BeneficioDados = { chave: "", nome: "", descricao: "", ordem: itens.length + 1, ativo: true, features: [] };
@@ -465,7 +479,9 @@ function AbaBeneficios() {
             </tr>
           </thead>
           <tbody>
-            {itens.length === 0 ? (
+            {carregando ? (
+              <tr><td colSpan={5} className="px-4 py-8"><LightningLoader texto="Carregando benefícios…" /></td></tr>
+            ) : itens.length === 0 ? (
               <tr><td colSpan={5} className="px-4 py-10 text-center text-[var(--muted)]">Nenhum benefício.</td></tr>
             ) : itens.map((b) => (
               <tr key={b.id} onClick={() => setEdit(b)} className="cursor-pointer border-b border-[var(--border)] last:border-0 hover:bg-slate-50">

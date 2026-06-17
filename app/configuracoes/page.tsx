@@ -13,6 +13,7 @@ import {
   formatData,
 } from "@/app/ui/primitives";
 import Tabs from "@/app/ui/Tabs";
+import LightningLoader from "@/app/ui/LightningLoader";
 import { EnderecoFields } from "@/app/ui/PessoaFields";
 import {
   listarEmpresas,
@@ -57,6 +58,7 @@ export default function ConfiguracoesPage() {
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [trocando, setTrocando] = useState(false);
 
   async function carregar() {
     const [lista, ativa] = await Promise.all([listarEmpresas(), obterEmpresaAtiva()]);
@@ -73,8 +75,10 @@ export default function ConfiguracoesPage() {
       setForm(empresaVazia);
       return;
     }
+    setTrocando(true);
     await trocarEmpresa(id);
     await carregar();
+    setTrocando(false);
   }
 
   async function salvar() {
@@ -129,7 +133,8 @@ export default function ConfiguracoesPage() {
         <p className="rounded-lg bg-[var(--danger-soft,#fee2e2)] px-4 py-3 text-sm font-medium text-[var(--danger)]">{erro}</p>
       )}
 
-      <Card className="p-6">
+      <Card className="relative p-6">
+        {trocando && <LightningLoader overlay texto="Carregando empresa…" />}
         <Tabs
           abas={[
             { id: "emit", label: "Empresa emitente", content: <AbaEmitente form={form} setE={setE} setForm={setForm} /> },
@@ -174,7 +179,7 @@ function AbaEquipe() {
     await recarregar();
   }
 
-  if (!info) return <p className="py-6 text-sm text-[var(--muted)]">Carregando…</p>;
+  if (!info) return <LightningLoader texto="Carregando equipe…" />;
 
   if (!info.permitido) {
     return (

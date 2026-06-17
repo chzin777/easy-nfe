@@ -18,6 +18,7 @@ import {
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Danfe from "@/app/ui/Danfe";
+import LightningLoader from "@/app/ui/LightningLoader";
 import { STATUS_NOTA, TIPOS_NOTA, rotulo } from "@/lib/mock-data";
 import type { StatusNota } from "@/lib/types";
 import { listarNotas, cancelarNota, type NotaCompleta } from "./actions";
@@ -230,7 +231,7 @@ export default function NotasEmitidasPage() {
           onRowClick={(n) => setVisualizar(n)}
           vazio={
             carregando
-              ? <EmptyState titulo="Carregando…" descricao="Buscando notas no banco." />
+              ? <LightningLoader texto="Carregando notas…" />
               : <EmptyState titulo="Nenhuma nota encontrada" descricao="Ajuste os filtros ou emita uma nova nota." />
           }
         />

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Badge, Button, Card, Field, Input, Select } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Tabs from "@/app/ui/Tabs";
+import LightningLoader from "@/app/ui/LightningLoader";
 import { formatBRL, formatData } from "@/lib/format";
 import {
   detalheUsuario, type UsuarioDetalhe as Detalhe,
@@ -44,7 +45,7 @@ export default function UsuarioDetalhe({
   }, [userId]);
 
   if (!d) {
-    return <Modal aberto onFechar={onFechar} titulo="Carregando…" largura="max-w-2xl"><p className="py-8 text-center text-sm text-[var(--muted)]">Buscando dados…</p></Modal>;
+    return <Modal aberto onFechar={onFechar} titulo="Carregando…" largura="max-w-2xl"><LightningLoader texto="Buscando dados…" /></Modal>;
   }
 
   return (
@@ -113,23 +114,42 @@ function Conta({ d, onMudou, flash }: Sub) {
   );
 }
 
+function isoEmDias(dias: number): string {
+  const dt = new Date();
+  dt.setDate(dt.getDate() + dias);
+  return dt.toISOString().slice(0, 10);
+}
+
 function Licenca({ d, planos, onMudou, flash }: Sub & { planos: Required<PlanoDados>[] }) {
   const [planoId, setPlanoId] = useState(d.licenca?.planoId ?? "");
   const [status, setStatus] = useState(d.licenca?.status ?? "TRIAL");
-  const [validade, setValidade] = useState(d.licenca?.validadeEm ? d.licenca.validadeEm.slice(0, 10) : "");
+  // trial padrão = 7 dias; validade já reflete daqui 7 dias quando não houver uma definida.
+  const [diasTrial, setDiasTrial] = useState(7);
+  const [validade, setValidade] = useState(
+    d.licenca?.validadeEm ? d.licenca.validadeEm.slice(0, 10) : isoEmDias(7),
+  );
   const [erro, setErro] = useState<string | null>(null);
+
+  // sem opção "Sem plano": seleciona o primeiro plano automaticamente quando carregar.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!planoId && planos.length) setPlanoId(planos[0].id);
+  }, [planos, planoId]);
+
+  function aplicarTrial(dias: number) {
+    setDiasTrial(dias);
+    setValidade(isoEmDias(dias));
+  }
 
   async function salvar() {
     setErro(null);
-    const r = await definirLicenca({ userId: d.id, planoId: planoId || null, status: status as "TRIAL" | "ATIVA" | "EXPIRADA" | "SUSPENSA" | "CANCELADA", validadeEm: validade || null });
+    if (!planoId) { setErro("Selecione um plano para aplicar as permissões."); return; }
+    const r = await definirLicenca({ userId: d.id, planoId, status: status as "TRIAL" | "ATIVA" | "EXPIRADA" | "SUSPENSA" | "CANCELADA", validadeEm: validade || null });
     if (!r.ok) { setErro(r.erro); return; }
     flash("Licença atualizada."); onMudou();
   }
 
-  const opcoesPlano = [
-    { id: "", nome: "Sem plano", preco: undefined as number | undefined, periodicidade: "", limite: 0 },
-    ...planos.map((p) => ({ id: p.id, nome: p.nome, preco: p.preco as number | undefined, periodicidade: p.periodicidade, limite: p.limiteEmpresas })),
-  ];
+  const opcoesPlano = planos.map((p) => ({ id: p.id, nome: p.nome, preco: p.preco as number | undefined, periodicidade: p.periodicidade, limite: p.limiteEmpresas }));
 
   return (
     <Secao titulo="Licença / Plano">
@@ -141,7 +161,7 @@ function Licenca({ d, planos, onMudou, flash }: Sub & { planos: Required<PlanoDa
               const sel = planoId === p.id;
               return (
                 <button
-                  key={p.id || "none"}
+                  key={p.id}
                   onClick={() => setPlanoId(p.id)}
                   className={
                     "flex flex-col items-start rounded-xl border-2 p-3 text-left transition " +
@@ -157,7 +177,7 @@ function Licenca({ d, planos, onMudou, flash }: Sub & { planos: Required<PlanoDa
                       </span>
                     </>
                   ) : (
-                    <span className="mt-1 text-xs text-[var(--muted)]">Nenhum plano</span>
+                    <span className="mt-1 text-xs text-[var(--muted)]">Sob consulta</span>
                   )}
                 </button>
               );
@@ -166,7 +186,13 @@ function Licenca({ d, planos, onMudou, flash }: Sub & { planos: Required<PlanoDa
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Status"><Select opcoes={STATUS_LIC} value={status} onChange={(e) => setStatus(e.target.value)} /></Field>
-          <Field label="Validade"><Input type="date" value={validade} onChange={(e) => setValidade(e.target.value)} /></Field>
+          {status === "TRIAL" ? (
+            <Field label="Período de trial (dias)" hint={`Expira em ${formatData(validade)}`}>
+              <Input type="number" min="1" value={diasTrial} onChange={(e) => aplicarTrial(Math.max(1, Number(e.target.value) || 0))} />
+            </Field>
+          ) : (
+            <Field label="Validade"><Input type="date" value={validade} onChange={(e) => setValidade(e.target.value)} /></Field>
+          )}
         </div>
         {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
         <div className="flex justify-end"><Button onClick={salvar}>Salvar licença</Button></div>

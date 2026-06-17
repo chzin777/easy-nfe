@@ -17,6 +17,7 @@ import {
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Tabs from "@/app/ui/Tabs";
+import LightningLoader from "@/app/ui/LightningLoader";
 import { ORIGENS, UNIDADES } from "@/lib/mock-data";
 import type { Produto } from "@/lib/types";
 import {
@@ -49,12 +50,17 @@ export default function ProdutosPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Form>(formVazio);
   const [salvando, setSalvando] = useState(false);
+  const [carregando, setCarregando] = useState(true);
 
   async function recarregar() {
-    setProdutos(await listarProdutos());
+    try {
+      setProdutos(await listarProdutos());
+    } finally {
+      setCarregando(false);
+    }
   }
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void recarregar();
   }, []);
 
@@ -211,12 +217,16 @@ export default function ProdutosPage() {
             className="max-w-md"
           />
         </div>
-        <Tabela
-          colunas={colunas}
-          dados={filtrados}
-          onRowClick={abrirEdicao}
-          vazio={<EmptyState titulo="Nenhum produto" descricao="Cadastre o primeiro produto para começar." />}
-        />
+        {carregando ? (
+          <LightningLoader texto="Carregando produtos…" />
+        ) : (
+          <Tabela
+            colunas={colunas}
+            dados={filtrados}
+            onRowClick={abrirEdicao}
+            vazio={<EmptyState titulo="Nenhum produto" descricao="Cadastre o primeiro produto para começar." />}
+          />
+        )}
       </Card>
 
       {/* Criação em etapas (modal compartilhado) */}

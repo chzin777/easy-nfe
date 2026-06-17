@@ -25,6 +25,7 @@ import {
   excluirTransportadora,
 } from "./actions";
 import NovaTransportadoraModal from "./NovaTransportadoraModal";
+import LightningLoader from "@/app/ui/LightningLoader";
 
 type Form = Omit<Transportadora, "id" | "codigoInterno">;
 
@@ -44,12 +45,17 @@ export default function TransportadorasPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Form>(formVazio);
   const [salvando, setSalvando] = useState(false);
+  const [carregando, setCarregando] = useState(true);
 
   async function recarregar() {
-    setLista(await listarTransportadoras());
+    try {
+      setLista(await listarTransportadoras());
+    } finally {
+      setCarregando(false);
+    }
   }
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void recarregar();
   }, []);
 
@@ -162,12 +168,16 @@ export default function TransportadorasPage() {
             className="max-w-md"
           />
         </div>
-        <Tabela
-          colunas={colunas}
-          dados={filtrados}
-          onRowClick={abrirEdicao}
-          vazio={<EmptyState titulo="Nenhuma transportadora" descricao="Cadastre a primeira transportadora." />}
-        />
+        {carregando ? (
+          <LightningLoader texto="Carregando transportadoras…" />
+        ) : (
+          <Tabela
+            colunas={colunas}
+            dados={filtrados}
+            onRowClick={abrirEdicao}
+            vazio={<EmptyState titulo="Nenhuma transportadora" descricao="Cadastre a primeira transportadora." />}
+          />
+        )}
       </Card>
 
       {/* Criação em etapas (modal compartilhado) */}

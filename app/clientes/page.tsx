@@ -16,6 +16,7 @@ import {
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Tabs from "@/app/ui/Tabs";
+import LightningLoader from "@/app/ui/LightningLoader";
 import { ContatoFields, EnderecoFields } from "@/app/ui/PessoaFields";
 import { TIPOS_CONTRIBUINTE, rotulo } from "@/lib/mock-data";
 import type { Cliente } from "@/lib/types";
@@ -44,12 +45,17 @@ export default function ClientesPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Form>(formVazio);
   const [salvando, setSalvando] = useState(false);
+  const [carregando, setCarregando] = useState(true);
 
   async function recarregar() {
-    setClientes(await listarClientes());
+    try {
+      setClientes(await listarClientes());
+    } finally {
+      setCarregando(false);
+    }
   }
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void recarregar();
   }, []);
 
@@ -162,12 +168,16 @@ export default function ClientesPage() {
             className="max-w-md"
           />
         </div>
-        <Tabela
-          colunas={colunas}
-          dados={filtrados}
-          onRowClick={abrirEdicao}
-          vazio={<EmptyState titulo="Nenhum cliente" descricao="Cadastre o primeiro cliente." />}
-        />
+        {carregando ? (
+          <LightningLoader texto="Carregando clientes…" />
+        ) : (
+          <Tabela
+            colunas={colunas}
+            dados={filtrados}
+            onRowClick={abrirEdicao}
+            vazio={<EmptyState titulo="Nenhum cliente" descricao="Cadastre o primeiro cliente." />}
+          />
+        )}
       </Card>
 
       {/* Criação em etapas (modal compartilhado) */}
