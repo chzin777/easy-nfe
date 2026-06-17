@@ -183,7 +183,7 @@ function AbaPlanos() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void recarregar(); }, []);
 
-  const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, periodicidade: "mensal", limiteEmpresas: 1, recursos: [], ativo: true, ordem: planos.length };
+  const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, recursos: [], ativo: true, ordem: planos.length };
 
   return (
     <div className="space-y-4">
@@ -260,6 +260,7 @@ function PlanoModal({ inicial, onFechar, onSalvo }: { inicial: PlanoDados; onFec
           <Field label="Preço (R$)"><Input type="number" step="0.01" min="0" value={p.preco} onChange={(e) => set("preco", Number(e.target.value))} /></Field>
           <Field label="Periodicidade"><Select opcoes={[{ value: "mensal", label: "Mensal" }, { value: "anual", label: "Anual" }]} value={p.periodicidade} onChange={(e) => set("periodicidade", e.target.value)} /></Field>
           <Field label="Limite de empresas" hint="-1 = ilimitado"><Input type="number" value={p.limiteEmpresas} onChange={(e) => set("limiteEmpresas", Number(e.target.value))} /></Field>
+          <Field label="Usuários por empresa" hint="-1 = ilimitado"><Input type="number" value={p.limiteUsuarios} onChange={(e) => set("limiteUsuarios", Number(e.target.value))} /></Field>
           <Field label="Ordem"><Input type="number" value={p.ordem} onChange={(e) => set("ordem", Number(e.target.value))} /></Field>
         </div>
         <Field label="Descrição"><Input value={p.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>

@@ -9,10 +9,13 @@ import {
   empresaAtivaId,
   exigirEmpresa,
   limiteEmpresasDoUsuario,
+  limiteEquipe,
 } from "@/lib/empresa";
-import { definirEmpresaAtiva } from "@/lib/auth";
+import { definirEmpresaAtiva, hashSenha } from "@/lib/auth";
 import { codigoMunicipio } from "@/lib/nfe/municipios";
 import { encriptar } from "@/lib/crypto";
+
+const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
 export type CertInfo = {
   ok: true;
@@ -300,6 +303,102 @@ export async function obterCertificado(): Promise<CertStatus> {
     expirado: validoAte ? validoAte.getTime() < Date.now() : false,
     diasRestantes,
   };
+}
+
+// ----------------------------------------------------------------------------
+// Equipe (multiusuário) — membros da empresa ativa, limitado pelo plano.
+// ----------------------------------------------------------------------------
+
+export type MembroEquipe = { userId: string; email: string; nome: string; papel: string; voce: boolean };
+export type EquipeInfo = {
+  membros: MembroEquipe[];
+  limite: number; // -1 = ilimitado
+  usados: number;
+  podeAdicionar: boolean;
+  permitido: boolean; // plano permite equipe (>1 ou ilimitado)
+};
+
+async function exigirDono(uid: string, empresaId: string) {
+  const acesso = await prisma.acessoEmpresa.findUnique({
+    where: { userId_empresaId: { userId: uid, empresaId } },
+    select: { papel: true },
+  });
+  if (!acesso || acesso.papel !== "dono") throw new Error("Apenas o dono da empresa gerencia a equipe.");
+}
+
+export async function listarEquipe(): Promise<EquipeInfo> {
+  const { uid } = await exigirSessao();
+  const empresaId = await exigirEmpresa();
+  const acessos = await prisma.acessoEmpresa.findMany({
+    where: { empresaId },
+    include: { user: { select: { id: true, email: true, nome: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  const lim = await limiteEquipe(uid, empresaId);
+  return {
+    membros: acessos.map((a) => ({
+      userId: a.user.id,
+      email: a.user.email,
+      nome: a.user.nome ?? "",
+      papel: a.papel,
+      voce: a.user.id === uid,
+    })),
+    limite: lim.limite,
+    usados: lim.usados,
+    podeAdicionar: lim.podeAdicionar,
+    permitido: lim.limite < 0 || lim.limite > 1,
+  };
+}
+
+export async function adicionarMembro(input: {
+  email: string;
+  nome: string;
+  senha: string;
+}): Promise<{ ok: true } | { ok: false; erro: string }> {
+  try {
+    const { uid } = await exigirSessao();
+    const empresaId = await exigirEmpresa();
+    await exigirDono(uid, empresaId);
+
+    const lim = await limiteEquipe(uid, empresaId);
+    const permitido = lim.limite < 0 || lim.limite > 1;
+    if (!permitido) return { ok: false, erro: "Seu plano não inclui equipe. Faça upgrade para adicionar usuários." };
+    if (!lim.podeAdicionar) return { ok: false, erro: `Seu plano permite ${lim.limite} membro(s) por empresa e você já tem ${lim.usados}.` };
+
+    const email = input.email.trim().toLowerCase();
+    if (!emailValido(email)) return { ok: false, erro: "E-mail inválido." };
+
+    let user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      if (input.senha.length < 8) return { ok: false, erro: "Senha do novo usuário deve ter ao menos 8 caracteres." };
+      user = await prisma.user.create({
+        data: { email, nome: input.nome || null, senhaHash: await hashSenha(input.senha), role: "USER" },
+      });
+    }
+
+    const jaTem = await prisma.acessoEmpresa.findUnique({
+      where: { userId_empresaId: { userId: user.id, empresaId } },
+    });
+    if (jaTem) return { ok: false, erro: "Esse usuário já tem acesso a esta empresa." };
+
+    await prisma.acessoEmpresa.create({ data: { userId: user.id, empresaId, papel: "membro" } });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function removerMembro(userId: string): Promise<{ ok: true } | { ok: false; erro: string }> {
+  try {
+    const { uid } = await exigirSessao();
+    const empresaId = await exigirEmpresa();
+    await exigirDono(uid, empresaId);
+    // Não remove o dono.
+    await prisma.acessoEmpresa.deleteMany({ where: { userId, empresaId, papel: { not: "dono" } } });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 export async function trocarEmpresa(id: string): Promise<void> {

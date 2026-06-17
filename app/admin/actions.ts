@@ -276,6 +276,7 @@ export type PlanoDados = {
   preco: number;
   periodicidade: string;
   limiteEmpresas: number;
+  limiteUsuarios: number;
   recursos: string[];
   ativo: boolean;
   ordem: number;
@@ -291,6 +292,7 @@ export async function listarPlanos(): Promise<Required<PlanoDados>[]> {
     preco: Number(p.preco),
     periodicidade: p.periodicidade,
     limiteEmpresas: p.limiteEmpresas,
+    limiteUsuarios: p.limiteUsuarios,
     recursos: p.recursos,
     ativo: p.ativo,
     ordem: p.ordem,
@@ -307,6 +309,7 @@ export async function salvarPlano(dados: PlanoDados): Promise<Resultado> {
       preco: dados.preco,
       periodicidade: dados.periodicidade,
       limiteEmpresas: dados.limiteEmpresas,
+      limiteUsuarios: dados.limiteUsuarios,
       recursos: dados.recursos.filter((r) => r.trim()),
       ativo: dados.ativo,
       ordem: dados.ordem,

@@ -9,6 +9,7 @@ const PLANOS = [
     preco: 49.9,
     periodicidade: "mensal",
     limiteEmpresas: 1,
+    limiteUsuarios: 1,
     ordem: 1,
     recursos: [
       "1 empresa (CNPJ)",
@@ -25,6 +26,7 @@ const PLANOS = [
     preco: 129.9,
     periodicidade: "mensal",
     limiteEmpresas: 3,
+    limiteUsuarios: 5,
     ordem: 2,
     recursos: [
       "Até 3 empresas (CNPJ)",
@@ -41,6 +43,7 @@ const PLANOS = [
     preco: 299.9,
     periodicidade: "mensal",
     limiteEmpresas: -1,
+    limiteUsuarios: -1,
     ordem: 3,
     recursos: [
       "Empresas ilimitadas",

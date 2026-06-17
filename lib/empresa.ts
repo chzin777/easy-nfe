@@ -79,3 +79,16 @@ export async function limiteEmpresasDoUsuario(
   const podeAdicionar = limite < 0 || usadas < limite;
   return { limite, usadas, podeAdicionar };
 }
+
+// Limite de membros (equipe) de UMA empresa, conforme o plano do usuário logado.
+export async function limiteEquipe(
+  uid: string,
+  empresaId: string,
+): Promise<{ limite: number; usados: number; podeAdicionar: boolean }> {
+  const licenca = await prisma.licenca.findUnique({ where: { userId: uid }, include: { plano: true } });
+  const limite = licenca?.plano?.limiteUsuarios ?? 1;
+  // Conta membros (papel != dono) com acesso à empresa.
+  const usados = await prisma.acessoEmpresa.count({ where: { empresaId, papel: { not: "dono" } } });
+  const podeAdicionar = limite < 0 || usados < limite;
+  return { limite, usados, podeAdicionar };
+}

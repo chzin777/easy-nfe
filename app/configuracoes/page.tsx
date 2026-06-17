@@ -22,9 +22,13 @@ import {
   salvarCertificado,
   removerCertificado,
   obterCertificado,
+  listarEquipe,
+  adicionarMembro,
+  removerMembro,
   type CertStatus,
   type EmpresaDados,
   type EmpresaResumo,
+  type EquipeInfo,
 } from "./actions";
 
 const CRT = [
@@ -130,10 +134,97 @@ export default function ConfiguracoesPage() {
           abas={[
             { id: "emit", label: "Empresa emitente", content: <AbaEmitente form={form} setE={setE} setForm={setForm} /> },
             { id: "cert", label: "Certificado A1", content: <AbaCertificado /> },
+            { id: "equipe", label: "Equipe", content: <AbaEquipe /> },
             { id: "amb", label: "Ambiente & numeração", content: <AbaAmbiente form={form} setE={setE} /> },
           ]}
         />
       </Card>
+    </div>
+  );
+}
+
+function AbaEquipe() {
+  const [info, setInfo] = useState<EquipeInfo | null>(null);
+  const [email, setEmail] = useState("");
+  const [nome, setNome] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+
+  async function recarregar() {
+    setInfo(await listarEquipe());
+  }
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void recarregar();
+  }, []);
+
+  async function adicionar() {
+    setSalvando(true);
+    setErro(null);
+    const r = await adicionarMembro({ email, nome, senha });
+    setSalvando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    setEmail(""); setNome(""); setSenha("");
+    await recarregar();
+  }
+  async function remover(userId: string) {
+    const r = await removerMembro(userId);
+    if (!r.ok) { setErro(r.erro); return; }
+    await recarregar();
+  }
+
+  if (!info) return <p className="py-6 text-sm text-[var(--muted)]">Carregando…</p>;
+
+  if (!info.permitido) {
+    return (
+      <div className="rounded-lg border border-[var(--border)] bg-slate-50 p-6 text-sm">
+        <p className="font-medium">Equipe não disponível no seu plano</p>
+        <p className="mt-1 text-[var(--muted)]">Faça upgrade para um plano com multiusuário e adicione membros à empresa.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <SectionTitle>Membros desta empresa</SectionTitle>
+        <p className="text-sm text-[var(--muted)]">
+          {info.limite < 0 ? "Usuários ilimitados" : `${info.usados}/${info.limite} membros`} · o dono não conta no limite.
+        </p>
+        <ul className="mt-3 divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
+          {info.membros.map((m) => (
+            <li key={m.userId} className="flex items-center justify-between px-4 py-2.5 text-sm">
+              <span>
+                <span className="font-medium">{m.nome || m.email}</span>
+                <span className="text-[var(--muted)]"> · {m.email}</span>
+                <span className={"ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " + (m.papel === "dono" ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "bg-slate-100 text-slate-600")}>{m.papel}</span>
+                {m.voce && <span className="ml-1 text-xs text-[var(--muted)]">(você)</span>}
+              </span>
+              {m.papel !== "dono" && (
+                <button onClick={() => remover(m.userId)} className="text-xs font-medium text-[var(--danger)] hover:underline">remover</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <section>
+        <SectionTitle>Adicionar membro</SectionTitle>
+        <p className="mb-3 text-xs text-[var(--muted)]">Se o e-mail já existir, ele só ganha acesso a esta empresa. Senão, cria a conta.</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field label="Nome"><Input value={nome} onChange={(e) => setNome(e.target.value)} /></Field>
+          <Field label="E-mail" required><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+          <Field label="Senha (se novo)" hint="Mín. 8 caracteres"><Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} /></Field>
+        </div>
+        {erro && <p className="mt-3 text-sm font-medium text-[var(--danger)]">{erro}</p>}
+        <div className="mt-4">
+          <Button onClick={adicionar} disabled={salvando || !info.podeAdicionar || !email}>
+            {salvando ? "Adicionando…" : "Adicionar à equipe"}
+          </Button>
+          {!info.podeAdicionar && <span className="ml-3 text-sm text-[var(--warning)]">Limite do plano atingido.</span>}
+        </div>
+      </section>
     </div>
   );
 }

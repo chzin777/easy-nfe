@@ -79,6 +79,7 @@ model Plano {
   preco          Decimal  @default(0) @db.Decimal(10, 2)
   periodicidade  String   @default("mensal") // mensal | anual
   limiteEmpresas Int      @default(1) // -1 = ilimitado
+  limiteUsuarios Int      @default(1) // membros por empresa; -1 = ilimitado
   recursos       String[] // bullets p/ a landing page
   ativo          Boolean  @default(true) // exibido na LP / disponível
   ordem          Int      @default(0)
