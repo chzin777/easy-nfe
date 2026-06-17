@@ -12,9 +12,9 @@ const RECURSOS = [
   { titulo: "Emissão de NF-e", desc: "Modelo 55 com autorização síncrona na SEFAZ em segundos.", icon: <IFile /> },
   { titulo: "Assinatura A1", desc: "Certificado digital A1 com assinatura XML-DSig automática.", icon: <ILock /> },
   { titulo: "DANFE & cancelamento", desc: "Gere o DANFE em PDF e cancele notas direto pelo painel.", icon: <IDoc /> },
-  { titulo: "Integração Winthor", desc: "Conecte seu ERP e emita a partir dos pedidos do Winthor.", icon: <IPlug /> },
-  { titulo: "WhatsApp & e-mail", desc: "Envie a nota ao cliente por WhatsApp ou e-mail automaticamente.", icon: <IChat /> },
-  { titulo: "Multiempresa", desc: "Gerencie vários CNPJs e equipes em uma só conta.", icon: <IBuilding /> },
+  { titulo: "Vendeu online, nota emitida", desc: "Conecte sua loja e marketplaces: cada pedido pago vira NF-e automática.", icon: <IPlug /> },
+  { titulo: "WhatsApp & e-mail", desc: "Envie o DANFE e o XML ao cliente por WhatsApp ou e-mail automaticamente.", icon: <IChat /> },
+  { titulo: "Multiempresa & contador", desc: "Vários CNPJs em uma conta, com acesso para o seu contador.", icon: <IBuilding /> },
 ];
 
 const STATS = [
@@ -33,13 +33,13 @@ const PASSOS = [
 
 const INTEGRACOES = [
   { nome: "SEFAZ-GO", desc: "Web Service oficial 4.00" },
-  { nome: "Winthor", desc: "ERP TOTVS" },
+  { nome: "E-commerce", desc: "Loja & marketplaces" },
   { nome: "WhatsApp", desc: "Envio automático" },
   { nome: "E-mail", desc: "XML + DANFE" },
 ];
 
 const DEPOIMENTOS = [
-  { texto: "Reduzimos o tempo de emissão em 80%. A integração com o Winthor foi o divisor de águas.", autor: "Carla M.", cargo: "Gerente fiscal · Distribuidora" },
+  { texto: "Integramos com a loja online e as notas saem sozinhas a cada venda. Reduzimos o tempo de emissão em 80%.", autor: "Carla M.", cargo: "Gerente fiscal · Varejo online" },
   { texto: "Antes era planilha e retrabalho. Hoje a equipe emite e manda no WhatsApp em segundos.", autor: "Rafael S.", cargo: "Dono · Comércio varejista" },
   { texto: "Suporte humano de verdade e sem fidelidade. Migrei e nunca mais tive dor de cabeça.", autor: "Patrícia L.", cargo: "Contadora" },
 ];
@@ -97,8 +97,8 @@ export default async function Landing() {
             <span className="bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent"> direto do seu sistema.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-300">
-            Assinatura digital A1, envio à SEFAZ, DANFE e cancelamento — com integração ao Winthor,
-            WhatsApp e e-mail. Tudo em uma plataforma só.
+            Assinatura digital A1, envio à SEFAZ, DANFE e cancelamento — com vendas online,
+            WhatsApp e e-mail integrados. Tudo em uma plataforma só.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link href="/login" className="w-full rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:-translate-y-0.5 sm:w-auto">
@@ -204,7 +204,7 @@ export default async function Landing() {
       {/* Faixa de texto em movimento (reage ao scroll) */}
       <section className="overflow-hidden border-y border-[var(--border)] bg-slate-950 py-8 text-white">
         <ScrollVelocity
-          texts={["Emita NF-e em segundos  •  Integração Winthor  •", "WhatsApp  •  E-mail  •  DANFE  •  Sem fidelidade  •"]}
+          texts={["Emita NF-e em segundos  •  Vendas online  •", "WhatsApp  •  E-mail  •  DANFE  •  Sem fidelidade  •"]}
           velocity={70}
           numCopies={6}
           className="px-4 text-transparent bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text"

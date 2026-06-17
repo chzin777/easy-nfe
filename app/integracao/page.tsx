@@ -2,9 +2,8 @@
 
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
-import CountUp from "@/app/ui/CountUp";
 
-// WhatsApp para ativar/agendar integração.
+// WhatsApp para ativar/agendar integrações.
 const WPP = "5562996183309";
 function whatsapp(msg: string): string {
   return `https://wa.me/${WPP}?text=${encodeURIComponent(msg)}`;
@@ -28,92 +27,62 @@ export default function IntegracaoPage() {
         <motion.div {...fade()} className="relative max-w-2xl">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium backdrop-blur">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-            Novo · Integração nativa com Winthor
+            Integrações & diferenciais
           </span>
           <h1 className="mt-5 text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-            Seu ERP Winthor emitindo NF-e
+            Muito além de emitir.
             <span className="bg-gradient-to-r from-violet-300 to-fuchsia-300 bg-clip-text text-transparent">
-              {" "}sem redigitar nada.
+              {" "}O fiscal da sua empresa no automático.
             </span>
           </h1>
           <p className="mt-5 text-lg text-slate-300">
-            Produtos, clientes e pedidos fluem direto do Winthor para o easy-nfe. Você seleciona o
-            pedido, confere e emite. Zero retrabalho, zero erro de digitação.
+            Conecte suas vendas online, capture as notas recebidas, entregue no WhatsApp e
+            gerencie vários CNPJs — tudo em um só lugar.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <a
-              href={whatsapp("Olá! Quero integrar meu Winthor com o easy-nfe.")}
+              href={whatsapp("Olá! Quero ativar integrações no easy-nfe.")}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-6 py-3 text-base font-semibold text-white shadow-[0_4px_14px_rgba(82,39,255,0.45)] transition hover:-translate-y-0.5"
             >
-              <IconWpp /> Quero integrar agora
-            </a>
-            <a
-              href={whatsapp("Olá! Quero falar com um especialista sobre a integração Winthor + easy-nfe.")}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/25 bg-white/5 px-6 py-3 text-base font-medium text-white backdrop-blur transition hover:bg-white/10"
-            >
-              Falar com especialista
+              <IconWpp /> Falar com especialista
             </a>
           </div>
         </motion.div>
-
-        {/* Fluxo */}
-        <motion.div {...fade(0.15)} className="relative mt-12 flex flex-wrap items-center gap-3 text-sm">
-          <FluxoChip>Winthor (Oracle)</FluxoChip>
-          <Seta />
-          <FluxoChip>Sincronização automática</FluxoChip>
-          <Seta />
-          <FluxoChip>easy-nfe</FluxoChip>
-          <Seta />
-          <FluxoChip destaque>NF-e autorizada</FluxoChip>
-        </motion.div>
       </section>
 
-      {/* ---- MÉTRICAS ---- */}
-      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {[
-          { v: 90, suf: "%", t: "menos tempo de digitação" },
-          { v: 0, suf: "", t: "retrabalho de cadastro" },
-          { v: 30, suf: "s", t: "do pedido à nota emitida" },
-          { v: 100, suf: "%", t: "dados vindos do seu ERP" },
-        ].map((m, i) => (
-          <motion.div
-            key={m.t}
-            {...fade(i * 0.08)}
-            className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center shadow-sm"
-          >
-            <p className="text-3xl font-bold text-[var(--primary)]">
-              <CountUp to={m.v} duration={1.4} suffix={m.suf} />
-            </p>
-            <p className="mt-1 text-sm text-[var(--muted)]">{m.t}</p>
-          </motion.div>
-        ))}
-      </section>
-
-      {/* ---- BENEFÍCIOS ---- */}
-      <section>
+      {/* ---- OS 5 DIFERENCIAIS ---- */}
+      <section className="space-y-6">
         <motion.div {...fade()} className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight">Por que integrar com o Winthor?</h2>
-          <p className="mt-3 text-[var(--muted)]">
-            O Winthor já é a fonte da verdade do seu negócio. O easy-nfe só fecha o ciclo fiscal.
-          </p>
+          <h2 className="text-3xl font-bold tracking-tight">O que faz o easy-nfe diferente</h2>
+          <p className="mt-3 text-[var(--muted)]">Recursos que você não encontra num emissor comum.</p>
         </motion.div>
 
-        <div className="mt-10 grid grid-cols-1 gap-5 md:grid-cols-3">
-          {beneficios.map((b, i) => (
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          {DIFERENCIAIS.map((d, i) => (
             <motion.div
-              key={b.titulo}
+              key={d.titulo}
               {...fade(i * 0.07)}
-              className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg"
+              className="group flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-2)] text-white shadow-md transition-transform group-hover:scale-110">
-                {b.icon}
+              <div className="flex items-start justify-between">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-2)] text-white shadow-md transition-transform group-hover:scale-110">
+                  {d.icon}
+                </div>
+                <span className={"rounded-full px-2.5 py-1 text-[11px] font-semibold " + (d.disponivel ? "bg-[var(--success-soft)] text-[var(--success)]" : "bg-[var(--primary-soft)] text-[var(--primary)]")}>
+                  {d.disponivel ? "Disponível" : "Em breve"}
+                </span>
               </div>
-              <h3 className="mt-4 text-lg font-semibold">{b.titulo}</h3>
-              <p className="mt-1.5 text-sm text-[var(--muted)]">{b.desc}</p>
+              <h3 className="mt-4 text-lg font-semibold">{d.titulo}</h3>
+              <p className="mt-1.5 flex-1 text-sm text-[var(--muted)]">{d.desc}</p>
+              {d.tags && (
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {d.tags.map((t) => (
+                    <span key={t} className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{t}</span>
+                  ))}
+                </div>
+              )}
             </motion.div>
           ))}
         </div>
@@ -121,63 +90,19 @@ export default function IntegracaoPage() {
 
       {/* ---- COMO FUNCIONA ---- */}
       <section className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-8 sm:p-12">
-        <motion.h2 {...fade()} className="text-center text-3xl font-bold tracking-tight">
-          Como funciona
-        </motion.h2>
+        <motion.h2 {...fade()} className="text-center text-3xl font-bold tracking-tight">Como ativamos</motion.h2>
         <div className="mt-10 grid grid-cols-1 gap-8 md:grid-cols-4">
-          {passos.map((p, i) => (
+          {PASSOS.map((p, i) => (
             <motion.div key={p.titulo} {...fade(i * 0.1)} className="relative">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--primary-soft)] text-base font-bold text-[var(--primary)]">
-                {i + 1}
-              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--primary-soft)] text-base font-bold text-[var(--primary)]">{i + 1}</div>
               <h3 className="mt-3 font-semibold">{p.titulo}</h3>
               <p className="mt-1 text-sm text-[var(--muted)]">{p.desc}</p>
-              {i < passos.length - 1 && (
+              {i < PASSOS.length - 1 && (
                 <div className="absolute right-0 top-5 hidden h-px w-1/2 translate-x-1/2 bg-gradient-to-r from-[var(--primary)]/40 to-transparent md:block" />
               )}
             </motion.div>
           ))}
         </div>
-      </section>
-
-      {/* ---- TABELAS WINTHOR ---- */}
-      <section className="grid grid-cols-1 items-center gap-8 lg:grid-cols-2">
-        <motion.div {...fade()}>
-          <h2 className="text-3xl font-bold tracking-tight">Mapeamento direto das tabelas</h2>
-          <p className="mt-3 text-[var(--muted)]">
-            Lemos as tabelas que você já conhece. Sem exportações manuais, sem planilhas, sem CSV.
-          </p>
-          <ul className="mt-6 space-y-3">
-            {mapeamentos.map((m) => (
-              <li key={m.tabela} className="flex items-center gap-3">
-                <code className="rounded-md bg-slate-900 px-2 py-1 font-mono text-xs text-emerald-300">
-                  {m.tabela}
-                </code>
-                <Seta pequena />
-                <span className="text-sm font-medium">{m.destino}</span>
-              </li>
-            ))}
-          </ul>
-        </motion.div>
-
-        <motion.div {...fade(0.15)} className="rounded-2xl border border-[var(--border)] bg-[var(--sidebar)] p-6 font-mono text-xs text-slate-300 shadow-xl">
-          <p className="mb-3 flex items-center gap-2 text-slate-500">
-            <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
-            <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-            <span className="ml-2">winthor → easy-nfe</span>
-          </p>
-          <pre className="whitespace-pre-wrap leading-relaxed">
-{`SELECT CODPROD, DESCRICAO, CODAUXILIAR,
-       NCM, UNIDADE, PVENDA
-  FROM WINDOW.PCPRODUT
- WHERE DTEXCLUSAO IS NULL;
-
-→ 1.482 produtos sincronizados ✓
-→ 318 clientes sincronizados ✓
-→ pronto para emitir NF-e ✓`}
-          </pre>
-        </motion.div>
       </section>
 
       {/* ---- CTA FINAL ---- */}
@@ -187,26 +112,18 @@ export default function IntegracaoPage() {
       >
         <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_20%_20%,white,transparent_40%)]" />
         <div className="relative">
-          <h2 className="text-3xl font-bold tracking-tight">Pare de digitar o que o Winthor já tem.</h2>
+          <h2 className="text-3xl font-bold tracking-tight">Quer ativar uma dessas integrações?</h2>
           <p className="mx-auto mt-3 max-w-xl text-violet-100">
-            Ative a integração e emita sua próxima nota em segundos, com os dados reais do seu ERP.
+            Fale com a gente e montamos o fluxo ideal para o seu negócio.
           </p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <a
-              href={whatsapp("Olá! Quero ativar a integração Winthor no easy-nfe.")}
+              href={whatsapp("Olá! Quero ativar integrações (e-commerce/WhatsApp/DFe) no easy-nfe.")}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-white px-7 py-3 text-base font-semibold text-[var(--primary)] shadow-lg transition hover:-translate-y-0.5"
             >
-              <IconWpp /> Ativar integração Winthor
-            </a>
-            <a
-              href={whatsapp("Olá! Quero agendar uma demonstração da integração Winthor + easy-nfe.")}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/30 bg-white/10 px-7 py-3 text-base font-medium text-white backdrop-blur transition hover:bg-white/20"
-            >
-              Agendar demonstração
+              <IconWpp /> Falar no WhatsApp
             </a>
           </div>
         </div>
@@ -217,51 +134,49 @@ export default function IntegracaoPage() {
 
 // ---- Dados ----
 
-const beneficios: { titulo: string; desc: string; icon: ReactNode }[] = [
+const DIFERENCIAIS: { titulo: string; desc: string; icon: ReactNode; disponivel: boolean; tags?: string[] }[] = [
   {
-    titulo: "Catálogo sempre atualizado",
-    desc: "Alterou preço ou produto no Winthor? Reflete no easy-nfe automaticamente.",
-    icon: <Svg d="M21 12a9 9 0 1 1-3-6.7L21 8" extra={<path d="M21 3v5h-5" />} />,
+    titulo: "Vendeu online, nota emitida",
+    desc: "Conecte sua loja e marketplaces: a cada pedido pago, o easy-nfe emite a NF-e automaticamente. Sem digitar pedido nenhum.",
+    icon: <Svg d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" extra={<><path d="M3 6h18" /><path d="M16 10a4 4 0 0 1-8 0" /></>} />,
+    disponivel: false,
+    tags: ["Nuvemshop", "Shopify", "Mercado Livre", "WooCommerce"],
   },
   {
-    titulo: "Emissão a partir do pedido",
-    desc: "Selecione um pedido do PCPEDIDO e gere a NF-e já com itens, cliente e valores.",
-    icon: <Svg d="M9 11l3 3L22 4" extra={<path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />} />,
+    titulo: "Captura de notas recebidas (DFe)",
+    desc: "Baixamos da SEFAZ todas as notas emitidas contra o seu CNPJ e fazemos a manifestação do destinatário automática. Você nunca perde uma nota — nem leva multa.",
+    icon: <Svg d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" extra={<path d="m9 11 2 2 4-4" />} />,
+    disponivel: false,
+    tags: ["Manifestação", "DF-e", "Compliance"],
   },
   {
-    titulo: "Zero erro de digitação",
-    desc: "NCM, GTIN, unidade e CFOP vêm prontos da origem. Menos rejeição na SEFAZ.",
-    icon: <Svg d="M20 6 9 17l-5-5" />,
+    titulo: "Entrega no WhatsApp",
+    desc: "Assim que a nota é autorizada, o DANFE e o XML vão direto pro WhatsApp do seu cliente. E-mail também, se preferir.",
+    icon: <Svg d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
+    disponivel: false,
+    tags: ["WhatsApp", "E-mail"],
   },
   {
-    titulo: "Estoque e financeiro em sincronia",
-    desc: "A nota emitida volta como referência para baixa e conferência no ERP.",
-    icon: <Svg d="M3 3v18h18" extra={<path d="m19 9-5 5-4-4-3 3" />} />,
+    titulo: "Multiempresa & contador",
+    desc: "Gerencie vários CNPJs numa conta só e dê acesso ao seu contador. Cada empresa com seus produtos, clientes e notas isolados.",
+    icon: <Svg d="M3 21h18" extra={<><path d="M5 21V7l8-4v18" /><path d="M19 21V11l-6-4" /></>} />,
+    disponivel: true,
+    tags: ["Vários CNPJs", "Acesso do contador"],
   },
   {
-    titulo: "Somente leitura e seguro",
-    desc: "Acesso read-only às tabelas. Não alteramos nada no seu Winthor.",
-    icon: <Svg d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
-  },
-  {
-    titulo: "Implantação sem dor",
-    desc: "Conexão por API segura. Sem instalar agente pesado, sem mexer no banco.",
-    icon: <Svg d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />,
+    titulo: "NFC-e e NFS-e no mesmo lugar",
+    desc: "Além da NF-e (mod. 55), emita o cupom fiscal do varejo (NFC-e) e a nota de serviço (NFS-e) sem trocar de sistema.",
+    icon: <Svg d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" extra={<><path d="M8 7h8" /><path d="M8 11h8" /></>} />,
+    disponivel: false,
+    tags: ["NFC-e (65)", "NFS-e"],
   },
 ];
 
-const passos = [
-  { titulo: "Conecte", desc: "Informe os dados de acesso read-only ao Oracle do Winthor." },
-  { titulo: "Sincronize", desc: "Produtos e clientes são importados e mantidos atualizados." },
-  { titulo: "Selecione", desc: "Escolha um pedido ou monte a nota com itens do catálogo." },
-  { titulo: "Emita", desc: "Gere, assine e autorize a NF-e na SEFAZ em segundos." },
-];
-
-const mapeamentos = [
-  { tabela: "WINDOW.PCPRODUT", destino: "Catálogo de produtos" },
-  { tabela: "WINDOW.PCCLIENT", destino: "Cadastro de clientes" },
-  { tabela: "WINDOW.PCPEDIDO", destino: "Pedidos para emissão" },
-  { tabela: "WINDOW.PCEST", destino: "Conferência de estoque" },
+const PASSOS = [
+  { titulo: "Fale com a gente", desc: "Conte seu cenário (loja, marketplace, volume) pelo WhatsApp." },
+  { titulo: "Conectamos", desc: "Ligamos suas fontes (loja, SEFAZ, WhatsApp) com segurança." },
+  { titulo: "Configuramos", desc: "Regras fiscais, CFOP e modelos prontos para o seu negócio." },
+  { titulo: "Automatize", desc: "As notas passam a fluir sozinhas. Você só acompanha." },
 ];
 
 // ---- helpers visuais ----
@@ -279,39 +194,6 @@ function Svg({ d, extra }: { d: string; extra?: ReactNode }) {
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d={d} />
       {extra}
-    </svg>
-  );
-}
-
-function FluxoChip({ children, destaque }: { children: ReactNode; destaque?: boolean }) {
-  return (
-    <span
-      className={
-        "rounded-lg border px-3 py-2 text-sm font-medium backdrop-blur " +
-        (destaque
-          ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-200"
-          : "border-white/15 bg-white/10 text-white")
-      }
-    >
-      {children}
-    </span>
-  );
-}
-
-function Seta({ pequena }: { pequena?: boolean }) {
-  return (
-    <svg
-      width={pequena ? 16 : 20}
-      height={pequena ? 16 : 20}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={pequena ? "text-[var(--muted)]" : "text-violet-300"}
-    >
-      <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
     </svg>
   );
 }

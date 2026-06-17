@@ -82,7 +82,7 @@ export default function LoginPage() {
 
           <ul className="mt-8 space-y-3 text-sm">
             {[
-              "Integração com Winthor (ERP)",
+              "Vendas online viram NF-e automática",
               "Integração com WhatsApp",
               "Envio automático de NF-e por e-mail",
               "Multiempresa e multiusuário",

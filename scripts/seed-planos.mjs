@@ -29,8 +29,8 @@ const PLANOS = [
     recursos: [
       "Até 3 empresas (CNPJ)",
       "Tudo do Básico",
-      "Envio automático de NF-e por e-mail",
-      "Integração com WhatsApp",
+      "Integração com e-commerce e marketplaces",
+      "Envio por WhatsApp e e-mail",
       "Multiusuário (equipe)",
       "Suporte prioritário por WhatsApp",
     ],
@@ -45,7 +45,8 @@ const PLANOS = [
     recursos: [
       "Empresas ilimitadas",
       "Tudo do Profissional",
-      "Integração com Winthor (ERP)",
+      "Captura de notas recebidas (DF-e)",
+      "NFC-e e NFS-e",
       "API de integração",
       "Gerente de conta dedicado",
     ],
