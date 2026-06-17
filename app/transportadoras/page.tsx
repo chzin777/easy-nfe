@@ -15,17 +15,16 @@ import {
   type Coluna,
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
-import Stepper, { Step } from "@/app/ui/Stepper";
 import Tabs from "@/app/ui/Tabs";
 import { ContatoFields, EnderecoFields } from "@/app/ui/PessoaFields";
 import { TIPOS_TRANSPORTE, rotulo } from "@/lib/mock-data";
 import type { Transportadora } from "@/lib/types";
 import {
   listarTransportadoras,
-  criarTransportadora,
   atualizarTransportadora,
   excluirTransportadora,
 } from "./actions";
+import NovaTransportadoraModal from "./NovaTransportadoraModal";
 
 type Form = Omit<Transportadora, "id" | "codigoInterno">;
 
@@ -79,13 +78,6 @@ export default function TransportadorasPage() {
   }
   function fechar() {
     setModo(null);
-  }
-  async function salvarNovo() {
-    setSalvando(true);
-    await criarTransportadora(form);
-    await recarregar();
-    setSalvando(false);
-    fechar();
   }
   async function salvarEdicao() {
     if (!editId) return;
@@ -178,25 +170,10 @@ export default function TransportadorasPage() {
         />
       </Card>
 
-      {/* Criação em etapas */}
-      <Modal aberto={modo === "novo"} onFechar={fechar} titulo="Nova transportadora" largura="max-w-2xl">
-        <Stepper
-          completeButtonText="Cadastrar transportadora"
-          onFinalStepCompleted={salvarNovo}
-          canProceed={(s) => (s === 1 ? form.nome.trim() !== "" && form.documento.trim() !== "" : true)}
-        >
-          <Step>
-            <SectionTitle>Identificação da transportadora</SectionTitle>
-            {identificacao}
-          </Step>
-          <Step>
-            <ContatoFields value={form.contato} onChange={(contato) => setForm((f) => ({ ...f, contato }))} />
-          </Step>
-          <Step>
-            <EnderecoFields value={form.endereco} onChange={(endereco) => setForm((f) => ({ ...f, endereco }))} />
-          </Step>
-        </Stepper>
-      </Modal>
+      {/* Criação em etapas (modal compartilhado) */}
+      {modo === "novo" && (
+        <NovaTransportadoraModal onFechar={fechar} onCriado={() => { recarregar(); fechar(); }} />
+      )}
 
       {/* Edição completa */}
       <Modal

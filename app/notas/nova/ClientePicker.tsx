@@ -1,22 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Button, Field, Input, Select } from "@/app/ui/primitives";
-import Modal from "@/app/ui/Modal";
 import Flutuante from "@/app/ui/Flutuante";
-import { ContatoFields, EnderecoFields } from "@/app/ui/PessoaFields";
-import { TIPOS_CONTRIBUINTE } from "@/lib/mock-data";
 import type { Cliente } from "@/lib/types";
-import { criarCliente, type ClienteInput } from "@/app/clientes/actions";
-
-const novoVazio: ClienteInput = {
-  tipoContribuinte: "1",
-  documento: "",
-  nome: "",
-  inscricaoEstadual: "",
-  contato: { telefone: "", email: "" },
-  endereco: { cep: "", logradouro: "", numero: "", complemento: "", bairro: "", municipio: "", uf: "GO" },
-};
+import NovoClienteModal from "@/app/clientes/NovoClienteModal";
 
 export default function ClientePicker({
   clientes,
@@ -104,63 +91,5 @@ export default function ClientePicker({
         />
       )}
     </div>
-  );
-}
-
-function NovoClienteModal({ onFechar, onCriado }: { onFechar: () => void; onCriado: (c: Cliente) => void }) {
-  const [form, setForm] = useState<ClienteInput>(novoVazio);
-  const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-
-  async function salvar() {
-    if (!form.nome.trim() || !form.documento.trim()) {
-      setErro("Nome e CPF/CNPJ são obrigatórios.");
-      return;
-    }
-    setSalvando(true);
-    setErro(null);
-    try {
-      const c = await criarCliente(form);
-      onCriado(c);
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <Modal
-      aberto
-      onFechar={onFechar}
-      titulo="Novo cliente"
-      largura="max-w-2xl"
-      rodape={
-        <>
-          <Button variante="secondary" onClick={onFechar} disabled={salvando}>Cancelar</Button>
-          <Button onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Cadastrar e selecionar"}</Button>
-        </>
-      }
-    >
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Tipo de contribuinte" required>
-            <Select opcoes={TIPOS_CONTRIBUINTE} value={form.tipoContribuinte} onChange={(e) => setForm((f) => ({ ...f, tipoContribuinte: e.target.value }))} />
-          </Field>
-          <Field label="CPF ou CNPJ" required>
-            <Input value={form.documento} onChange={(e) => setForm((f) => ({ ...f, documento: e.target.value }))} />
-          </Field>
-          <Field label="Nome / Razão social" required className="sm:col-span-2">
-            <Input value={form.nome} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} />
-          </Field>
-          <Field label="Inscrição estadual" hint="Vazio se isento">
-            <Input value={form.inscricaoEstadual} onChange={(e) => setForm((f) => ({ ...f, inscricaoEstadual: e.target.value }))} />
-          </Field>
-        </div>
-        <ContatoFields value={form.contato} onChange={(contato) => setForm((f) => ({ ...f, contato }))} />
-        <EnderecoFields value={form.endereco} onChange={(endereco) => setForm((f) => ({ ...f, endereco }))} />
-        {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
-      </div>
-    </Modal>
   );
 }

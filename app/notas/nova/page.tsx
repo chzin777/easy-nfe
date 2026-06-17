@@ -86,6 +86,10 @@ export default function NovaNotaPage() {
       setResultado({ ok: false, erro: "Selecione um cliente." });
       return;
     }
+    if (!transporteOk) {
+      setResultado({ ok: false, erro: "Escolha uma transportadora para a modalidade de frete selecionada." });
+      return;
+    }
 
     const input: EmitirInput = {
       clienteId,
@@ -103,9 +107,13 @@ export default function NovaNotaPage() {
     setResultado(r);
   }
 
+  // Frete diferente de "9 - Sem ocorrência" exige transportadora.
+  const transporteOk = modFrete === "9" || transportadoraId !== "";
+
   function canProceed(step: number) {
     if (step === 1) return clienteId !== "";
     if (step === 2) return itens.length > 0;
+    if (step === 3) return transporteOk;
     return true;
   }
 
@@ -164,7 +172,15 @@ export default function NovaNotaPage() {
             <Field label="Quantidade">
               <Input type="number" min="1" value={qtd} onChange={(e) => setQtd(Number(e.target.value))} />
             </Field>
-            <Button variante="secondary" onClick={adicionarItem} disabled={!produtoSel}>+ Adicionar</Button>
+            <button
+              type="button"
+              onClick={adicionarItem}
+              disabled={!produtoSel}
+              className="flex h-[46px] cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[var(--success)] px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+              Adicionar
+            </button>
           </div>
 
           <div className="mt-5 overflow-hidden rounded-lg border border-[var(--border)]">
@@ -193,8 +209,12 @@ export default function NovaNotaPage() {
                       <td className="px-4 py-3 text-right">{formatBRL(i.precoUnitario)}</td>
                       <td className="px-4 py-3 text-right font-medium">{formatBRL(i.quantidade * i.precoUnitario)}</td>
                       <td className="px-4 py-3 text-right">
-                        <button onClick={() => removerItem(i.produtoId)} className="text-xs font-medium text-[var(--danger)] hover:underline">
-                          remover
+                        <button
+                          onClick={() => removerItem(i.produtoId)}
+                          className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-[var(--danger)] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                          Remover
                         </button>
                       </td>
                     </tr>
@@ -216,24 +236,34 @@ export default function NovaNotaPage() {
 
         {/* Etapa 3 */}
         <Step>
-          <SectionTitle>Transporte (se necessário)</SectionTitle>
+          <SectionTitle>Transporte</SectionTitle>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Transportadora" hint="Opcional">
+            <Field label="Modalidade do frete" required hint="Vai no XML da NF-e (modFrete)">
+              <Select
+                opcoes={MODALIDADES_FRETE}
+                value={modFrete}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setModFrete(v);
+                  if (v === "9") setTransportadoraId(""); // sem ocorrência → sem transportadora
+                }}
+              />
+            </Field>
+            <Field label="Transportadora" required={modFrete !== "9"} hint={modFrete === "9" ? "Não se aplica" : "Obrigatória para esta modalidade"}>
               <TransportadoraPicker
                 transportadoras={transportadoras}
                 value={transportadoraId}
-                onChange={(id) => {
-                  setTransportadoraId(id);
-                  const t = transportadoras.find((x) => x.id === id);
-                  if (t) setModFrete(t.tipoTransporte); // sugere a modalidade da transportadora
-                }}
-                onCriado={(t) => { setTransportadoras((prev) => [...prev, t]); setTransportadoraId(t.id); setModFrete(t.tipoTransporte); }}
+                permitirNenhum={modFrete === "9"}
+                onChange={setTransportadoraId}
+                onCriado={(t) => { setTransportadoras((prev) => [...prev, t]); setTransportadoraId(t.id); }}
               />
             </Field>
-            <Field label="Modalidade do frete" required hint="Vai no XML da NF-e (modFrete)">
-              <Select opcoes={MODALIDADES_FRETE} value={modFrete} onChange={(e) => setModFrete(e.target.value)} />
-            </Field>
           </div>
+          {!transporteOk && (
+            <p className="mt-3 text-sm font-medium text-[var(--warning)]">
+              Escolha uma transportadora — obrigatória para a modalidade de frete selecionada.
+            </p>
+          )}
         </Step>
 
         {/* Etapa 4 */}

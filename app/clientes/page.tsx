@@ -15,17 +15,16 @@ import {
   type Coluna,
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
-import Stepper, { Step } from "@/app/ui/Stepper";
 import Tabs from "@/app/ui/Tabs";
 import { ContatoFields, EnderecoFields } from "@/app/ui/PessoaFields";
 import { TIPOS_CONTRIBUINTE, rotulo } from "@/lib/mock-data";
 import type { Cliente } from "@/lib/types";
 import {
   listarClientes,
-  criarCliente,
   atualizarCliente,
   excluirCliente,
 } from "./actions";
+import NovoClienteModal from "./NovoClienteModal";
 
 type Form = Omit<Cliente, "id" | "codigoInterno">;
 
@@ -79,13 +78,6 @@ export default function ClientesPage() {
   }
   function fechar() {
     setModo(null);
-  }
-  async function salvarNovo() {
-    setSalvando(true);
-    await criarCliente(form);
-    await recarregar();
-    setSalvando(false);
-    fechar();
   }
   async function salvarEdicao() {
     if (!editId) return;
@@ -178,25 +170,10 @@ export default function ClientesPage() {
         />
       </Card>
 
-      {/* Criação em etapas */}
-      <Modal aberto={modo === "novo"} onFechar={fechar} titulo="Novo cliente" largura="max-w-2xl">
-        <Stepper
-          completeButtonText="Cadastrar cliente"
-          onFinalStepCompleted={salvarNovo}
-          canProceed={(s) => (s === 1 ? form.nome.trim() !== "" && form.documento.trim() !== "" : true)}
-        >
-          <Step>
-            <SectionTitle>Identificação do cliente</SectionTitle>
-            {identificacao}
-          </Step>
-          <Step>
-            <ContatoFields value={form.contato} onChange={(contato) => setForm((f) => ({ ...f, contato }))} />
-          </Step>
-          <Step>
-            <EnderecoFields value={form.endereco} onChange={(endereco) => setForm((f) => ({ ...f, endereco }))} />
-          </Step>
-        </Stepper>
-      </Modal>
+      {/* Criação em etapas (modal compartilhado) */}
+      {modo === "novo" && (
+        <NovoClienteModal onFechar={fechar} onCriado={() => { recarregar(); fechar(); }} />
+      )}
 
       {/* Edição completa */}
       <Modal

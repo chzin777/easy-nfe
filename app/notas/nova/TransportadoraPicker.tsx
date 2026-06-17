@@ -1,33 +1,22 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Button, Field, Input, Select } from "@/app/ui/primitives";
-import Modal from "@/app/ui/Modal";
 import Flutuante from "@/app/ui/Flutuante";
-import { ContatoFields, EnderecoFields } from "@/app/ui/PessoaFields";
-import { TIPOS_TRANSPORTE } from "@/lib/mock-data";
 import type { Transportadora } from "@/lib/types";
-import { criarTransportadora, type TransportadoraInput } from "@/app/transportadoras/actions";
-
-const novoVazio: TransportadoraInput = {
-  tipoTransporte: "0",
-  documento: "",
-  nome: "",
-  inscricaoEstadual: "",
-  contato: { telefone: "", email: "" },
-  endereco: { cep: "", logradouro: "", numero: "", complemento: "", bairro: "", municipio: "", uf: "GO" },
-};
+import NovaTransportadoraModal from "@/app/transportadoras/NovaTransportadoraModal";
 
 export default function TransportadoraPicker({
   transportadoras,
   value,
   onChange,
   onCriado,
+  permitirNenhum = true,
 }: {
   transportadoras: Transportadora[];
   value: string;
   onChange: (id: string) => void;
   onCriado: (t: Transportadora) => void;
+  permitirNenhum?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
@@ -52,7 +41,7 @@ export default function TransportadoraPicker({
         }
       >
         <span className={sel ? "font-medium" : "text-slate-400"}>
-          {sel ? `${sel.codigoInterno} · ${sel.nome}` : "Sem transporte / retirada"}
+          {sel ? `${sel.codigoInterno} · ${sel.nome}` : permitirNenhum ? "Sem transporte / retirada" : "Selecione uma transportadora…"}
         </span>
         <svg className={"shrink-0 text-slate-400 transition-transform " + (aberto ? "rotate-180" : "")} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
       </button>
@@ -69,15 +58,17 @@ export default function TransportadoraPicker({
             />
           </div>
           <ul className="max-h-56 overflow-y-auto py-1">
-            <li>
-              <button
-                type="button"
-                onClick={() => { onChange(""); setAberto(false); setBusca(""); }}
-                className={"flex w-full px-3 py-2 text-left text-sm text-[var(--muted)] hover:bg-slate-50 " + (value === "" ? "bg-[var(--primary-soft)]" : "")}
-              >
-                Sem transporte / retirada
-              </button>
-            </li>
+            {permitirNenhum && (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => { onChange(""); setAberto(false); setBusca(""); }}
+                  className={"flex w-full px-3 py-2 text-left text-sm text-[var(--muted)] hover:bg-slate-50 " + (value === "" ? "bg-[var(--primary-soft)]" : "")}
+                >
+                  Sem transporte / retirada
+                </button>
+              </li>
+            )}
             {filtrados.map((t) => (
               <li key={t.id}>
                 <button
@@ -102,65 +93,7 @@ export default function TransportadoraPicker({
         </div>
       </Flutuante>
 
-      {modal && <NovaTranspModal onFechar={() => setModal(false)} onCriado={(t) => { setModal(false); onCriado(t); }} />}
+      {modal && <NovaTransportadoraModal onFechar={() => setModal(false)} onCriado={(t) => { setModal(false); onCriado(t); }} />}
     </div>
-  );
-}
-
-function NovaTranspModal({ onFechar, onCriado }: { onFechar: () => void; onCriado: (t: Transportadora) => void }) {
-  const [form, setForm] = useState<TransportadoraInput>(novoVazio);
-  const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-
-  async function salvar() {
-    if (!form.nome.trim() || !form.documento.trim()) {
-      setErro("Nome e CPF/CNPJ são obrigatórios.");
-      return;
-    }
-    setSalvando(true);
-    setErro(null);
-    try {
-      const t = await criarTransportadora(form);
-      onCriado(t);
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <Modal
-      aberto
-      onFechar={onFechar}
-      titulo="Nova transportadora"
-      largura="max-w-2xl"
-      rodape={
-        <>
-          <Button variante="secondary" onClick={onFechar} disabled={salvando}>Cancelar</Button>
-          <Button onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Cadastrar e selecionar"}</Button>
-        </>
-      }
-    >
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Tipo de transporte" required>
-            <Select opcoes={TIPOS_TRANSPORTE} value={form.tipoTransporte} onChange={(e) => setForm((f) => ({ ...f, tipoTransporte: e.target.value }))} />
-          </Field>
-          <Field label="CPF ou CNPJ" required>
-            <Input value={form.documento} onChange={(e) => setForm((f) => ({ ...f, documento: e.target.value }))} />
-          </Field>
-          <Field label="Nome / Razão social" required className="sm:col-span-2">
-            <Input value={form.nome} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} />
-          </Field>
-          <Field label="Inscrição estadual" hint="Vazio se isento">
-            <Input value={form.inscricaoEstadual} onChange={(e) => setForm((f) => ({ ...f, inscricaoEstadual: e.target.value }))} />
-          </Field>
-        </div>
-        <ContatoFields value={form.contato} onChange={(contato) => setForm((f) => ({ ...f, contato }))} />
-        <EnderecoFields value={form.endereco} onChange={(endereco) => setForm((f) => ({ ...f, endereco }))} />
-        {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
-      </div>
-    </Modal>
   );
 }

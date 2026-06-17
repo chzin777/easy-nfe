@@ -1,27 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Button, Field, Input, Select, Textarea } from "@/app/ui/primitives";
-import Modal from "@/app/ui/Modal";
 import Flutuante from "@/app/ui/Flutuante";
-import { ORIGENS, UNIDADES } from "@/lib/mock-data";
 import { formatBRL } from "@/lib/format";
 import type { Produto } from "@/lib/types";
-import { criarProduto, type ProdutoInput } from "@/app/produtos/actions";
-
-const novoVazio: ProdutoInput = {
-  codigoBarras: "",
-  nome: "",
-  unidade: "UN",
-  ncm: "",
-  origem: "0",
-  preco: 0,
-  descricao: "",
-  cest: "",
-  codigoBeneficio: "",
-  creditoPresumidoIcms: "",
-  reguladoAnp: false,
-};
+import NovoProdutoModal from "@/app/produtos/NovoProdutoModal";
 
 export default function ProdutoPicker({
   produtos,
@@ -107,75 +90,5 @@ export default function ProdutoPicker({
 
       {modal && <NovoProdutoModal onFechar={() => setModal(false)} onCriado={(p) => { setModal(false); onCriado(p); }} />}
     </div>
-  );
-}
-
-function NovoProdutoModal({ onFechar, onCriado }: { onFechar: () => void; onCriado: (p: Produto) => void }) {
-  const [form, setForm] = useState<ProdutoInput>(novoVazio);
-  const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-
-  function set<K extends keyof ProdutoInput>(k: K, v: ProdutoInput[K]) {
-    setForm((f) => ({ ...f, [k]: v }));
-  }
-
-  async function salvar() {
-    if (!form.nome.trim() || !form.ncm.trim()) {
-      setErro("Nome e NCM são obrigatórios.");
-      return;
-    }
-    setSalvando(true);
-    setErro(null);
-    try {
-      const p = await criarProduto(form);
-      onCriado(p);
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <Modal
-      aberto
-      onFechar={onFechar}
-      titulo="Novo produto"
-      largura="max-w-2xl"
-      rodape={
-        <>
-          <Button variante="secondary" onClick={onFechar} disabled={salvando}>Cancelar</Button>
-          <Button onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Cadastrar e selecionar"}</Button>
-        </>
-      }
-    >
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Código de barras (GTIN/EAN)">
-          <Input value={form.codigoBarras} onChange={(e) => set("codigoBarras", e.target.value)} placeholder="Sem GTIN" />
-        </Field>
-        <Field label="Nome do produto" required>
-          <Input value={form.nome} onChange={(e) => set("nome", e.target.value)} />
-        </Field>
-        <Field label="Unidade" required>
-          <Select opcoes={UNIDADES} value={form.unidade} onChange={(e) => set("unidade", e.target.value)} />
-        </Field>
-        <Field label="NCM" required hint="8 dígitos">
-          <Input value={form.ncm} onChange={(e) => set("ncm", e.target.value)} placeholder="00000000" />
-        </Field>
-        <Field label="Origem" required>
-          <Select opcoes={ORIGENS} value={form.origem} onChange={(e) => set("origem", e.target.value)} />
-        </Field>
-        <Field label="Preço" required>
-          <Input type="number" step="0.01" min="0" value={form.preco} onChange={(e) => set("preco", Number(e.target.value))} />
-        </Field>
-        <Field label="CEST">
-          <Input value={form.cest} onChange={(e) => set("cest", e.target.value)} placeholder="0000000" />
-        </Field>
-        <Field label="Descrição" className="sm:col-span-2">
-          <Textarea value={form.descricao} onChange={(e) => set("descricao", e.target.value)} />
-        </Field>
-      </div>
-      {erro && <p className="mt-3 text-sm font-medium text-[var(--danger)]">{erro}</p>}
-    </Modal>
   );
 }

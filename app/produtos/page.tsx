@@ -8,7 +8,6 @@ import {
   Field,
   Input,
   PageHeader,
-  SectionTitle,
   Select,
   Tabela,
   Textarea,
@@ -17,16 +16,15 @@ import {
   type Coluna,
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
-import Stepper, { Step } from "@/app/ui/Stepper";
 import Tabs from "@/app/ui/Tabs";
 import { ORIGENS, UNIDADES } from "@/lib/mock-data";
 import type { Produto } from "@/lib/types";
 import {
   listarProdutos,
-  criarProduto,
   atualizarProduto,
   excluirProduto,
 } from "./actions";
+import NovoProdutoModal from "./NovoProdutoModal";
 
 type Form = Omit<Produto, "id" | "codigoInterno">;
 
@@ -86,13 +84,6 @@ export default function ProdutosPage() {
   }
   function fechar() {
     setModo(null);
-  }
-  async function salvarNovo() {
-    setSalvando(true);
-    await criarProduto(form);
-    await recarregar();
-    setSalvando(false);
-    fechar();
   }
   async function salvarEdicao() {
     if (!editId) return;
@@ -228,23 +219,10 @@ export default function ProdutosPage() {
         />
       </Card>
 
-      {/* Criação em etapas */}
-      <Modal aberto={modo === "novo"} onFechar={fechar} titulo="Novo produto" largura="max-w-2xl">
-        <Stepper completeButtonText="Cadastrar produto" onFinalStepCompleted={salvarNovo} canProceed={(s) => (s === 1 ? form.nome.trim() !== "" && form.ncm.trim() !== "" : true)}>
-          <Step>
-            <SectionTitle>Identificação do produto</SectionTitle>
-            {identificacao}
-          </Step>
-          <Step>
-            <SectionTitle>Origem, preço e descrição</SectionTitle>
-            {precoOrigem}
-          </Step>
-          <Step>
-            <SectionTitle>Configurações fiscais</SectionTitle>
-            {fiscal}
-          </Step>
-        </Stepper>
-      </Modal>
+      {/* Criação em etapas (modal compartilhado) */}
+      {modo === "novo" && (
+        <NovoProdutoModal onFechar={fechar} onCriado={() => { recarregar(); fechar(); }} />
+      )}
 
       {/* Edição completa */}
       <Modal
