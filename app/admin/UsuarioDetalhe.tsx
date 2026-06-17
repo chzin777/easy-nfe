@@ -278,10 +278,17 @@ function competenciaLabel(c: string): string {
 }
 
 function Faturas({ d, onMudou, flash }: Sub) {
+  const hojeISO = new Date().toISOString().slice(0, 10);
   const [pagandoId, setPagandoId] = useState<string | null>(null);
-  const [data, setData] = useState("");
+  const [data, setData] = useState(hojeISO);
   const [metodo, setMetodo] = useState("pix");
   const [erro, setErro] = useState<string | null>(null);
+
+  function abrirPagamento(id: string) {
+    setPagandoId(pagandoId === id ? null : id);
+    setData(hojeISO); // data do pagamento já vem com hoje
+    setMetodo("pix");
+  }
 
   async function gerar() {
     setErro(null);
@@ -293,7 +300,7 @@ function Faturas({ d, onMudou, flash }: Sub) {
     setErro(null);
     const r = await marcarFaturaPaga({ faturaId: id, data, metodo });
     if (!r.ok) { setErro(r.erro); return; }
-    setPagandoId(null); setData(""); setMetodo("pix"); flash("Fatura marcada como paga."); onMudou();
+    setPagandoId(null); flash("Fatura marcada como paga."); onMudou();
   }
   async function reabrir(id: string) {
     const r = await marcarFaturaPendente(id);
@@ -331,21 +338,29 @@ function Faturas({ d, onMudou, flash }: Sub) {
                       {f.status === "PAGA" && f.pagaEm && ` · pago em ${formatData(f.pagaEm)}${f.metodo ? ` (${f.metodo})` : ""}`}
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-1.5">
                     <Badge tom={tomFatura[f.status] ?? "neutral"}>{f.status}</Badge>
                     {f.status === "PAGA" ? (
-                      <button onClick={() => reabrir(f.id)} className="text-xs font-medium text-[var(--muted)] hover:underline">reabrir</button>
+                      <button onClick={() => reabrir(f.id)} className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50">
+                        Reabrir
+                      </button>
                     ) : (
-                      <button onClick={() => setPagandoId(pagandoId === f.id ? null : f.id)} className="text-xs font-medium text-[var(--primary)] hover:underline">marcar paga</button>
+                      <button onClick={() => abrirPagamento(f.id)} className="flex items-center gap-1 rounded-md bg-[var(--success)] px-2.5 py-1.5 text-xs font-semibold text-white transition hover:opacity-90">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                        Marcar paga
+                      </button>
                     )}
-                    <button onClick={() => remover(f.id)} className="text-xs font-medium text-[var(--danger)] hover:underline">excluir</button>
+                    <button onClick={() => remover(f.id)} title="Excluir fatura" className="flex items-center justify-center rounded-md border border-red-200 px-2 py-1.5 text-[var(--danger)] transition hover:bg-red-50">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" x2="10" y1="11" y2="17" /><line x1="14" x2="14" y1="11" y2="17" /></svg>
+                    </button>
                   </div>
                 </div>
 
                 {pagandoId === f.id && (
-                  <div className="mt-2 flex items-end gap-2 rounded-lg bg-slate-50 p-2">
+                  <div className="mt-2 flex items-end gap-2 rounded-lg border border-[var(--border)] bg-slate-50 p-3">
                     <Field label="Data do pagamento" className="flex-1"><Input type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
                     <Field label="Método" className="flex-1"><Select opcoes={METODOS} value={metodo} onChange={(e) => setMetodo(e.target.value)} /></Field>
+                    <Button variante="secondary" onClick={() => setPagandoId(null)}>Cancelar</Button>
                     <Button onClick={() => confirmarPaga(f.id)}>Confirmar</Button>
                   </div>
                 )}

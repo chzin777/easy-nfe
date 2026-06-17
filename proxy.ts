@@ -17,7 +17,7 @@ async function lerSessao(req: NextRequest): Promise<{ role: string } | null> {
   }
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const sessao = await lerSessao(req);
   const autenticado = sessao !== null;

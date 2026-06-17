@@ -363,24 +363,24 @@ export async function definirLicenca(input: {
 // Faturas (cobranças por período, geradas do plano + validade)
 // ----------------------------------------------------------------------------
 
-// Cria as faturas faltantes do início da licença até a validade, uma por período.
+// Gera as faturas dos PRÓXIMOS 3 MESES (mês atual + 2), respeitando a validade.
 // Não sobrescreve faturas existentes (preserva pagamentos já marcados).
 async function gerarFaturasInterno(userId: string): Promise<void> {
   const lic = await prisma.licenca.findUnique({ where: { userId }, include: { plano: true } });
-  if (!lic?.plano || !lic.validadeEm) return;
+  if (!lic?.plano) return;
 
   const preco = Number(lic.plano.preco);
-  const anual = lic.plano.periodicidade === "anual";
-  const inicio = lic.inicioEm;
   const fim = lic.validadeEm;
   const hoje = new Date();
+  const diaVenc = Math.min(lic.inicioEm.getDate(), 28);
 
-  let d = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
-  let guard = 0;
-  while (d <= fim && guard < 120) {
-    guard++;
+  for (let i = 0; i < 3; i++) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
+    const vencimento = new Date(d.getFullYear(), d.getMonth(), diaVenc);
+    // Não gera além da validade da licença.
+    if (fim && vencimento > fim) break;
+
     const competencia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const vencimento = new Date(d.getFullYear(), d.getMonth(), Math.min(inicio.getDate(), 28));
     const atrasada = vencimento < hoje;
     await prisma.fatura.upsert({
       where: { userId_competencia: { userId, competencia } },
@@ -394,7 +394,6 @@ async function gerarFaturasInterno(userId: string): Promise<void> {
         status: atrasada ? "ATRASADA" : "PENDENTE",
       },
     });
-    d = new Date(d.getFullYear(), d.getMonth() + (anual ? 12 : 1), 1);
   }
 }
 

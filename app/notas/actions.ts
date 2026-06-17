@@ -10,6 +10,7 @@ import type { DadosNFe, EnderecoNFe } from "@/lib/nfe/types";
 import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
 import { decriptar } from "@/lib/crypto";
+import { estadoLicencaUsuario } from "@/lib/licenca";
 
 // Carrega o certificado A1 (PFX+senha) armazenado criptografado na empresa.
 function certDaEmpresa(certData: string | null): { pfxBase64: string; senha: string } {
@@ -66,6 +67,9 @@ export type EmitirResultado =
 // o cliente só envia ids + o certificado (que vive apenas na sessão do navegador).
 export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
   try {
+    const lic = await estadoLicencaUsuario();
+    if (lic.bloqueado) return { ok: false, erro: lic.mensagem ?? "Licença expirada — emissão bloqueada." };
+
     const empresaId = await exigirEmpresa();
     const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
     const cUF = UF_IBGE[empresa.uf];
