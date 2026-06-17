@@ -137,10 +137,10 @@ export default function ConfiguracoesPage() {
         {trocando && <LightningLoader overlay texto="Carregando empresa…" />}
         <Tabs
           abas={[
-            { id: "emit", label: "Empresa emitente", content: <AbaEmitente form={form} setE={setE} setForm={setForm} /> },
+            { id: "emit", label: "Empresa emitente", content: <AbaEmitente form={form} setE={setE} setForm={setForm} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
             { id: "cert", label: "Certificado A1", content: <AbaCertificado /> },
             { id: "equipe", label: "Equipe", content: <AbaEquipe /> },
-            { id: "amb", label: "Ambiente & numeração", content: <AbaAmbiente form={form} setE={setE} /> },
+            { id: "amb", label: "Ambiente & numeração", content: <AbaAmbiente form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
           ]}
         />
       </Card>
@@ -332,14 +332,42 @@ function SeletorEmpresa({
   );
 }
 
+// Barra de salvar reaproveitada no rodapé das abas que editam a empresa.
+function BarraSalvar({
+  onSalvar,
+  salvando,
+  salvo,
+  rotuloNovo,
+}: {
+  onSalvar: () => void;
+  salvando: boolean;
+  salvo: boolean;
+  rotuloNovo: string;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-3 border-t border-[var(--border)] pt-4">
+      {salvo && <span className="text-sm font-medium text-[var(--success)]">✓ Salvo</span>}
+      <Button onClick={onSalvar} disabled={salvando}>
+        {salvando ? "Salvando…" : rotuloNovo}
+      </Button>
+    </div>
+  );
+}
+
 function AbaEmitente({
   form,
   setE,
   setForm,
+  onSalvar,
+  salvando,
+  salvo,
 }: {
   form: EmpresaDados;
   setE: <K extends keyof EmpresaDados>(k: K, v: EmpresaDados[K]) => void;
   setForm: React.Dispatch<React.SetStateAction<EmpresaDados>>;
+  onSalvar: () => void;
+  salvando: boolean;
+  salvo: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -370,6 +398,7 @@ function AbaEmitente({
         </div>
       </section>
       <EnderecoFields value={form.endereco} onChange={(endereco) => setForm((s) => ({ ...s, endereco }))} />
+      <BarraSalvar onSalvar={onSalvar} salvando={salvando} salvo={salvo} rotuloNovo={form.id ? "Salvar alterações" : "Cadastrar empresa"} />
     </div>
   );
 }
@@ -377,9 +406,15 @@ function AbaEmitente({
 function AbaAmbiente({
   form,
   setE,
+  onSalvar,
+  salvando,
+  salvo,
 }: {
   form: EmpresaDados;
   setE: <K extends keyof EmpresaDados>(k: K, v: EmpresaDados[K]) => void;
+  onSalvar: () => void;
+  salvando: boolean;
+  salvo: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -426,6 +461,8 @@ function AbaAmbiente({
           </Field>
         </div>
       </section>
+
+      <BarraSalvar onSalvar={onSalvar} salvando={salvando} salvo={salvo} rotuloNovo={form.id ? "Salvar alterações" : "Cadastrar empresa"} />
     </div>
   );
 }
