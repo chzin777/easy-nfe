@@ -1,5 +1,6 @@
 "use server";
 
+import forge from "node-forge";
 import { carregarCertificado } from "@/lib/nfe";
 import {
   consultarDFe,
@@ -284,6 +285,66 @@ export async function manifestar(input: ManifestarInput): Promise<ManifestarResu
       });
     }
     return { ok: r.ok, cStat: r.cStat, xMotivo: r.xMotivo };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
+    return { ok: false, erro: msg };
+  }
+}
+
+export type DiagnosticoCert = {
+  ok: boolean;
+  erro?: string;
+  ambiente?: string;
+  cnpjEmpresa?: string;
+  expirado?: boolean;
+  validoAte?: string | null;
+  numCerts?: number;
+  cadeia?: { cn: string; ca: boolean }[];
+  temIntermediario?: boolean;
+};
+
+// Diagnostica o certificado da empresa ativa — identifica as 2 causas do HTTP 403
+// na SEFAZ: certificado expirado, ou cadeia ICP-Brasil incompleta no PFX.
+export async function diagnosticarCertificado(): Promise<DiagnosticoCert> {
+  try {
+    const empresaId = await exigirEmpresa();
+    const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
+    const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
+
+    const p12 = forge.pkcs12.pkcs12FromAsn1(
+      forge.asn1.fromDer(forge.util.decode64(pfxBase64)),
+      senha,
+    );
+    const certs = (p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] ?? [])
+      .map((b) => b.cert)
+      .filter((c): c is forge.pki.Certificate => !!c);
+
+    const cadeia = certs.map((c) => {
+      const cn = (c.subject.getField("CN")?.value as string) ?? "(sem CN)";
+      const bc = c.getExtension("basicConstraints") as { cA?: boolean } | undefined;
+      return { cn, ca: bc?.cA === true };
+    });
+
+    // Folha = não-CA; expiração olha a folha.
+    const folha = certs.find((c) => {
+      const bc = c.getExtension("basicConstraints") as { cA?: boolean } | undefined;
+      return bc?.cA !== true;
+    }) ?? certs[0];
+    const validoAte = folha?.validity.notAfter ?? null;
+    const expirado = validoAte ? validoAte.getTime() < Date.now() : false;
+    const temIntermediario = cadeia.some((c) => c.ca);
+
+    return {
+      ok: true,
+      ambiente: empresa.ambiente,
+      cnpjEmpresa: empresa.cnpj,
+      expirado,
+      validoAte: validoAte?.toISOString() ?? null,
+      numCerts: certs.length,
+      cadeia,
+      temIntermediario,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };

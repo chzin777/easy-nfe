@@ -22,6 +22,7 @@ import {
   sincronizarRecebidas,
   manifestar,
   baixarXmlRecebida,
+  diagnosticarCertificado,
   type RecebidaUI,
   type ResumoSinc,
 } from "./actions";
@@ -62,6 +63,7 @@ export default function NotasRecebidasPage() {
   const [carregando, setCarregando] = useState(true);
   const [sincronizando, setSincronizando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [diag, setDiag] = useState<string[] | null>(null);
   const [busca, setBusca] = useState("");
 
   const [alvo, setAlvo] = useState<RecebidaUI | null>(null);
@@ -98,6 +100,30 @@ export default function NotasRecebidasPage() {
           : "Nenhum documento novo. Você está em dia."),
     );
     await recarregar();
+  }
+
+  async function diagnosticar() {
+    setDiag(["Diagnosticando…"]);
+    const r = await diagnosticarCertificado();
+    if (!r.ok) {
+      setDiag([`Erro: ${r.erro}`]);
+      return;
+    }
+    const linhas: string[] = [];
+    linhas.push(`Ambiente: ${r.ambiente} · CNPJ ${r.cnpjEmpresa}`);
+    linhas.push(
+      r.expirado
+        ? `❌ Certificado EXPIRADO em ${r.validoAte ? new Date(r.validoAte).toLocaleDateString("pt-BR") : "—"} — esta é a causa do 403.`
+        : `✓ Certificado válido até ${r.validoAte ? new Date(r.validoAte).toLocaleDateString("pt-BR") : "—"}.`,
+    );
+    linhas.push(`Certificados no PFX: ${r.numCerts}`);
+    (r.cadeia ?? []).forEach((c) => linhas.push(`  • ${c.cn}${c.ca ? " (CA/intermediário)" : " (folha)"}`));
+    linhas.push(
+      r.temIntermediario
+        ? "✓ Cadeia intermediária presente no PFX."
+        : "❌ SEM cadeia intermediária no PFX — o AN rejeita com 403. Reexporte o A1 incluindo a cadeia completa.",
+    );
+    setDiag(linhas);
   }
 
   function abrirManifesto(d: RecebidaUI) {
@@ -222,11 +248,23 @@ export default function NotasRecebidasPage() {
         titulo="Notas recebidas (DF-e)"
         subtitulo="Documentos emitidos contra o seu CNPJ, baixados da SEFAZ, com manifestação do destinatário."
         acao={
-          <Button onClick={sincronizar} disabled={sincronizando}>
-            {sincronizando ? "Sincronizando…" : "Sincronizar com SEFAZ"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variante="secondary" onClick={diagnosticar}>
+              Diagnosticar certificado
+            </Button>
+            <Button onClick={sincronizar} disabled={sincronizando}>
+              {sincronizando ? "Sincronizando…" : "Sincronizar com SEFAZ"}
+            </Button>
+          </div>
         }
       />
+
+      {diag && (
+        <div className="rounded-lg border border-[var(--border)] bg-slate-50 px-4 py-3 font-mono text-xs leading-relaxed text-[var(--foreground)] whitespace-pre-wrap">
+          {diag.join("\n")}
+          <button onClick={() => setDiag(null)} className="ml-3 font-sans text-[var(--muted)] hover:underline">fechar</button>
+        </div>
+      )}
 
       {resumo && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
