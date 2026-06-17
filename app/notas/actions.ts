@@ -46,6 +46,7 @@ export type EmitirInput = {
   clienteId: string;
   transportadoraId: string | null;
   tipoNota: string;
+  modFrete: string; // 0-4, 9 (NT 2016.002)
   infCpl?: string;
   itens: { produtoId: string; quantidade: number }[];
 };
@@ -117,7 +118,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       serie: String(empresa.serie),
       nNF: String(numero),
       natOp: "VENDA DE MERCADORIA",
-      modFrete: transp ? transp.tipoTransporte : "9",
+      modFrete: input.modFrete || "9",
       infCpl: input.infCpl,
       emit: {
         cnpj: empresa.cnpj,

@@ -48,6 +48,16 @@ export const TIPOS_TRANSPORTE: Opcao[] = [
   { value: "9", label: "9 - Sem frete" },
 ];
 
+// Modalidade do frete na NOTA (campo modFrete da NF-e, NT 2016.002).
+export const MODALIDADES_FRETE: Opcao[] = [
+  { value: "0", label: "0 - Frete por conta do Remetente (CIF)" },
+  { value: "1", label: "1 - Frete por conta do Destinatário (FOB)" },
+  { value: "2", label: "2 - Frete por conta de Terceiros" },
+  { value: "3", label: "3 - Transporte próprio por conta do Remetente" },
+  { value: "4", label: "4 - Transporte próprio por conta do Destinatário" },
+  { value: "9", label: "9 - Sem Ocorrência de Transporte" },
+];
+
 // Tipo de nota: modelo + sentido.
 export const TIPOS_NOTA: Opcao[] = [
   { value: "55-saida", label: "NF-e (mod. 55) - Saída" },

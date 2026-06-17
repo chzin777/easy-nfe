@@ -13,10 +13,13 @@ import {
 import { formatBRL } from "@/lib/format";
 import Modal from "@/app/ui/Modal";
 import Stepper, { Step } from "@/app/ui/Stepper";
-import { TIPOS_NOTA, TIPOS_TRANSPORTE, rotulo } from "@/lib/mock-data";
+import { TIPOS_NOTA, MODALIDADES_FRETE, rotulo } from "@/lib/mock-data";
 import type { ItemNota, Cliente, Produto, Transportadora } from "@/lib/types";
 import { emitirNota, type EmitirInput, type EmitirResultado } from "../actions";
 import { listarClientes } from "@/app/clientes/actions";
+import ClientePicker from "./ClientePicker";
+import ProdutoPicker from "./ProdutoPicker";
+import TransportadoraPicker from "./TransportadoraPicker";
 import { listarProdutos } from "@/app/produtos/actions";
 import { listarTransportadoras } from "@/app/transportadoras/actions";
 
@@ -24,6 +27,7 @@ export default function NovaNotaPage() {
   const [tipoNota, setTipoNota] = useState("55-saida");
   const [clienteId, setClienteId] = useState("");
   const [transportadoraId, setTransportadoraId] = useState("");
+  const [modFrete, setModFrete] = useState("9");
   const [info, setInfo] = useState("");
   const [itens, setItens] = useState<ItemNota[]>([]);
 
@@ -50,9 +54,6 @@ export default function NovaNotaPage() {
     })();
   }, []);
 
-  const clienteOpcoes = clientes.map((c) => ({ value: c.id, label: `${c.codigoInterno} · ${c.nome}` }));
-  const transpOpcoes = transportadoras.map((t) => ({ value: t.id, label: `${t.codigoInterno} · ${t.nome}` }));
-  const produtoOpcoes = produtos.map((p) => ({ value: p.id, label: `${p.codigoInterno} · ${p.nome}` }));
 
   const total = useMemo(
     () => itens.reduce((s, i) => s + i.quantidade * i.precoUnitario, 0),
@@ -90,6 +91,7 @@ export default function NovaNotaPage() {
       clienteId,
       transportadoraId: transportadoraId || null,
       tipoNota,
+      modFrete,
       infCpl: info || undefined,
       itens: itens.map((i) => ({ produtoId: i.produtoId, quantidade: i.quantidade })),
     };
@@ -129,12 +131,14 @@ export default function NovaNotaPage() {
               <Select opcoes={TIPOS_NOTA} value={tipoNota} onChange={(e) => setTipoNota(e.target.value)} />
             </Field>
             <Field label="Cliente" required>
-              <Select opcoes={clienteOpcoes} value={clienteId} onChange={(e) => setClienteId(e.target.value)} placeholder="Selecione o cliente…" />
+              <ClientePicker
+                clientes={clientes}
+                value={clienteId}
+                onChange={setClienteId}
+                onCriado={(c) => { setClientes((prev) => [...prev, c]); setClienteId(c.id); }}
+              />
             </Field>
           </div>
-          {clientes.length === 0 && (
-            <p className="mt-3 text-sm text-[var(--warning)]">Nenhum cliente cadastrado. Cadastre em Clientes antes de emitir.</p>
-          )}
           {cliente && (
             <div className="mt-4 rounded-lg border border-[var(--border)] bg-slate-50 px-4 py-3 text-sm">
               <p className="font-medium">{cliente.nome}</p>
@@ -150,7 +154,12 @@ export default function NovaNotaPage() {
           <SectionTitle>Produtos</SectionTitle>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_140px_auto] sm:items-end">
             <Field label="Produto">
-              <Select opcoes={produtoOpcoes} value={produtoSel} onChange={(e) => setProdutoSel(e.target.value)} placeholder="Selecione…" />
+              <ProdutoPicker
+                produtos={produtos}
+                value={produtoSel}
+                onChange={setProdutoSel}
+                onCriado={(p) => { setProdutos((prev) => [...prev, p]); setProdutoSel(p.id); }}
+              />
             </Field>
             <Field label="Quantidade">
               <Input type="number" min="1" value={qtd} onChange={(e) => setQtd(Number(e.target.value))} />
@@ -210,19 +219,20 @@ export default function NovaNotaPage() {
           <SectionTitle>Transporte (se necessário)</SectionTitle>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Transportadora" hint="Opcional">
-              <Select opcoes={transpOpcoes} value={transportadoraId} onChange={(e) => setTransportadoraId(e.target.value)} placeholder="Sem transporte / retirada" />
+              <TransportadoraPicker
+                transportadoras={transportadoras}
+                value={transportadoraId}
+                onChange={(id) => {
+                  setTransportadoraId(id);
+                  const t = transportadoras.find((x) => x.id === id);
+                  if (t) setModFrete(t.tipoTransporte); // sugere a modalidade da transportadora
+                }}
+                onCriado={(t) => { setTransportadoras((prev) => [...prev, t]); setTransportadoraId(t.id); setModFrete(t.tipoTransporte); }}
+              />
             </Field>
-            {transportadoraId && (
-              <Field label="Modalidade do frete">
-                <Input
-                  disabled
-                  value={rotulo(
-                    TIPOS_TRANSPORTE,
-                    transportadoras.find((t) => t.id === transportadoraId)?.tipoTransporte ?? "",
-                  )}
-                />
-              </Field>
-            )}
+            <Field label="Modalidade do frete" required hint="Vai no XML da NF-e (modFrete)">
+              <Select opcoes={MODALIDADES_FRETE} value={modFrete} onChange={(e) => setModFrete(e.target.value)} />
+            </Field>
           </div>
         </Step>
 
