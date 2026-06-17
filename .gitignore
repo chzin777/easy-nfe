@@ -32,7 +32,9 @@
 scripts/test-*.mjs
 
 # arquivos enviados (certificados/imagens originais com segredos)
-/public/images
+/public/images/*
+# exceto assets versionados da landing (prints de avaliações)
+!/public/images/prints
 
 # memória interna de ferramentas
 /memory

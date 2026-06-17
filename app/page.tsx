@@ -41,12 +41,6 @@ const INTEGRACOES = [
   { nome: "E-mail", desc: "XML + DANFE" },
 ];
 
-const DEPOIMENTOS = [
-  { texto: "Integramos com a loja online e as notas saem sozinhas a cada venda. Reduzimos o tempo de emissão em 80%.", autor: "Carla M.", cargo: "Gerente fiscal · Varejo online" },
-  { texto: "Antes era planilha e retrabalho. Hoje a equipe emite e manda no WhatsApp em segundos.", autor: "Rafael S.", cargo: "Dono · Comércio varejista" },
-  { texto: "Suporte humano de verdade e sem fidelidade. Migrei e nunca mais tive dor de cabeça.", autor: "Patrícia L.", cargo: "Contadora" },
-];
-
 const FAQ = [
   { p: "Preciso de certificado digital?", r: "Sim, um certificado A1 (.pfx). Você sobe na própria plataforma e ele é usado apenas para assinar suas notas, com segurança." },
   { p: "Funciona para qualquer estado?", r: "A emissão está homologada para a SEFAZ-GO. Outros estados entram sob demanda — fale com a gente." },
@@ -210,17 +204,20 @@ export default async function Landing() {
             <h2 className="text-3xl font-bold tracking-tight">Quem usa, recomenda</h2>
             <p className="mt-3 text-[var(--muted)]">Negócios que trocaram a planilha pelo easy-nfe.</p>
           </Reveal>
-          <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
-            {DEPOIMENTOS.map((d) => (
-              <div key={d.autor} className="flex flex-col rounded-2xl border border-[var(--border)] bg-slate-50 p-6">
-                <div className="mb-3 text-[var(--primary)]">
-                  {"★★★★★"}
-                </div>
-                <p className="flex-1 text-sm leading-relaxed text-slate-700">“{d.texto}”</p>
-                <div className="mt-4">
-                  <p className="text-sm font-semibold">{d.autor}</p>
-                  <p className="text-xs text-[var(--muted)]">{d.cargo}</p>
-                </div>
+          <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              { n: "1", w: 324, h: 320 },
+              { n: "2", w: 322, h: 340 },
+              { n: "3", w: 323, h: 357 },
+            ].map((p) => (
+              <div key={p.n} className="overflow-hidden rounded-2xl border border-[var(--border)] bg-slate-50 shadow-sm">
+                <Image
+                  src={`/images/prints/${p.n}.png`}
+                  alt={`Avaliação de cliente ${p.n}`}
+                  width={p.w}
+                  height={p.h}
+                  className="h-auto w-full"
+                />
               </div>
             ))}
           </div>
