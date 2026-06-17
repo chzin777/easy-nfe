@@ -49,18 +49,16 @@ function soapAN(
     `<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">` +
     `<soap:Body><${operacao} xmlns="${wsdlNs}"><nfeDadosMsg>${inner}</nfeDadosMsg></${operacao}></soap:Body>` +
     `</soap:Envelope>`;
-  // SOAP 1.2 carrega o SOAPAction como parâmetro do Content-Type (não em header próprio).
-  const action = `${wsdlNs}/${operacao}`;
   const u = new URL(url);
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
         hostname: u.hostname, port: 443, path: u.pathname, method: "POST",
         key: cert.keyPem, cert: cert.certPem, rejectUnauthorized: false,
-        // SEFAZ (Serpro/IIS) só negocia o client-cert em TLS 1.2 — TLS 1.3 resulta em HTTP 403.
-        servername: u.hostname, minVersion: "TLSv1.2", maxVersion: "TLSv1.2",
+        servername: u.hostname, minVersion: "TLSv1.2",
         headers: {
-          "Content-Type": `application/soap+xml; charset=utf-8; action="${action}"`,
+          // SEFAZ rejeita (HTTP 403) o parâmetro action no Content-Type — manter simples.
+          "Content-Type": "application/soap+xml; charset=utf-8",
           "Content-Length": Buffer.byteLength(envelope),
           "User-Agent": "easy-nfe/1.0",
         },
