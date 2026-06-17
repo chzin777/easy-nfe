@@ -1,0 +1,374 @@
+// easy-nfe — schema de domínio (emissão NF-e modelo 55).
+// Mapeia lib/types.ts + dados de autorização SEFAZ.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ----------------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------------
+enum Ambiente {
+  HOMOLOGACAO
+  PRODUCAO
+}
+
+enum StatusNota {
+  RASCUNHO
+  AUTORIZADA
+  CANCELADA
+  REJEITADA
+  DENEGADA
+}
+
+enum Role {
+  USER
+  SUPORTE
+  ADMIN
+}
+
+enum StatusLicenca {
+  TRIAL
+  ATIVA
+  EXPIRADA
+  SUSPENSA
+  CANCELADA
+}
+
+enum StatusFatura {
+  PENDENTE
+  PAGA
+  ATRASADA
+  CANCELADA
+}
+
+// ----------------------------------------------------------------------------
+// Usuário (login). Um usuário pode administrar várias empresas (emitentes).
+// ----------------------------------------------------------------------------
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  senhaHash String
+  nome      String?
+  role      Role     @default(USER)
+  ativo     Boolean  @default(true)
+
+  empresas   Emitente[] // empresas criadas por este usuário (dono original)
+  acessos    AcessoEmpresa[]
+  licenca    Licenca?
+  faturas    Fatura[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("usuarios")
+}
+
+// ----------------------------------------------------------------------------
+// SaaS: planos, licenças e pagamentos.
+// ----------------------------------------------------------------------------
+model Plano {
+  id             String   @id @default(uuid())
+  nome           String
+  descricao      String?
+  preco          Decimal  @default(0) @db.Decimal(10, 2)
+  periodicidade  String   @default("mensal") // mensal | anual
+  limiteEmpresas Int      @default(1) // -1 = ilimitado
+  recursos       String[] // bullets p/ a landing page
+  ativo          Boolean  @default(true) // exibido na LP / disponível
+  ordem          Int      @default(0)
+
+  licencas  Licenca[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("planos")
+}
+
+model Licenca {
+  id         String        @id @default(uuid())
+  userId     String        @unique
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planoId    String?
+  plano      Plano?        @relation(fields: [planoId], references: [id])
+  status     StatusLicenca @default(TRIAL)
+  inicioEm   DateTime      @default(now())
+  validadeEm DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("licencas")
+}
+
+// "Fatura" (cobrança por período) gerada a partir do plano/validade da licença.
+model Fatura {
+  id          String       @id @default(uuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planoNome   String // snapshot do nome do plano
+  competencia String // período de referência, ex.: "2026-06"
+  valor       Decimal      @db.Decimal(10, 2)
+  vencimento  DateTime
+  status      StatusFatura @default(PENDENTE)
+  pagaEm      DateTime?
+  metodo      String? // pix | cartao | boleto | transferencia (ao marcar paga)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, competencia])
+  @@index([userId])
+  @@map("faturas")
+}
+
+// Vínculo M—N usuário <-> empresa (acesso compartilhado).
+model AcessoEmpresa {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  empresaId String
+  empresa   Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  papel     String   @default("membro") // dono | membro
+  createdAt DateTime @default(now())
+
+  @@unique([userId, empresaId])
+  @@index([empresaId])
+  @@map("acessos_empresa")
+}
+
+// ----------------------------------------------------------------------------
+// Emitente / configuração fiscal (empresa que emite)
+// ----------------------------------------------------------------------------
+model Emitente {
+  id            String   @id @default(uuid())
+
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  cnpj          String
+  razaoSocial   String
+  nomeFantasia  String?
+  ie            String // inscrição estadual
+  crt           String // 1=Simples, 2=Simples-excesso, 3=Regime normal
+
+  // endereço (flat)
+  cep           String
+  logradouro    String
+  numero        String
+  complemento   String?
+  bairro        String
+  codMunicipio  String // IBGE
+  municipio     String
+  uf            String
+
+  telefone      String?
+  email         String?
+
+  // emissão
+  ambiente      Ambiente @default(HOMOLOGACAO)
+  serie         Int      @default(1)
+  proximoNumero Int      @default(1)
+
+  // certificado A1 — PFX+senha criptografados (AES-256-GCM) + metadados
+  certData      String?   @db.Text
+  certTitular   String?
+  certValidoAte DateTime?
+
+  notas         Nota[]
+  produtos      Produto[]
+  clientes      Cliente[]
+  transportadoras Transportadora[]
+  acessos       AcessoEmpresa[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, cnpj])
+  @@map("emitentes")
+}
+
+// ----------------------------------------------------------------------------
+// Produtos
+// ----------------------------------------------------------------------------
+model Produto {
+  id                  String   @id @default(uuid())
+
+  empresaId           String
+  empresa             Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  codigoInterno       Int      @unique @default(autoincrement())
+  codigoBarras        String? // cEAN / GTIN
+  nome                String
+  unidade             String
+  ncm                 String
+  origem              String // 0-8
+  preco               Decimal  @db.Decimal(15, 2)
+  descricao           String?
+
+  // fiscais
+  cfopPadrao          String?
+  csosn               String? // Simples
+  cst                 String? // Regime normal
+  cest                String?
+  codigoBeneficio     String?
+  creditoPresumidoIcms String?
+  reguladoAnp         Boolean  @default(false)
+
+  itens               ItemNota[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([empresaId])
+  @@map("produtos")
+}
+
+// ----------------------------------------------------------------------------
+// Clientes (destinatários)
+// ----------------------------------------------------------------------------
+model Cliente {
+  id               String   @id @default(uuid())
+
+  empresaId        String
+  empresa          Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  codigoInterno    Int      @unique @default(autoincrement())
+  tipoContribuinte String // 1 / 2 / 9
+  documento        String // CPF ou CNPJ
+  nome             String
+  inscricaoEstadual String?
+
+  telefone         String?
+  email            String?
+
+  cep              String?
+  logradouro       String?
+  numero           String?
+  complemento      String?
+  bairro           String?
+  codMunicipio     String?
+  municipio        String?
+  uf               String?
+
+  notas            Nota[]
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([empresaId])
+  @@map("clientes")
+}
+
+// ----------------------------------------------------------------------------
+// Transportadoras
+// ----------------------------------------------------------------------------
+model Transportadora {
+  id               String   @id @default(uuid())
+
+  empresaId        String
+  empresa          Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  codigoInterno    Int      @unique @default(autoincrement())
+  tipoTransporte   String // modalidade frete 0-4,9
+  documento        String
+  nome             String
+  inscricaoEstadual String?
+
+  telefone         String?
+  email            String?
+
+  cep              String?
+  logradouro       String?
+  numero           String?
+  complemento      String?
+  bairro           String?
+  codMunicipio     String?
+  municipio        String?
+  uf               String?
+
+  notas            Nota[]
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([empresaId])
+  @@map("transportadoras")
+}
+
+// ----------------------------------------------------------------------------
+// Notas (NF-e)
+// ----------------------------------------------------------------------------
+model Nota {
+  id                  String   @id @default(uuid())
+  numero              Int
+  serie               Int      @default(1)
+  modelo              String   @default("55")
+  naturezaOperacao    String   @default("VENDA DE MERCADORIA")
+  tipoNota            String // ex.: "55-saida"
+
+  emitenteId          String
+  emitente            Emitente @relation(fields: [emitenteId], references: [id])
+
+  clienteId           String
+  cliente             Cliente  @relation(fields: [clienteId], references: [id])
+
+  transportadoraId    String?
+  transportadora      Transportadora? @relation(fields: [transportadoraId], references: [id])
+
+  itens               ItemNota[]
+
+  informacoesAdicionais String?
+  status              StatusNota @default(RASCUNHO)
+  ambiente            Ambiente   @default(HOMOLOGACAO)
+  valorTotal          Decimal    @db.Decimal(15, 2) @default(0)
+
+  // autorização SEFAZ
+  chaveAcesso         String?  @unique
+  protocolo           String?
+  autorizadaEm        DateTime?
+  xmlAutorizado       String?  @db.Text
+
+  // cancelamento
+  protocoloCancelamento String?
+  justificativaCancelamento String?
+  canceladaEm         DateTime?
+  xmlCancelamento     String?  @db.Text
+
+  // rejeição
+  cStat               String?
+  xMotivo             String?
+
+  emitidaEm           DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([emitenteId, modelo, serie, numero])
+  @@index([status])
+  @@map("notas")
+}
+
+model ItemNota {
+  id            String   @id @default(uuid())
+  notaId        String
+  nota          Nota     @relation(fields: [notaId], references: [id], onDelete: Cascade)
+
+  produtoId     String?
+  produto       Produto? @relation(fields: [produtoId], references: [id])
+
+  // snapshots (preservam valores no momento da emissão)
+  nome          String
+  ncm           String?
+  cfop          String?
+  unidade       String?
+  quantidade    Decimal  @db.Decimal(15, 4)
+  precoUnitario Decimal  @db.Decimal(15, 10)
+  valorTotal    Decimal  @db.Decimal(15, 2)
+
+  @@map("itens_nota")
+}

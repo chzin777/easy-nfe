@@ -24,6 +24,19 @@
 .DS_Store
 *.pem
 
+# certificados digitais (segredo — nunca versionar)
+*.pfx
+*.p12
+
+# scripts de teste com credenciais de certificado
+scripts/test-*.mjs
+
+# arquivos enviados (certificados/imagens originais com segredos)
+/public/images
+
+# memória interna de ferramentas
+/memory
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -39,3 +52,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/lib/generated/prisma
+
+# prisma
+.env

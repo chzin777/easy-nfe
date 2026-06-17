@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+  <NFe>
+    <infNFe Id="NFe52260612345678000190550010000099991000099998" versao="4.00">
+      <ide>
+        <cUF>52</cUF>
+        <natOp>VENDA DE MERCADORIA</natOp>
+        <mod>55</mod>
+        <serie>1</serie>
+        <nNF>9999</nNF>
+        <dhEmi>2026-06-10T10:30:00-03:00</dhEmi>
+        <tpNF>1</tpNF>
+      </ide>
+      <emit>
+        <CNPJ>11222333000144</CNPJ>
+        <xNome>Distribuidora Atacado Goias Ltda</xNome>
+        <enderEmit>
+          <xLgr>Rod. BR-153</xLgr>
+          <nro>1500</nro>
+          <xBairro>Distrito Industrial</xBairro>
+          <xMun>Aparecida de Goiania</xMun>
+          <UF>GO</UF>
+          <CEP>74900000</CEP>
+          <fone>6230001111</fone>
+        </enderEmit>
+        <IE>109876543</IE>
+      </emit>
+      <dest>
+        <CNPJ>12345678000190</CNPJ>
+        <xNome>Easy Comercio e Distribuicao Ltda</xNome>
+        <enderDest>
+          <xLgr>Av. Anhanguera</xLgr>
+          <nro>5400</nro>
+          <xBairro>Setor Central</xBairro>
+          <xMun>Goiania</xMun>
+          <UF>GO</UF>
+          <CEP>74000000</CEP>
+        </enderDest>
+        <IE>101234567</IE>
+      </dest>
+      <det nItem="1">
+        <prod>
+          <cProd>A001</cProd>
+          <cEAN>7891234567890</cEAN>
+          <xProd>Cafe Torrado e Moido 500g</xProd>
+          <NCM>09012100</NCM>
+          <CFOP>5102</CFOP>
+          <uCom>PC</uCom>
+          <qCom>50.0000</qCom>
+          <vUnCom>15.5000</vUnCom>
+          <vProd>775.00</vProd>
+        </prod>
+      </det>
+      <det nItem="2">
+        <prod>
+          <cProd>A050</cProd>
+          <cEAN>7895555000017</cEAN>
+          <xProd>Acucar Refinado 1kg</xProd>
+          <NCM>17019900</NCM>
+          <CEST>1700700</CEST>
+          <CFOP>5102</CFOP>
+          <uCom>PC</uCom>
+          <qCom>120.0000</qCom>
+          <vUnCom>4.2000</vUnCom>
+          <vProd>504.00</vProd>
+        </prod>
+      </det>
+      <det nItem="3">
+        <prod>
+          <cProd>A075</cProd>
+          <cEAN>SEM GTIN</cEAN>
+          <xProd>Farinha de Trigo Tipo 1 - 5kg</xProd>
+          <NCM>11010010</NCM>
+          <CFOP>5102</CFOP>
+          <uCom>SC</uCom>
+          <qCom>30.0000</qCom>
+          <vUnCom>22.9000</vUnCom>
+          <vProd>687.00</vProd>
+        </prod>
+      </det>
+      <total>
+        <ICMSTot>
+          <vProd>1966.00</vProd>
+          <vNF>1966.00</vNF>
+        </ICMSTot>
+      </total>
+    </infNFe>
+  </NFe>
+  <protNFe versao="4.00">
+    <infProt>
+      <chNFe>52260612345678000190550010000099991000099998</chNFe>
+      <nProt>152260000099998</nProt>
+      <cStat>100</cStat>
+      <xMotivo>Autorizado o uso da NF-e</xMotivo>
+    </infProt>
+  </protNFe>
+</nfeProc>
