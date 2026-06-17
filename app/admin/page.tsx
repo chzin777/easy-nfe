@@ -13,6 +13,7 @@ import {
   listarPlanos, salvarPlano, excluirPlano, type PlanoDados,
   listarBeneficios, type Beneficio,
   listarBeneficiosAdmin, salvarBeneficio, excluirBeneficio, type BeneficioDados,
+  listarCategorias, criarCategoria, type CategoriaPlano,
 } from "./actions";
 import UsuarioDetalhe from "./UsuarioDetalhe";
 
@@ -201,12 +202,15 @@ function rotuloBeneficio(b: Beneficio, prevNome?: string): string {
 function AbaPlanos() {
   const [planos, setPlanos] = useState<Required<PlanoDados>[]>([]);
   const [beneficios, setBeneficios] = useState<Beneficio[]>([]);
+  const [categorias, setCategorias] = useState<CategoriaPlano[]>([]);
   const [edit, setEdit] = useState<PlanoDados | null>(null);
+  const [novaCat, setNovaCat] = useState(false);
 
   async function recarregar() {
-    const [pl, bs] = await Promise.all([listarPlanos(), listarBeneficios()]);
+    const [pl, bs, cs] = await Promise.all([listarPlanos(), listarBeneficios(), listarCategorias()]);
     setPlanos(pl);
     setBeneficios(bs);
+    setCategorias(cs);
   }
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void recarregar(); }, []);
@@ -214,52 +218,84 @@ function AbaPlanos() {
   const porId = new Map(beneficios.map((b) => [b.id, b]));
   const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, precoAntigo: 0, sobConsulta: false, categoria: "", periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, beneficioIds: [], ativo: true, ordem: planos.length };
 
+  // Agrupa por categoria, na ordem do catálogo (sem categoria por último).
+  const grupos: { categoria: string; itens: Required<PlanoDados>[] }[] = [];
+  for (const c of categorias) {
+    const itens = planos.filter((p) => p.categoria === c.nome);
+    if (itens.length) grupos.push({ categoria: c.nome, itens });
+  }
+  const semCat = planos.filter((p) => !p.categoria || !categorias.some((c) => c.nome === p.categoria));
+  if (semCat.length) grupos.push({ categoria: "", itens: semCat });
+
+  function cardPlano(p: Required<PlanoDados>) {
+    const prev = nomePlanoAnterior(planos, p.ordem, p.id);
+    const temTudoAnterior = p.beneficioIds.some((id) => porId.get(id)?.chave === "tudo_anterior");
+    const planoAnterior = planos.filter((x) => x.ordem < p.ordem && x.id !== p.id).sort((a, b) => b.ordem - a.ordem)[0];
+    const idsAnterior = new Set(planoAnterior?.beneficioIds ?? []);
+    // Com "tudo do anterior", esconde os benefícios que já vêm do plano de baixo.
+    const idsVisiveis = p.beneficioIds.filter((id) => {
+      if (porId.get(id)?.chave === "tudo_anterior") return true;
+      return !(temTudoAnterior && idsAnterior.has(id));
+    });
+    return (
+      <Card key={p.id} className="flex flex-col p-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="font-semibold">{p.nome}</p>
+            <p className="text-xs text-[var(--muted)]">{p.periodicidade} · {p.limiteEmpresas < 0 ? "∞" : p.limiteEmpresas} empresa(s)</p>
+          </div>
+          {!p.ativo && <Badge tom="neutral">inativo</Badge>}
+        </div>
+        {p.sobConsulta ? (
+          <p className="mt-2 text-lg font-bold text-[var(--primary)]">Sob consulta</p>
+        ) : (
+          <p className="mt-2 flex items-baseline gap-2">
+            {p.precoAntigo > 0 && <span className="text-sm text-[var(--muted)] line-through">{formatBRL(p.precoAntigo)}</span>}
+            <span className="text-2xl font-bold text-[var(--primary)]">{formatBRL(p.preco)}</span>
+          </p>
+        )}
+        {p.descricao && <p className="mt-1 text-sm text-[var(--muted)]">{p.descricao}</p>}
+        <ul className="mt-3 flex-1 space-y-1 text-sm">
+          {idsVisiveis.map((id) => {
+            const b = porId.get(id);
+            return <li key={id} className="flex gap-1.5"><span className="text-[var(--success)]">✓</span>{b ? rotuloBeneficio(b, prev) : id}</li>;
+          })}
+        </ul>
+        <Button variante="secondary" className="mt-4" onClick={() => setEdit(p)}>Editar</Button>
+      </Card>
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-[var(--muted)]">{planos.length} plano(s). Aparecem na landing page quando ativos.</p>
-        <Button onClick={() => setEdit(vazio)}>+ Novo plano</Button>
+        <p className="text-sm text-[var(--muted)]">{planos.length} plano(s) · {categorias.length} categoria(s).</p>
+        <div className="flex gap-2">
+          <Button variante="secondary" onClick={() => setNovaCat(true)}>+ Nova categoria</Button>
+          <Button onClick={() => setEdit(vazio)}>+ Novo plano</Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {planos.map((p) => {
-          const prev = nomePlanoAnterior(planos, p.ordem, p.id);
-          return (
-            <Card key={p.id} className="flex flex-col p-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-semibold">{p.nome}</p>
-                  <p className="text-xs text-[var(--muted)]">{p.categoria ? `${p.categoria} · ` : ""}{p.periodicidade} · {p.limiteEmpresas < 0 ? "∞" : p.limiteEmpresas} empresa(s)</p>
-                </div>
-                {!p.ativo && <Badge tom="neutral">inativo</Badge>}
-              </div>
-              {p.sobConsulta ? (
-                <p className="mt-2 text-lg font-bold text-[var(--primary)]">Sob consulta</p>
-              ) : (
-                <p className="mt-2 flex items-baseline gap-2">
-                  {p.precoAntigo > 0 && <span className="text-sm text-[var(--muted)] line-through">{formatBRL(p.precoAntigo)}</span>}
-                  <span className="text-2xl font-bold text-[var(--primary)]">{formatBRL(p.preco)}</span>
-                </p>
-              )}
-              {p.descricao && <p className="mt-1 text-sm text-[var(--muted)]">{p.descricao}</p>}
-              <ul className="mt-3 flex-1 space-y-1 text-sm">
-                {p.beneficioIds.map((id) => {
-                  const b = porId.get(id);
-                  return <li key={id} className="flex gap-1.5"><span className="text-[var(--success)]">✓</span>{b ? rotuloBeneficio(b, prev) : id}</li>;
-                })}
-              </ul>
-              <Button variante="secondary" className="mt-4" onClick={() => setEdit(p)}>Editar</Button>
-            </Card>
-          );
-        })}
-      </div>
+      {planos.length === 0 ? (
+        <p className="py-10 text-center text-sm text-[var(--muted)]">Nenhum plano. Crie o primeiro.</p>
+      ) : (
+        grupos.map((g) => (
+          <div key={g.categoria || "_sem_"}>
+            <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">{g.categoria || "Sem categoria"}</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {g.itens.map(cardPlano)}
+            </div>
+          </div>
+        ))
+      )}
 
-      {edit && <PlanoModal inicial={edit} catalogo={beneficios} planos={planos} onFechar={() => setEdit(null)} onSalvo={() => { setEdit(null); recarregar(); }} />}
+      {edit && <PlanoModal inicial={edit} catalogo={beneficios} planos={planos} categorias={categorias} onFechar={() => setEdit(null)} onSalvo={() => { setEdit(null); recarregar(); }} />}
+      {novaCat && <NovaCategoriaModal onFechar={() => setNovaCat(false)} onCriada={() => { setNovaCat(false); recarregar(); }} />}
     </div>
   );
 }
 
-function PlanoModal({ inicial, catalogo, planos, onFechar, onSalvo }: { inicial: PlanoDados; catalogo: Beneficio[]; planos: Required<PlanoDados>[]; onFechar: () => void; onSalvo: () => void }) {
+function PlanoModal({ inicial, catalogo, planos, categorias, onFechar, onSalvo }: { inicial: PlanoDados; catalogo: Beneficio[]; planos: Required<PlanoDados>[]; categorias: CategoriaPlano[]; onFechar: () => void; onSalvo: () => void }) {
   const [p, setP] = useState<PlanoDados>(inicial);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -295,7 +331,13 @@ function PlanoModal({ inicial, catalogo, planos, onFechar, onSalvo }: { inicial:
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <Field label="Nome" required><Input value={p.nome} onChange={(e) => set("nome", e.target.value)} /></Field>
-        <Field label="Categoria" hint="Agrupa na landing"><Input value={p.categoria} onChange={(e) => set("categoria", e.target.value)} placeholder="Ex.: Para crescer" /></Field>
+        <Field label="Categoria" hint="Agrupa na landing">
+          <Select
+            opcoes={[{ value: "", label: "— sem categoria —" }, ...categorias.map((c) => ({ value: c.nome, label: c.nome }))]}
+            value={p.categoria}
+            onChange={(e) => set("categoria", e.target.value)}
+          />
+        </Field>
         <Field label="Preço de (riscado)" hint="0 = sem promoção"><Input type="number" step="0.01" min="0" value={p.precoAntigo} onChange={(e) => set("precoAntigo", Number(e.target.value))} /></Field>
         <Field label="Preço (R$)"><Input type="number" step="0.01" min="0" value={p.preco} onChange={(e) => set("preco", Number(e.target.value))} /></Field>
         <Field label="Periodicidade"><Select opcoes={[{ value: "mensal", label: "Mensal" }, { value: "anual", label: "Anual" }]} value={p.periodicidade} onChange={(e) => set("periodicidade", e.target.value)} /></Field>
@@ -522,6 +564,36 @@ function BeneficioModal({ inicial, onFechar, onSalvo }: { inicial: BeneficioDado
         </label>
         {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
       </div>
+    </Modal>
+  );
+}
+
+function NovaCategoriaModal({ onFechar, onCriada }: { onFechar: () => void; onCriada: () => void }) {
+  const [nome, setNome] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+
+  async function salvar() {
+    setSalvando(true); setErro(null);
+    const r = await criarCategoria(nome);
+    setSalvando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    onCriada();
+  }
+
+  return (
+    <Modal aberto onFechar={onFechar} titulo="Nova categoria" largura="max-w-sm"
+      rodape={
+        <>
+          <Button variante="secondary" onClick={onFechar} disabled={salvando}>Cancelar</Button>
+          <Button onClick={salvar} disabled={salvando || !nome.trim()}>{salvando ? "Criando…" : "Criar"}</Button>
+        </>
+      }
+    >
+      <Field label="Nome da categoria" required>
+        <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Para crescer" autoFocus />
+      </Field>
+      {erro && <p className="mt-2 text-sm font-medium text-[var(--danger)]">{erro}</p>}
     </Modal>
   );
 }

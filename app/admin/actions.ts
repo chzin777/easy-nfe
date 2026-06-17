@@ -287,6 +287,42 @@ export type PlanoDados = {
 
 export type Beneficio = { id: string; chave: string; nome: string };
 
+// ----------------------------------------------------------------------------
+// Categorias de plano
+// ----------------------------------------------------------------------------
+export type CategoriaPlano = { id: string; nome: string };
+
+export async function listarCategorias(): Promise<CategoriaPlano[]> {
+  await exigirAdmin();
+  const rows = await prisma.categoriaPlano.findMany({ orderBy: { ordem: "asc" } });
+  return rows.map((c) => ({ id: c.id, nome: c.nome }));
+}
+
+export async function criarCategoria(nome: string): Promise<Resultado> {
+  try {
+    await exigirAdmin();
+    const n = nome.trim();
+    if (!n) return { ok: false, erro: "Nome da categoria é obrigatório." };
+    const existe = await prisma.categoriaPlano.findUnique({ where: { nome: n } });
+    if (existe) return { ok: false, erro: "Já existe uma categoria com este nome." };
+    const count = await prisma.categoriaPlano.count();
+    const c = await prisma.categoriaPlano.create({ data: { nome: n, ordem: count } });
+    return { ok: true, id: c.id };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function excluirCategoria(id: string): Promise<Resultado> {
+  try {
+    await exigirAdmin();
+    await prisma.categoriaPlano.delete({ where: { id } });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function listarBeneficios(): Promise<Beneficio[]> {
   await exigirAdmin();
   const rows = await prisma.beneficio.findMany({ where: { ativo: true }, orderBy: { ordem: "asc" } });

@@ -95,6 +95,16 @@ model Plano {
   @@map("planos")
 }
 
+// Categorias de plano (agrupamento na landing).
+model CategoriaPlano {
+  id        String   @id @default(uuid())
+  nome      String   @unique
+  ordem     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("categorias_plano")
+}
+
 // Catálogo de benefícios/permissões que podem ser atribuídos a planos.
 model Beneficio {
   id        String  @id @default(uuid())

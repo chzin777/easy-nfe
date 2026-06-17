@@ -63,8 +63,16 @@ export default async function Landing() {
     orderBy: { ordem: "asc" },
     include: { beneficios: { orderBy: { ordem: "asc" }, select: { chave: true, nome: true } } },
   });
-  const nomePlanoAnterior = (ordem: number) =>
-    planos.filter((x) => x.ordem < ordem).sort((a, b) => b.ordem - a.ordem)[0]?.nome;
+  const planoAnterior = (ordem: number) =>
+    planos.filter((x) => x.ordem < ordem).sort((a, b) => b.ordem - a.ordem)[0];
+  const nomePlanoAnterior = (ordem: number) => planoAnterior(ordem)?.nome;
+  // Com "Tudo do {anterior}", esconde os benefícios já cobertos pelo plano de baixo (redundância).
+  const beneficiosVisiveis = (p: (typeof planos)[number]) => {
+    const temTudoAnterior = p.beneficios.some((b) => b.chave === "tudo_anterior");
+    if (!temTudoAnterior) return p.beneficios;
+    const anteriores = new Set((planoAnterior(p.ordem)?.beneficios ?? []).map((b) => b.chave));
+    return p.beneficios.filter((b) => b.chave === "tudo_anterior" || !anteriores.has(b.chave));
+  };
 
   const destaqueId = planos[1]?.id;
   // Agrupa por categoria preservando a ordem de aparição.
@@ -266,7 +274,7 @@ export default async function Landing() {
                         )}
                         <p className="mt-1 text-xs text-[var(--muted)]">{p.limiteEmpresas < 0 ? "Empresas ilimitadas" : `${p.limiteEmpresas} empresa(s)`}</p>
                         <ul className="mt-6 flex-1 space-y-2.5 text-sm">
-                          {p.beneficios.map((b, j) => (
+                          {beneficiosVisiveis(p).map((b, j) => (
                             <li key={j} className="flex gap-2"><span className="text-[var(--success)]">✓</span><span className="text-slate-600">{b.chave === "tudo_anterior" ? `Tudo do ${nomePlanoAnterior(p.ordem) ?? "plano anterior"}` : b.nome}</span></li>
                           ))}
                         </ul>
