@@ -109,20 +109,15 @@ export default function ConfiguracoesPage() {
       />
 
       {/* Seletor de empresa */}
-      <Card className="flex flex-wrap items-center gap-3 p-4">
-        <span className="text-sm font-medium text-[var(--muted)]">Empresa ativa:</span>
-        <div className="min-w-[260px] flex-1">
-          <Select
-            opcoes={[
-              ...empresas.map((e) => ({ value: e.id, label: `${e.razaoSocial} · ${e.cnpj}` })),
-              { value: "__nova__", label: "➕ Cadastrar nova empresa…" },
-            ]}
-            value={ativaValue}
-            onChange={(e) => onTrocar(e.target.value)}
-          />
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-[var(--muted)]">Empresa ativa:</span>
+          <div className="min-w-[280px] flex-1">
+            <SeletorEmpresa empresas={empresas} ativaId={ativaValue} onSelecionar={onTrocar} />
+          </div>
         </div>
         {empresas.length === 0 && (
-          <span className="text-sm text-[var(--warning)]">Cadastre sua primeira empresa para emitir notas.</span>
+          <p className="mt-2 text-sm text-[var(--warning)]">Cadastre sua primeira empresa para emitir notas.</p>
         )}
       </Card>
 
@@ -139,6 +134,104 @@ export default function ConfiguracoesPage() {
           ]}
         />
       </Card>
+    </div>
+  );
+}
+
+function SeletorEmpresa({
+  empresas,
+  ativaId,
+  onSelecionar,
+}: {
+  empresas: EmpresaResumo[];
+  ativaId: string;
+  onSelecionar: (id: string) => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function fora(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false);
+    }
+    document.addEventListener("mousedown", fora);
+    return () => document.removeEventListener("mousedown", fora);
+  }, []);
+
+  const ativa = empresas.find((e) => e.id === ativaId);
+  const q = busca.trim().toLowerCase();
+  const filtrados = q ? empresas.filter((e) => e.razaoSocial.toLowerCase().includes(q) || e.cnpj.includes(q)) : empresas;
+  const iniciais = (ativa?.razaoSocial ?? "+").slice(0, 2).toUpperCase();
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className={
+          "flex w-full items-center gap-2.5 rounded-lg border bg-white px-3 py-2 text-left transition " +
+          (aberto ? "border-[var(--primary)]" : "border-[var(--border)] hover:border-slate-300")
+        }
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--primary)] to-[var(--primary-2)] text-[11px] font-bold text-white">{iniciais}</span>
+        <span className="min-w-0 flex-1">
+          {ativa ? (
+            <>
+              <span className="block truncate text-sm font-semibold">{ativa.razaoSocial}</span>
+              <span className="block truncate font-mono text-[11px] text-[var(--muted)]">{ativa.cnpj}</span>
+            </>
+          ) : (
+            <span className="block text-sm font-medium text-[var(--primary)]">Nova empresa (não salva)</span>
+          )}
+        </span>
+        <svg className={"shrink-0 text-slate-400 transition-transform " + (aberto ? "rotate-180" : "")} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+
+      {aberto && (
+        <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-xl">
+          {empresas.length > 3 && (
+            <div className="border-b border-[var(--border)] p-2">
+              <input
+                autoFocus
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar empresa…"
+                className="w-full rounded-md border border-[var(--border)] px-2.5 py-1.5 text-sm outline-none focus:border-[var(--primary)]"
+              />
+            </div>
+          )}
+          <ul className="max-h-60 overflow-y-auto py-1">
+            {filtrados.map((e) => (
+              <li key={e.id}>
+                <button
+                  type="button"
+                  onClick={() => { onSelecionar(e.id); setAberto(false); setBusca(""); }}
+                  className={"flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-slate-50 " + (e.id === ativaId ? "bg-[var(--primary-soft)]" : "")}
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-600">{e.razaoSocial.slice(0, 2).toUpperCase()}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{e.razaoSocial}</span>
+                    <span className="block truncate font-mono text-[11px] text-[var(--muted)]">{e.cnpj}</span>
+                  </span>
+                  {e.id === ativaId && (
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--primary)]"><path d="M20 6 9 17l-5-5" /></svg>
+                  )}
+                </button>
+              </li>
+            ))}
+            {filtrados.length === 0 && <li className="px-3 py-3 text-center text-xs text-[var(--muted)]">Nenhuma empresa.</li>}
+          </ul>
+          <button
+            type="button"
+            onClick={() => { onSelecionar("__nova__"); setAberto(false); setBusca(""); }}
+            className="flex w-full items-center gap-2 border-t border-[var(--border)] px-3 py-2.5 text-sm font-medium text-[var(--primary)] hover:bg-[var(--primary-soft)]"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+            Cadastrar nova empresa
+          </button>
+        </div>
+      )}
     </div>
   );
 }

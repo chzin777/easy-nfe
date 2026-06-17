@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion, AnimatePresence, type Variants } from "motion/react";
 import { Badge, Button, Card, Field, Input, Select, Textarea } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import { formatBRL, formatData } from "@/lib/format";
@@ -20,8 +21,24 @@ const tomLicenca: Record<string, "success" | "danger" | "warning" | "neutral" | 
   ATIVA: "success", TRIAL: "primary", EXPIRADA: "danger", SUSPENSA: "warning", CANCELADA: "neutral",
 };
 
+const ABAS = ["usuarios", "planos"] as const;
+type Aba = (typeof ABAS)[number];
+
+const abaVariants: Variants = {
+  enter: (dir: number) => ({ x: dir >= 0 ? "100%" : "-100%", opacity: 0 }),
+  center: { x: "0%", opacity: 1 },
+  exit: (dir: number) => ({ x: dir >= 0 ? "-40%" : "40%", opacity: 0 }),
+};
+
 export default function AdminPage() {
-  const [aba, setAba] = useState<"usuarios" | "planos">("usuarios");
+  const [aba, setAba] = useState<Aba>("usuarios");
+  const [dir, setDir] = useState(0);
+
+  function trocar(nova: Aba) {
+    if (nova === aba) return;
+    setDir(ABAS.indexOf(nova) - ABAS.indexOf(aba));
+    setAba(nova);
+  }
 
   return (
     <div className="space-y-6">
@@ -31,10 +48,10 @@ export default function AdminPage() {
       </div>
 
       <div className="flex gap-1 rounded-lg bg-slate-100 p-1 text-sm font-medium">
-        {(["usuarios", "planos"] as const).map((a) => (
+        {ABAS.map((a) => (
           <button
             key={a}
-            onClick={() => setAba(a)}
+            onClick={() => trocar(a)}
             className={"rounded-md px-4 py-1.5 transition " + (aba === a ? "bg-white text-[var(--primary)] shadow-sm" : "text-slate-500")}
           >
             {a === "usuarios" ? "Usuários & Licenças" : "Planos"}
@@ -42,7 +59,21 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {aba === "usuarios" ? <AbaUsuarios /> : <AbaPlanos />}
+      <div className="relative overflow-hidden">
+        <AnimatePresence mode="wait" custom={dir} initial={false}>
+          <motion.div
+            key={aba}
+            custom={dir}
+            variants={abaVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {aba === "usuarios" ? <AbaUsuarios /> : <AbaPlanos />}
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
