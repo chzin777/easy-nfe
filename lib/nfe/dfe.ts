@@ -57,7 +57,8 @@ function soapAN(
       {
         hostname: u.hostname, port: 443, path: u.pathname, method: "POST",
         key: cert.keyPem, cert: cert.certPem, rejectUnauthorized: false,
-        servername: u.hostname, minVersion: "TLSv1.2",
+        // SEFAZ (Serpro/IIS) só negocia o client-cert em TLS 1.2 — TLS 1.3 resulta em HTTP 403.
+        servername: u.hostname, minVersion: "TLSv1.2", maxVersion: "TLSv1.2",
         headers: {
           "Content-Type": `application/soap+xml; charset=utf-8; action="${action}"`,
           "Content-Length": Buffer.byteLength(envelope),
