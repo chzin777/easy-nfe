@@ -6,6 +6,7 @@ import { Badge, Button, Card, Field, Input, Select } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import Tabs from "@/app/ui/Tabs";
+import { FEATURES } from "@/lib/features";
 import { formatBRL, formatData } from "@/lib/format";
 import {
   listarUsuarios, criarUsuario, type UsuarioResumo,
@@ -388,7 +389,7 @@ function AbaBeneficios() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void recarregar(); }, []);
 
-  const vazio: BeneficioDados = { chave: "", nome: "", descricao: "", ordem: itens.length + 1, ativo: true };
+  const vazio: BeneficioDados = { chave: "", nome: "", descricao: "", ordem: itens.length + 1, ativo: true, features: [] };
 
   return (
     <div className="space-y-4">
@@ -438,6 +439,14 @@ function BeneficioModal({ inicial, onFechar, onSalvo }: { inicial: BeneficioDado
   const [salvando, setSalvando] = useState(false);
   function set<K extends keyof BeneficioDados>(k: K, v: BeneficioDados[K]) { setB((s) => ({ ...s, [k]: v })); }
 
+  function toggleFeature(chave: string) {
+    setB((s) => ({
+      ...s,
+      features: s.features.includes(chave) ? s.features.filter((f) => f !== chave) : [...s.features, chave],
+    }));
+  }
+  const categorias = [...new Set(FEATURES.map((f) => f.categoria))];
+
   async function salvar() {
     setSalvando(true); setErro(null);
     const r = await salvarBeneficio(b);
@@ -455,7 +464,7 @@ function BeneficioModal({ inicial, onFechar, onSalvo }: { inicial: BeneficioDado
   }
 
   return (
-    <Modal aberto onFechar={onFechar} titulo={b.id ? "Editar benefício" : "Novo benefício"} largura="max-w-lg"
+    <Modal aberto onFechar={onFechar} titulo={b.id ? "Editar benefício" : "Novo benefício"} largura="max-w-2xl"
       rodape={
         <div className="flex w-full items-center justify-between">
           {b.id ? <Button variante="ghost" className="text-[var(--danger)]" onClick={excluir} disabled={salvando}>Excluir</Button> : <span />}
@@ -467,16 +476,37 @@ function BeneficioModal({ inicial, onFechar, onSalvo }: { inicial: BeneficioDado
       }
     >
       <div className="space-y-4">
-        <Field label="Nome" required><Input value={b.nome} onChange={(e) => set("nome", e.target.value)} placeholder="Ex.: Integração com WhatsApp" /></Field>
-        <Field label="Chave" hint="Identificador único; deixe vazio para gerar do nome"><Input value={b.chave} onChange={(e) => set("chave", e.target.value)} placeholder="whatsapp" /></Field>
-        <Field label="Descrição (opcional)"><Input value={b.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Nome" required className="sm:col-span-2"><Input value={b.nome} onChange={(e) => set("nome", e.target.value)} placeholder="Ex.: Integração com WhatsApp" /></Field>
+          <Field label="Chave" hint="Único; vazio = gera do nome"><Input value={b.chave} onChange={(e) => set("chave", e.target.value)} placeholder="whatsapp" /></Field>
           <Field label="Ordem"><Input type="number" value={b.ordem} onChange={(e) => set("ordem", Number(e.target.value))} /></Field>
-          <label className="flex items-end gap-2 pb-2.5 text-sm">
-            <input type="checkbox" checked={b.ativo} onChange={(e) => set("ativo", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
-            Ativo
-          </label>
+          <Field label="Descrição (opcional)" className="sm:col-span-2"><Input value={b.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
         </div>
+
+        <div>
+          <p className="text-sm font-semibold">Funcionalidades liberadas</p>
+          <p className="mb-2 text-xs text-[var(--muted)]">O que este benefício dá acesso. ({b.features.length} selecionada(s))</p>
+          <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-[var(--border)] p-3">
+            {categorias.map((cat) => (
+              <div key={cat}>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">{cat}</p>
+                <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                  {FEATURES.filter((f) => f.categoria === cat).map((f) => (
+                    <label key={f.chave} className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-slate-50">
+                      <input type="checkbox" checked={b.features.includes(f.chave)} onChange={() => toggleFeature(f.chave)} className="h-4 w-4 accent-[var(--primary)]" />
+                      {f.nome}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={b.ativo} onChange={(e) => set("ativo", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+          Ativo
+        </label>
         {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
       </div>
     </Modal>

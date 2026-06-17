@@ -300,6 +300,7 @@ export type BeneficioDados = {
   descricao: string;
   ordem: number;
   ativo: boolean;
+  features: string[];
   emUso?: number; // planos que usam (read-only)
 };
 
@@ -320,6 +321,7 @@ export async function listarBeneficiosAdmin(): Promise<Required<BeneficioDados>[
     descricao: b.descricao ?? "",
     ordem: b.ordem,
     ativo: b.ativo,
+    features: b.features,
     emUso: b._count.planos,
   }));
 }
@@ -334,7 +336,7 @@ export async function salvarBeneficio(dados: BeneficioDados): Promise<Resultado>
     const conflito = await prisma.beneficio.findUnique({ where: { chave }, select: { id: true } });
     if (conflito && conflito.id !== dados.id) return { ok: false, erro: `Já existe um benefício com a chave "${chave}".` };
 
-    const data = { chave, nome: dados.nome, descricao: dados.descricao || null, ordem: dados.ordem, ativo: dados.ativo };
+    const data = { chave, nome: dados.nome, descricao: dados.descricao || null, ordem: dados.ordem, ativo: dados.ativo, features: dados.features ?? [] };
     if (dados.id) {
       await prisma.beneficio.update({ where: { id: dados.id }, data });
       return { ok: true, id: dados.id };

@@ -98,9 +98,10 @@ model Beneficio {
   chave     String  @unique
   nome      String
   descricao String?
-  ordem     Int     @default(0)
-  ativo     Boolean @default(true)
-  oculto    Boolean @default(false) // não aparece no catálogo (aba Benefícios), só no modal de plano
+  ordem     Int      @default(0)
+  ativo     Boolean  @default(true)
+  oculto    Boolean  @default(false) // não aparece no catálogo (aba Benefícios), só no modal de plano
+  features  String[] // chaves de funcionalidades que este benefício libera
 
   planos    Plano[]
   createdAt DateTime @default(now())
