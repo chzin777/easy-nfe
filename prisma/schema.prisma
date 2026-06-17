@@ -80,15 +80,31 @@ model Plano {
   periodicidade  String   @default("mensal") // mensal | anual
   limiteEmpresas Int      @default(1) // -1 = ilimitado
   limiteUsuarios Int      @default(1) // membros por empresa; -1 = ilimitado
-  recursos       String[] // bullets p/ a landing page
+  recursos       String[] // legado (texto livre) — substituído por `beneficios`
   ativo          Boolean  @default(true) // exibido na LP / disponível
   ordem          Int      @default(0)
 
-  licencas  Licenca[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  beneficios Beneficio[]
+  licencas   Licenca[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
   @@map("planos")
+}
+
+// Catálogo de benefícios/permissões que podem ser atribuídos a planos.
+model Beneficio {
+  id        String  @id @default(uuid())
+  chave     String  @unique
+  nome      String
+  descricao String?
+  ordem     Int     @default(0)
+  ativo     Boolean @default(true)
+
+  planos    Plano[]
+  createdAt DateTime @default(now())
+
+  @@map("beneficios")
 }
 
 model Licenca {

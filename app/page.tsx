@@ -59,6 +59,7 @@ export default async function Landing() {
   const planos = await prisma.plano.findMany({
     where: { ativo: true },
     orderBy: { ordem: "asc" },
+    include: { beneficios: { orderBy: { ordem: "asc" }, select: { nome: true } } },
   });
 
   return (
@@ -236,8 +237,8 @@ export default async function Landing() {
                     </p>
                     <p className="mt-1 text-xs text-[var(--muted)]">{p.limiteEmpresas < 0 ? "Empresas ilimitadas" : `${p.limiteEmpresas} empresa(s)`}</p>
                     <ul className="mt-6 flex-1 space-y-2.5 text-sm">
-                      {p.recursos.map((r, j) => (
-                        <li key={j} className="flex gap-2"><span className="text-[var(--success)]">✓</span><span className="text-slate-600">{r}</span></li>
+                      {p.beneficios.map((b, j) => (
+                        <li key={j} className="flex gap-2"><span className="text-[var(--success)]">✓</span><span className="text-slate-600">{b.nome}</span></li>
                       ))}
                     </ul>
                     <Link href="/login" className={"mt-7 rounded-xl px-5 py-2.5 text-center text-sm font-semibold transition " + (destaque ? "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg shadow-violet-500/25 hover:-translate-y-0.5" : "bg-slate-100 text-slate-900 hover:bg-slate-200")}>

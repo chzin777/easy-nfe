@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence, type Variants } from "motion/react";
-import { Badge, Button, Card, Field, Input, Select, Textarea } from "@/app/ui/primitives";
+import { Badge, Button, Card, Field, Input, Select } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import { formatBRL, formatData } from "@/lib/format";
 import {
   listarUsuarios, criarUsuario, type UsuarioResumo,
   listarPlanos, salvarPlano, excluirPlano, type PlanoDados,
+  listarBeneficios, type Beneficio,
 } from "./actions";
 import UsuarioDetalhe from "./UsuarioDetalhe";
 
@@ -177,13 +178,19 @@ function NovoUsuarioModal({ aberto, onFechar, onCriado }: { aberto: boolean; onF
 
 function AbaPlanos() {
   const [planos, setPlanos] = useState<Required<PlanoDados>[]>([]);
+  const [beneficios, setBeneficios] = useState<Beneficio[]>([]);
   const [edit, setEdit] = useState<PlanoDados | null>(null);
 
-  async function recarregar() { setPlanos(await listarPlanos()); }
+  async function recarregar() {
+    const [pl, bs] = await Promise.all([listarPlanos(), listarBeneficios()]);
+    setPlanos(pl);
+    setBeneficios(bs);
+  }
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void recarregar(); }, []);
 
-  const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, recursos: [], ativo: true, ordem: planos.length };
+  const nomePorId = new Map(beneficios.map((b) => [b.id, b.nome]));
+  const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, beneficioIds: [], ativo: true, ordem: planos.length };
 
   return (
     <div className="space-y-4">
@@ -205,35 +212,40 @@ function AbaPlanos() {
             <p className="mt-2 text-2xl font-bold text-[var(--primary)]">{formatBRL(p.preco)}</p>
             {p.descricao && <p className="mt-1 text-sm text-[var(--muted)]">{p.descricao}</p>}
             <ul className="mt-3 flex-1 space-y-1 text-sm">
-              {p.recursos.map((r, i) => <li key={i} className="flex gap-1.5"><span className="text-[var(--success)]">✓</span>{r}</li>)}
+              {p.beneficioIds.map((id) => <li key={id} className="flex gap-1.5"><span className="text-[var(--success)]">✓</span>{nomePorId.get(id) ?? id}</li>)}
             </ul>
             <Button variante="secondary" className="mt-4" onClick={() => setEdit(p)}>Editar</Button>
           </Card>
         ))}
       </div>
 
-      {edit && <PlanoModal inicial={edit} onFechar={() => setEdit(null)} onSalvo={() => { setEdit(null); recarregar(); }} />}
+      {edit && <PlanoModal inicial={edit} catalogo={beneficios} onFechar={() => setEdit(null)} onSalvo={() => { setEdit(null); recarregar(); }} />}
     </div>
   );
 }
 
-function PlanoModal({ inicial, onFechar, onSalvo }: { inicial: PlanoDados; onFechar: () => void; onSalvo: () => void }) {
+function PlanoModal({ inicial, catalogo, onFechar, onSalvo }: { inicial: PlanoDados; catalogo: Beneficio[]; onFechar: () => void; onSalvo: () => void }) {
   const [p, setP] = useState<PlanoDados>(inicial);
-  const [recursosTexto, setRecursosTexto] = useState(inicial.recursos.join("\n"));
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [arrastando, setArrastando] = useState<string | null>(null);
 
   function set<K extends keyof PlanoDados>(k: K, v: PlanoDados[K]) { setP((s) => ({ ...s, [k]: v })); }
 
+  const noPlano = p.beneficioIds.map((id) => catalogo.find((b) => b.id === id)).filter(Boolean) as Beneficio[];
+  const disponiveis = catalogo.filter((b) => !p.beneficioIds.includes(b.id));
+
+  function adicionar(id: string) { if (!p.beneficioIds.includes(id)) set("beneficioIds", [...p.beneficioIds, id]); }
+  function remover(id: string) { set("beneficioIds", p.beneficioIds.filter((x) => x !== id)); }
+
   async function salvar() {
-    setSalvando(true);
-    setErro(null);
-    const r = await salvarPlano({ ...p, recursos: recursosTexto.split("\n").map((x) => x.trim()).filter(Boolean) });
+    setSalvando(true); setErro(null);
+    const r = await salvarPlano(p);
     setSalvando(false);
     if (!r.ok) { setErro(r.erro); return; }
     onSalvo();
   }
-  async function remover() {
+  async function excluir() {
     if (!p.id) return;
     setSalvando(true);
     const r = await excluirPlano(p.id);
@@ -243,10 +255,10 @@ function PlanoModal({ inicial, onFechar, onSalvo }: { inicial: PlanoDados; onFec
   }
 
   return (
-    <Modal aberto onFechar={onFechar} titulo={p.id ? "Editar plano" : "Novo plano"} largura="max-w-lg"
+    <Modal aberto onFechar={onFechar} titulo={p.id ? "Editar plano" : "Novo plano"} largura="max-w-3xl"
       rodape={
         <div className="flex w-full items-center justify-between">
-          {p.id ? <Button variante="ghost" className="text-[var(--danger)]" onClick={remover} disabled={salvando}>Excluir</Button> : <span />}
+          {p.id ? <Button variante="ghost" className="text-[var(--danger)]" onClick={excluir} disabled={salvando}>Excluir</Button> : <span />}
           <div className="flex gap-2">
             <Button variante="secondary" onClick={onFechar} disabled={salvando}>Cancelar</Button>
             <Button onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</Button>
@@ -254,7 +266,7 @@ function PlanoModal({ inicial, onFechar, onSalvo }: { inicial: PlanoDados; onFec
         </div>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-5">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Nome" required className="col-span-2"><Input value={p.nome} onChange={(e) => set("nome", e.target.value)} /></Field>
           <Field label="Preço (R$)"><Input type="number" step="0.01" min="0" value={p.preco} onChange={(e) => set("preco", Number(e.target.value))} /></Field>
@@ -262,9 +274,63 @@ function PlanoModal({ inicial, onFechar, onSalvo }: { inicial: PlanoDados; onFec
           <Field label="Limite de empresas" hint="-1 = ilimitado"><Input type="number" value={p.limiteEmpresas} onChange={(e) => set("limiteEmpresas", Number(e.target.value))} /></Field>
           <Field label="Usuários por empresa" hint="-1 = ilimitado"><Input type="number" value={p.limiteUsuarios} onChange={(e) => set("limiteUsuarios", Number(e.target.value))} /></Field>
           <Field label="Ordem"><Input type="number" value={p.ordem} onChange={(e) => set("ordem", Number(e.target.value))} /></Field>
+          <Field label="Descrição" className="col-span-2"><Input value={p.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
         </div>
-        <Field label="Descrição"><Input value={p.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
-        <Field label="Recursos (um por linha)"><Textarea value={recursosTexto} onChange={(e) => setRecursosTexto(e.target.value)} placeholder={"Emissão ilimitada de NF-e\nSuporte por WhatsApp"} /></Field>
+
+        {/* Benefícios: arrastar do catálogo (direita) para o plano (esquerda) */}
+        <div>
+          <p className="mb-2 text-sm font-semibold">Benefícios do plano <span className="font-normal text-[var(--muted)]">— arraste ou clique para mover</span></p>
+          <div className="grid grid-cols-2 gap-3">
+            {/* No plano */}
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); if (arrastando) { adicionar(arrastando); setArrastando(null); } }}
+              className="min-h-[180px] rounded-lg border-2 border-dashed border-[var(--primary)]/30 bg-[var(--primary-soft)]/40 p-2"
+            >
+              <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--primary)]">No plano ({noPlano.length})</p>
+              {noPlano.length === 0 && <p className="px-1 py-6 text-center text-xs text-[var(--muted)]">Arraste benefícios para cá.</p>}
+              <ul className="space-y-1.5">
+                {noPlano.map((b) => (
+                  <li
+                    key={b.id}
+                    draggable
+                    onDragStart={() => setArrastando(b.id)}
+                    onClick={() => remover(b.id)}
+                    className="flex cursor-grab items-center justify-between rounded-md border border-[var(--border)] bg-white px-2.5 py-1.5 text-sm active:cursor-grabbing"
+                  >
+                    <span>{b.nome}</span>
+                    <span className="text-xs text-[var(--danger)]">✕</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Disponíveis */}
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); if (arrastando) { remover(arrastando); setArrastando(null); } }}
+              className="min-h-[180px] rounded-lg border-2 border-dashed border-[var(--border)] bg-slate-50 p-2"
+            >
+              <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Disponíveis ({disponiveis.length})</p>
+              {disponiveis.length === 0 && <p className="px-1 py-6 text-center text-xs text-[var(--muted)]">Todos no plano.</p>}
+              <ul className="space-y-1.5">
+                {disponiveis.map((b) => (
+                  <li
+                    key={b.id}
+                    draggable
+                    onDragStart={() => setArrastando(b.id)}
+                    onClick={() => adicionar(b.id)}
+                    className="flex cursor-grab items-center justify-between rounded-md border border-[var(--border)] bg-white px-2.5 py-1.5 text-sm active:cursor-grabbing hover:border-[var(--primary)]"
+                  >
+                    <span>{b.nome}</span>
+                    <span className="text-xs text-[var(--primary)]">+</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={p.ativo} onChange={(e) => set("ativo", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
           Ativo (exibir na landing page)

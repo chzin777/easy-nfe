@@ -277,14 +277,25 @@ export type PlanoDados = {
   periodicidade: string;
   limiteEmpresas: number;
   limiteUsuarios: number;
-  recursos: string[];
+  beneficioIds: string[];
   ativo: boolean;
   ordem: number;
 };
 
+export type Beneficio = { id: string; chave: string; nome: string };
+
+export async function listarBeneficios(): Promise<Beneficio[]> {
+  await exigirAdmin();
+  const rows = await prisma.beneficio.findMany({ where: { ativo: true }, orderBy: { ordem: "asc" } });
+  return rows.map((b) => ({ id: b.id, chave: b.chave, nome: b.nome }));
+}
+
 export async function listarPlanos(): Promise<Required<PlanoDados>[]> {
   await exigirAdmin();
-  const rows = await prisma.plano.findMany({ orderBy: { ordem: "asc" } });
+  const rows = await prisma.plano.findMany({
+    orderBy: { ordem: "asc" },
+    include: { beneficios: { orderBy: { ordem: "asc" }, select: { id: true } } },
+  });
   return rows.map((p) => ({
     id: p.id,
     nome: p.nome,
@@ -293,7 +304,7 @@ export async function listarPlanos(): Promise<Required<PlanoDados>[]> {
     periodicidade: p.periodicidade,
     limiteEmpresas: p.limiteEmpresas,
     limiteUsuarios: p.limiteUsuarios,
-    recursos: p.recursos,
+    beneficioIds: p.beneficios.map((b) => b.id),
     ativo: p.ativo,
     ordem: p.ordem,
   }));
@@ -303,22 +314,22 @@ export async function salvarPlano(dados: PlanoDados): Promise<Resultado> {
   try {
     await exigirAdmin();
     if (!dados.nome.trim()) return { ok: false, erro: "Nome do plano é obrigatório." };
-    const data = {
+    const base = {
       nome: dados.nome,
       descricao: dados.descricao || null,
       preco: dados.preco,
       periodicidade: dados.periodicidade,
       limiteEmpresas: dados.limiteEmpresas,
       limiteUsuarios: dados.limiteUsuarios,
-      recursos: dados.recursos.filter((r) => r.trim()),
       ativo: dados.ativo,
       ordem: dados.ordem,
     };
+    const conexao = dados.beneficioIds.map((id) => ({ id }));
     if (dados.id) {
-      await prisma.plano.update({ where: { id: dados.id }, data });
+      await prisma.plano.update({ where: { id: dados.id }, data: { ...base, beneficios: { set: conexao } } });
       return { ok: true, id: dados.id };
     }
-    const p = await prisma.plano.create({ data });
+    const p = await prisma.plano.create({ data: { ...base, beneficios: { connect: conexao } } });
     return { ok: true, id: p.id };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
