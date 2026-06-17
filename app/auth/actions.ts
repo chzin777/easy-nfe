@@ -49,12 +49,19 @@ export async function entrar(
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const senha = String(formData.get("senha") ?? "");
 
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.ativo || !(await verificarSenha(senha, user.senhaHash))) {
-    return { erro: "E-mail ou senha incorretos." };
+  let destino: string;
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !user.ativo || !(await verificarSenha(senha, user.senhaHash))) {
+      return { erro: "E-mail ou senha incorretos." };
+    }
+    await criarSessao(user.id, user.role);
+    destino = await aposLogin(user.id, user.role);
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : String(e) };
   }
-  await criarSessao(user.id, user.role);
-  redirect(await aposLogin(user.id, user.role));
+  // redirect() lança NEXT_REDIRECT — fica fora do try p/ não ser capturado.
+  redirect(destino);
 }
 
 export async function sair(): Promise<void> {
