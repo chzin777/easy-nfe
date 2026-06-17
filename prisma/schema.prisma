@@ -85,6 +85,7 @@ model Plano {
   limiteUsuarios Int      @default(1) // membros por empresa; -1 = ilimitado
   recursos       String[] // legado (texto livre) — substituído por `beneficios`
   ativo          Boolean  @default(true) // exibido na LP / disponível
+  popular        Boolean  @default(false) // destaque "mais popular" na landing
   ordem          Int      @default(0)
 
   beneficios Beneficio[]

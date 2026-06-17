@@ -15,7 +15,7 @@ import {
   listarPlanos, salvarPlano, excluirPlano, type PlanoDados,
   listarBeneficios, type Beneficio,
   listarBeneficiosAdmin, salvarBeneficio, excluirBeneficio, type BeneficioDados,
-  listarCategorias, criarCategoria, renomearCategoria, type CategoriaPlano,
+  listarCategorias, criarCategoria, renomearCategoria, moverCategoria, definirPlanoPopular, type CategoriaPlano,
 } from "./actions";
 import UsuarioDetalhe from "./UsuarioDetalhe";
 
@@ -225,8 +225,11 @@ function AbaPlanos() {
    
   useEffect(() => { void recarregar(); }, []);
 
+  async function moverCat(id: string, dir: "cima" | "baixo") { await moverCategoria(id, dir); recarregar(); }
+  async function togglePopular(p: Required<PlanoDados>) { await definirPlanoPopular(p.id, !p.popular); recarregar(); }
+
   const porId = new Map(beneficios.map((b) => [b.id, b]));
-  const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, precoAntigo: 0, sobConsulta: false, categoria: "", periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, beneficioIds: [], ativo: true, ordem: planos.length };
+  const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, precoAntigo: 0, sobConsulta: false, categoria: "", periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, beneficioIds: [], ativo: true, popular: false, ordem: planos.length };
 
   // Agrupa por categoria, na ordem do catálogo (sem categoria por último).
   const grupos: { categoria: string; itens: Required<PlanoDados>[] }[] = [];
@@ -249,13 +252,23 @@ function AbaPlanos() {
     });
     return (
       <Card key={p.id} className="flex flex-col p-5">
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-2">
           <div>
             <p className="font-semibold">{p.nome}</p>
             <p className="text-xs text-[var(--muted)]">{p.periodicidade} · {p.limiteEmpresas < 0 ? "∞" : p.limiteEmpresas} empresa(s)</p>
           </div>
-          {!p.ativo && <Badge tom="neutral">inativo</Badge>}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {!p.ativo && <Badge tom="neutral">inativo</Badge>}
+            <button
+              onClick={() => togglePopular(p)}
+              title={p.popular ? "Remover destaque de mais popular" : "Marcar como mais popular"}
+              className={"rounded-md p-1 transition " + (p.popular ? "text-amber-500 hover:bg-amber-50" : "text-slate-300 hover:bg-slate-100 hover:text-amber-400")}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={p.popular ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5 14 7.6l5.7.8-4.1 4 1 5.6-5.1-2.7L7.3 18l1-5.6-4.1-4 5.7-.8Z" /></svg>
+            </button>
+          </div>
         </div>
+        {p.popular && <span className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">★ Mais popular</span>}
         {p.sobConsulta ? (
           <p className="mt-2 text-lg font-bold text-[var(--primary)]">Sob consulta</p>
         ) : (
@@ -293,18 +306,37 @@ function AbaPlanos() {
       ) : (
         grupos.map((g) => {
           const cat = categorias.find((c) => c.nome === g.categoria);
+          const catIdx = cat ? categorias.findIndex((c) => c.id === cat.id) : -1;
           return (
             <div key={g.categoria || "_sem_"}>
               <div className="mb-2 flex items-center gap-1.5">
                 <p className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">{g.categoria || "Sem categoria"}</p>
                 {cat && (
-                  <button
-                    onClick={() => setEditCat(cat)}
-                    title="Renomear categoria"
-                    className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-[var(--primary)]"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                  </button>
+                  <>
+                    <button
+                      onClick={() => moverCat(cat.id, "cima")}
+                      disabled={catIdx <= 0}
+                      title="Mover categoria para cima"
+                      className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
+                    </button>
+                    <button
+                      onClick={() => moverCat(cat.id, "baixo")}
+                      disabled={catIdx >= categorias.length - 1}
+                      title="Mover categoria para baixo"
+                      className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                    </button>
+                    <button
+                      onClick={() => setEditCat(cat)}
+                      title="Renomear categoria"
+                      className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-[var(--primary)]"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                    </button>
+                  </>
                 )}
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

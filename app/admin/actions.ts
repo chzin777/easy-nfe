@@ -282,6 +282,7 @@ export type PlanoDados = {
   limiteUsuarios: number;
   beneficioIds: string[];
   ativo: boolean;
+  popular: boolean;
   ordem: number;
 };
 
@@ -290,12 +291,12 @@ export type Beneficio = { id: string; chave: string; nome: string };
 // ----------------------------------------------------------------------------
 // Categorias de plano
 // ----------------------------------------------------------------------------
-export type CategoriaPlano = { id: string; nome: string };
+export type CategoriaPlano = { id: string; nome: string; ordem: number };
 
 export async function listarCategorias(): Promise<CategoriaPlano[]> {
   await exigirAdmin();
   const rows = await prisma.categoriaPlano.findMany({ orderBy: { ordem: "asc" } });
-  return rows.map((c) => ({ id: c.id, nome: c.nome }));
+  return rows.map((c) => ({ id: c.id, nome: c.nome, ordem: c.ordem }));
 }
 
 export async function criarCategoria(nome: string): Promise<Resultado> {
@@ -327,6 +328,40 @@ export async function renomearCategoria(id: string, nome: string): Promise<Resul
     await prisma.$transaction([
       prisma.categoriaPlano.update({ where: { id }, data: { nome: n } }),
       prisma.plano.updateMany({ where: { categoria: atual.nome }, data: { categoria: n } }),
+    ]);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function moverCategoria(id: string, direcao: "cima" | "baixo"): Promise<Resultado> {
+  try {
+    await exigirAdmin();
+    const ordenadas = await prisma.categoriaPlano.findMany({ orderBy: { ordem: "asc" } });
+    const i = ordenadas.findIndex((c) => c.id === id);
+    if (i < 0) return { ok: false, erro: "Categoria não encontrada." };
+    const j = direcao === "cima" ? i - 1 : i + 1;
+    if (j < 0 || j >= ordenadas.length) return { ok: true }; // já no limite
+    const a = ordenadas[i], b = ordenadas[j];
+    // troca a ordem entre os dois vizinhos (normaliza por índice para evitar empates).
+    await prisma.$transaction([
+      prisma.categoriaPlano.update({ where: { id: a.id }, data: { ordem: j } }),
+      prisma.categoriaPlano.update({ where: { id: b.id }, data: { ordem: i } }),
+    ]);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function definirPlanoPopular(id: string, popular: boolean): Promise<Resultado> {
+  try {
+    await exigirAdmin();
+    // popular é único: ao marcar um, desmarca os demais.
+    await prisma.$transaction([
+      prisma.plano.updateMany({ data: { popular: false } }),
+      ...(popular ? [prisma.plano.update({ where: { id }, data: { popular: true } })] : []),
     ]);
     return { ok: true };
   } catch (e) {
@@ -437,6 +472,7 @@ export async function listarPlanos(): Promise<Required<PlanoDados>[]> {
     limiteUsuarios: p.limiteUsuarios,
     beneficioIds: p.beneficios.map((b) => b.id),
     ativo: p.ativo,
+    popular: p.popular,
     ordem: p.ordem,
   }));
 }
@@ -456,6 +492,7 @@ export async function salvarPlano(dados: PlanoDados): Promise<Resultado> {
       limiteEmpresas: dados.limiteEmpresas,
       limiteUsuarios: dados.limiteUsuarios,
       ativo: dados.ativo,
+      popular: dados.popular,
       ordem: dados.ordem,
     };
     const conexao = dados.beneficioIds.map((id) => ({ id }));

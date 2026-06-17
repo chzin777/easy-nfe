@@ -74,7 +74,7 @@ export default async function Landing() {
     return p.beneficios.filter((b) => b.chave === "tudo_anterior" || !anteriores.has(b.chave));
   };
 
-  const destaqueId = planos[1]?.id;
+  const destaqueId = planos.find((p) => p.popular)?.id;
   // Agrupa por categoria preservando a ordem de aparição.
   const grupos: { categoria: string; itens: typeof planos }[] = [];
   for (const p of planos) {
@@ -251,11 +251,11 @@ export default async function Landing() {
                 {agruparPorCategoria && g.categoria && (
                   <h3 className="mb-5 text-center text-sm font-semibold uppercase tracking-wider text-[var(--primary)]">{g.categoria}</h3>
                 )}
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                <div className="flex flex-wrap justify-center gap-6">
                   {g.itens.map((p) => {
                     const destaque = p.id === destaqueId;
                     return (
-                      <div key={p.id} className={"relative flex flex-col rounded-2xl border bg-white p-7 " + (destaque ? "border-[var(--primary)] shadow-xl shadow-violet-500/10 ring-1 ring-[var(--primary)]" : "border-[var(--border)] shadow-sm")}>
+                      <div key={p.id} className={"relative flex w-full flex-col rounded-2xl border bg-white p-7 sm:w-[21rem] md:w-[22rem] " + (destaque ? "border-[var(--primary)] shadow-xl shadow-violet-500/10 ring-1 ring-[var(--primary)]" : "border-[var(--border)] shadow-sm")}>
                         {destaque && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--primary)] px-3 py-1 text-xs font-semibold text-white">Mais popular</span>}
                         <h3 className="text-lg font-bold">{p.nome}</h3>
                         {p.descricao && <p className="mt-1 text-sm text-[var(--muted)]">{p.descricao}</p>}
