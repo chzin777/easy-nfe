@@ -5,16 +5,18 @@ import { dataHoraBrasilia } from "./chave";
 import { assinar } from "./sign";
 
 // Distribuição DFe — Ambiente Nacional (puxa documentos emitidos contra o CNPJ).
+// Hosts homologação antigos (hom.nfe) foram desativados em 23/05/22 → hom1.nfe.
 const ENDPOINT = {
   "1": "https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx",
-  "2": "https://hom.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx",
+  "2": "https://hom1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx",
 } as const;
 const WSDL_NS = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe";
 
 // Recepção de Evento — Ambiente Nacional (manifestação do destinatário, cOrgao 91).
+// Produção usa www.nfe (sem o "1"); homologação usa hom1.nfe.
 const ENDPOINT_EVENTO = {
-  "1": "https://www1.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx",
-  "2": "https://hom.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx",
+  "1": "https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx",
+  "2": "https://hom1.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx",
 } as const;
 const WSDL_NS_EVENTO = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4";
 
