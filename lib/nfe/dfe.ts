@@ -49,6 +49,8 @@ function soapAN(
     `<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">` +
     `<soap:Body><${operacao} xmlns="${wsdlNs}"><nfeDadosMsg>${inner}</nfeDadosMsg></${operacao}></soap:Body>` +
     `</soap:Envelope>`;
+  // SOAPAction: Java/.NET enviam como header HTTP próprio (mesmo em SOAP 1.2).
+  const soapAction = `${wsdlNs}/${operacao}`;
   const u = new URL(url);
   return new Promise((resolve, reject) => {
     const req = https.request(
@@ -57,16 +59,22 @@ function soapAN(
         key: cert.keyPem, cert: cert.certPem, rejectUnauthorized: false,
         servername: u.hostname, minVersion: "TLSv1.2",
         headers: {
-          // SEFAZ rejeita (HTTP 403) o parâmetro action no Content-Type — manter simples.
           "Content-Type": "application/soap+xml; charset=utf-8",
+          "SOAPAction": soapAction,
           "Content-Length": Buffer.byteLength(envelope),
+          "Accept": "application/soap+xml, text/xml, */*",
           "User-Agent": "easy-nfe/1.0",
         },
       },
       (res) => {
         let d = "";
         res.on("data", (c) => (d += c));
-        res.on("end", () => resolve({ status: res.statusCode ?? 0, body: d }));
+        res.on("end", () => {
+          // Sub-status IIS (ex.: "403.7") ajuda a diagnosticar quando falha.
+          const h = res.headers;
+          const diag = `${h["x-aspnet-version"] ?? ""} ${h["www-authenticate"] ?? ""}`.trim();
+          resolve({ status: res.statusCode ?? 0, body: diag ? `[${diag}] ${d}` : d });
+        });
       },
     );
     req.on("error", reject);
