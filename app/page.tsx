@@ -205,18 +205,14 @@ export default async function Landing() {
             <p className="mt-3 text-[var(--muted)]">Negócios que trocaram a planilha pelo easy-nfe.</p>
           </Reveal>
           <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              { n: "1", w: 324, h: 320 },
-              { n: "2", w: 322, h: 340 },
-              { n: "3", w: 323, h: 357 },
-            ].map((p) => (
-              <div key={p.n} className="overflow-hidden rounded-2xl border border-[var(--border)] bg-slate-50 shadow-sm">
+            {["1", "2", "3"].map((n) => (
+              <div key={n} className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-sm">
                 <Image
-                  src={`/images/prints/${p.n}.png`}
-                  alt={`Avaliação de cliente ${p.n}`}
-                  width={p.w}
-                  height={p.h}
-                  className="h-auto w-full"
+                  src={`/images/prints/${n}.png`}
+                  alt={`Avaliação de cliente ${n}`}
+                  fill
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                  className="object-cover object-top"
                 />
               </div>
             ))}
