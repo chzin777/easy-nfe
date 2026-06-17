@@ -41,12 +41,14 @@ function soapAN(
   operacao: string,
   inner: string,
   cert: Certificado,
-): Promise<string> {
+): Promise<{ status: number; body: string }> {
   const envelope =
     `<?xml version="1.0" encoding="utf-8"?>` +
     `<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">` +
     `<soap:Body><${operacao} xmlns="${wsdlNs}"><nfeDadosMsg>${inner}</nfeDadosMsg></${operacao}></soap:Body>` +
     `</soap:Envelope>`;
+  // SOAP 1.2 carrega o SOAPAction como parâmetro do Content-Type (não em header próprio).
+  const action = `${wsdlNs}/${operacao}`;
   const u = new URL(url);
   return new Promise((resolve, reject) => {
     const req = https.request(
@@ -55,12 +57,16 @@ function soapAN(
         key: cert.keyPem, cert: cert.certPem, rejectUnauthorized: false,
         servername: u.hostname, minVersion: "TLSv1.2",
         headers: {
-          "Content-Type": "application/soap+xml; charset=utf-8",
+          "Content-Type": `application/soap+xml; charset=utf-8; action="${action}"`,
           "Content-Length": Buffer.byteLength(envelope),
           "User-Agent": "easy-nfe/1.0",
         },
       },
-      (res) => { let d = ""; res.on("data", (c) => (d += c)); res.on("end", () => resolve(d)); },
+      (res) => {
+        let d = "";
+        res.on("data", (c) => (d += c));
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, body: d }));
+      },
     );
     req.on("error", reject);
     req.write(envelope);
@@ -68,8 +74,17 @@ function soapAN(
   });
 }
 
-function soap(tpAmb: "1" | "2", inner: string, cert: Certificado): Promise<string> {
+function soap(tpAmb: "1" | "2", inner: string, cert: Certificado): Promise<{ status: number; body: string }> {
   return soapAN(ENDPOINT[tpAmb], WSDL_NS, "nfeDistDFeInteresse", inner, cert);
+}
+
+// Resume um corpo bruto (fault SOAP / HTML de erro) numa linha curta p/ diagnóstico.
+function resumoCru(body: string): string {
+  const fault =
+    extrai(body, "faultstring") ?? extrai(body, "Text") ?? extrai(body, "Reason");
+  if (fault) return fault;
+  const txt = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return txt.slice(0, 200) || "resposta vazia";
 }
 
 // Consulta documentos a partir do último NSU conhecido (lote de até 50 por chamada).
@@ -84,9 +99,11 @@ export async function consultarDFe(
     `<tpAmb>${params.tpAmb}</tpAmb><cUFAutor>${params.cUF}</cUFAutor>` +
     `<CNPJ>${cnpj}</CNPJ><distNSU><ultNSU>${nsu}</ultNSU></distNSU></distDFeInt>`;
 
-  const body = await soap(params.tpAmb, inner, cert);
+  const { status, body } = await soap(params.tpAmb, inner, cert);
   const cStat = extrai(body, "cStat");
-  const xMotivo = extrai(body, "xMotivo");
+  // Sem cStat = não chegou ao serviço (SOAP fault / HTTP de erro). Surfaça o motivo bruto.
+  const xMotivo =
+    extrai(body, "xMotivo") ?? (cStat ? null : `HTTP ${status}: ${resumoCru(body)}`);
   const ultNSU = extrai(body, "ultNSU") ?? nsu;
   const maxNSU = extrai(body, "maxNSU") ?? ultNSU;
 
@@ -160,12 +177,13 @@ export async function manifestarDestinatario(
     `<envEvento versao="1.00" xmlns="http://www.portalfiscal.inf.br/nfe">` +
     `<idLote>1</idLote>${eventoAssinado}</envEvento>`;
 
-  const body = await soapAN(ENDPOINT_EVENTO[params.tpAmb], WSDL_NS_EVENTO, "nfeRecepcaoEvento", envEvento, cert);
+  const { status, body } = await soapAN(ENDPOINT_EVENTO[params.tpAmb], WSDL_NS_EVENTO, "nfeRecepcaoEvento", envEvento, cert);
 
   // O retorno traz o status do lote e, dentro de retEvento, o status do evento.
   const retEvento = body.match(/<retEvento[\s\S]*?<\/retEvento>/)?.[0] ?? body;
   const cStat = extrai(retEvento, "cStat");
-  const xMotivo = extrai(retEvento, "xMotivo");
+  const xMotivo =
+    extrai(retEvento, "xMotivo") ?? (cStat ? null : `HTTP ${status}: ${resumoCru(body)}`);
   const nProt = extrai(retEvento, "nProt");
   // 135 = registrado e vinculado, 136 = registrado (não vinculado — nota ainda não na base).
   return { ok: cStat === "135" || cStat === "136", cStat, xMotivo, nProt };
