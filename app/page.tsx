@@ -8,6 +8,8 @@ import Aurora from "./ui/Aurora";
 import Reveal from "./ui/Reveal";
 import ScrollVelocity from "./ui/ScrollVelocity";
 
+const WPP_VENDAS = "https://wa.me/5562996183309?text=" + encodeURIComponent("Olá! Quero falar sobre um plano do easy-nfe.");
+
 const RECURSOS = [
   { titulo: "Emissão de NF-e", desc: "Modelo 55 com autorização síncrona na SEFAZ em segundos.", icon: <IFile /> },
   { titulo: "Assinatura A1", desc: "Certificado digital A1 com assinatura XML-DSig automática.", icon: <ILock /> },
@@ -249,22 +251,34 @@ export default async function Landing() {
                         {destaque && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--primary)] px-3 py-1 text-xs font-semibold text-white">Mais popular</span>}
                         <h3 className="text-lg font-bold">{p.nome}</h3>
                         {p.descricao && <p className="mt-1 text-sm text-[var(--muted)]">{p.descricao}</p>}
-                        {p.precoAntigo && Number(p.precoAntigo) > 0 && (
-                          <p className="mt-5 text-sm text-[var(--muted)] line-through">{formatBRL(Number(p.precoAntigo))}</p>
+                        {p.sobConsulta ? (
+                          <p className="mt-5 text-2xl font-extrabold tracking-tight text-[var(--primary)]">Sob consulta</p>
+                        ) : (
+                          <>
+                            {p.precoAntigo && Number(p.precoAntigo) > 0 && (
+                              <p className="mt-5 text-sm text-[var(--muted)] line-through">{formatBRL(Number(p.precoAntigo))}</p>
+                            )}
+                            <p className={(p.precoAntigo && Number(p.precoAntigo) > 0 ? "mt-0.5" : "mt-5") + " text-4xl font-extrabold tracking-tight"}>
+                              {formatBRL(Number(p.preco))}
+                              <span className="text-base font-medium text-[var(--muted)]">/{p.periodicidade === "anual" ? "ano" : "mês"}</span>
+                            </p>
+                          </>
                         )}
-                        <p className={(p.precoAntigo && Number(p.precoAntigo) > 0 ? "mt-0.5" : "mt-5") + " text-4xl font-extrabold tracking-tight"}>
-                          {formatBRL(Number(p.preco))}
-                          <span className="text-base font-medium text-[var(--muted)]">/{p.periodicidade === "anual" ? "ano" : "mês"}</span>
-                        </p>
                         <p className="mt-1 text-xs text-[var(--muted)]">{p.limiteEmpresas < 0 ? "Empresas ilimitadas" : `${p.limiteEmpresas} empresa(s)`}</p>
                         <ul className="mt-6 flex-1 space-y-2.5 text-sm">
                           {p.beneficios.map((b, j) => (
                             <li key={j} className="flex gap-2"><span className="text-[var(--success)]">✓</span><span className="text-slate-600">{b.chave === "tudo_anterior" ? `Tudo do ${nomePlanoAnterior(p.ordem) ?? "plano anterior"}` : b.nome}</span></li>
                           ))}
                         </ul>
-                        <Link href="/login" className={"mt-7 rounded-xl px-5 py-2.5 text-center text-sm font-semibold transition " + (destaque ? "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg shadow-violet-500/25 hover:-translate-y-0.5" : "bg-slate-100 text-slate-900 hover:bg-slate-200")}>
-                          Começar agora
-                        </Link>
+                        {p.sobConsulta ? (
+                          <a href={WPP_VENDAS} target="_blank" rel="noopener noreferrer" className={"mt-7 rounded-xl px-5 py-2.5 text-center text-sm font-semibold transition " + (destaque ? "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg shadow-violet-500/25 hover:-translate-y-0.5" : "bg-slate-100 text-slate-900 hover:bg-slate-200")}>
+                            Fale com nossos vendedores
+                          </a>
+                        ) : (
+                          <Link href="/login" className={"mt-7 rounded-xl px-5 py-2.5 text-center text-sm font-semibold transition " + (destaque ? "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg shadow-violet-500/25 hover:-translate-y-0.5" : "bg-slate-100 text-slate-900 hover:bg-slate-200")}>
+                            Começar agora
+                          </Link>
+                        )}
                       </div>
                     );
                   })}

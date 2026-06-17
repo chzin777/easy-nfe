@@ -275,6 +275,7 @@ export type PlanoDados = {
   descricao: string;
   preco: number;
   precoAntigo: number; // 0 = sem "de"
+  sobConsulta: boolean;
   categoria: string;
   periodicidade: string;
   limiteEmpresas: number;
@@ -372,6 +373,7 @@ export async function listarPlanos(): Promise<Required<PlanoDados>[]> {
     descricao: p.descricao ?? "",
     preco: Number(p.preco),
     precoAntigo: p.precoAntigo ? Number(p.precoAntigo) : 0,
+    sobConsulta: p.sobConsulta,
     categoria: p.categoria ?? "",
     periodicidade: p.periodicidade,
     limiteEmpresas: p.limiteEmpresas,
@@ -391,6 +393,7 @@ export async function salvarPlano(dados: PlanoDados): Promise<Resultado> {
       descricao: dados.descricao || null,
       preco: dados.preco,
       precoAntigo: dados.precoAntigo > 0 ? dados.precoAntigo : null,
+      sobConsulta: dados.sobConsulta,
       categoria: dados.categoria.trim() || null,
       periodicidade: dados.periodicidade,
       limiteEmpresas: dados.limiteEmpresas,

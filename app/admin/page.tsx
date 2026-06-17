@@ -212,7 +212,7 @@ function AbaPlanos() {
   useEffect(() => { void recarregar(); }, []);
 
   const porId = new Map(beneficios.map((b) => [b.id, b]));
-  const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, precoAntigo: 0, categoria: "", periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, beneficioIds: [], ativo: true, ordem: planos.length };
+  const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, precoAntigo: 0, sobConsulta: false, categoria: "", periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, beneficioIds: [], ativo: true, ordem: planos.length };
 
   return (
     <div className="space-y-4">
@@ -233,10 +233,14 @@ function AbaPlanos() {
                 </div>
                 {!p.ativo && <Badge tom="neutral">inativo</Badge>}
               </div>
-              <p className="mt-2 flex items-baseline gap-2">
-                {p.precoAntigo > 0 && <span className="text-sm text-[var(--muted)] line-through">{formatBRL(p.precoAntigo)}</span>}
-                <span className="text-2xl font-bold text-[var(--primary)]">{formatBRL(p.preco)}</span>
-              </p>
+              {p.sobConsulta ? (
+                <p className="mt-2 text-lg font-bold text-[var(--primary)]">Sob consulta</p>
+              ) : (
+                <p className="mt-2 flex items-baseline gap-2">
+                  {p.precoAntigo > 0 && <span className="text-sm text-[var(--muted)] line-through">{formatBRL(p.precoAntigo)}</span>}
+                  <span className="text-2xl font-bold text-[var(--primary)]">{formatBRL(p.preco)}</span>
+                </p>
+              )}
               {p.descricao && <p className="mt-1 text-sm text-[var(--muted)]">{p.descricao}</p>}
               <ul className="mt-3 flex-1 space-y-1 text-sm">
                 {p.beneficioIds.map((id) => {
@@ -300,6 +304,10 @@ function PlanoModal({ inicial, catalogo, planos, onFechar, onSalvo }: { inicial:
         <Field label="Usuários por empresa" hint="-1 = ilimitado"><Input type="number" value={p.limiteUsuarios} onChange={(e) => set("limiteUsuarios", Number(e.target.value))} /></Field>
         <Field label="Descrição" className="col-span-2"><Input value={p.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
       </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={p.sobConsulta} onChange={(e) => set("sobConsulta", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+        Sob consulta (sem preço fixo — landing mostra “Fale com vendedores”)
+      </label>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={p.ativo} onChange={(e) => set("ativo", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
         Ativo (exibir na landing page)
