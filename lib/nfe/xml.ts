@@ -120,8 +120,9 @@ export function montarNFe(
     tagDoc(d.doc) +
     `<xNome>${esc(d.xNome)}</xNome>` +
     enderXml("enderDest", d.ender) +
-    (d.indIEDest === "1" && d.ie ? `<IE>${d.ie.replace(/\D/g, "")}</IE>` : "") +
+    // Schema NFe 4.00: indIEDest precede IE. Inverter gera rejeição 225 (falha de schema).
     `<indIEDest>${d.indIEDest}</indIEDest>` +
+    (d.indIEDest === "1" && d.ie ? `<IE>${d.ie.replace(/\D/g, "")}</IE>` : "") +
     `</dest>`;
 
   const total =

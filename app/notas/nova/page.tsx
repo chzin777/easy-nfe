@@ -16,6 +16,7 @@ import Stepper, { Step } from "@/app/ui/Stepper";
 import { TIPOS_NOTA, MODALIDADES_FRETE, rotulo } from "@/lib/mock-data";
 import type { ItemNota, Cliente, Produto, Transportadora } from "@/lib/types";
 import { emitirNota, type EmitirInput, type EmitirResultado } from "../actions";
+import { explicarRejeicao } from "@/lib/nfe/mensagens";
 import { listarClientes } from "@/app/clientes/actions";
 import ClientePicker from "./ClientePicker";
 import ProdutoPicker from "./ProdutoPicker";
@@ -316,8 +317,18 @@ export default function NovaNotaPage() {
                 Autorizada pela SEFAZ (cStat {resultado.cStat})
               </div>
             ) : (
-              <div className="rounded-lg bg-[var(--warning-soft)] px-3 py-2.5 font-medium text-[var(--warning)]">
-                Rejeitada pela SEFAZ — cStat {resultado.cStat}
+              <div className="space-y-2 rounded-lg bg-[var(--warning-soft)] px-3 py-2.5 text-[var(--warning)]">
+                <p className="font-semibold">Nota recusada pela SEFAZ</p>
+                {(() => {
+                  const ex = explicarRejeicao(resultado.cStat, resultado.xMotivo);
+                  return (
+                    <>
+                      <p className="text-sm">{ex.resumo}</p>
+                      {ex.acao && <p className="text-xs opacity-90">O que fazer: {ex.acao}</p>}
+                      <p className="text-[10px] opacity-70">Código técnico: cStat {resultado.cStat}</p>
+                    </>
+                  );
+                })()}
               </div>
             )}
             {resultado.avisoPersistencia && (
