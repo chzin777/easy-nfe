@@ -3,7 +3,7 @@ import { jwtVerify } from "jose";
 
 const COOKIE_SESSAO = "easy-nfe-sessao";
 // Rotas públicas (sem sessão): landing e login.
-const PUBLICAS = ["/", "/login"];
+const PUBLICAS = ["/", "/login", "/cadastro"];
 
 async function lerSessao(req: NextRequest): Promise<{ role: string } | null> {
   const token = req.cookies.get(COOKIE_SESSAO)?.value;

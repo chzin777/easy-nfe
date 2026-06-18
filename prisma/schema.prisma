@@ -48,6 +48,13 @@ enum StatusFatura {
   CANCELADA
 }
 
+enum StatusLead {
+  NOVO
+  CONTATADO
+  CONVERTIDO
+  DESCARTADO
+}
+
 // ----------------------------------------------------------------------------
 // Usuário (login). Um usuário pode administrar várias empresas (emitentes).
 // ----------------------------------------------------------------------------
@@ -172,6 +179,26 @@ model Fatura {
   @@map("faturas")
 }
 
+// Pedido de contato vindo da landing (planos "sob consulta" ou quem prefere falar
+// com vendas). Não cria conta — vendas dá sequência.
+model Lead {
+  id        String     @id @default(uuid())
+  nome      String
+  email     String
+  telefone  String?
+  empresa   String? // nome/razão da empresa informado
+  planoId   String? // plano de interesse (solto, sem FK)
+  planoNome String? // snapshot do nome do plano
+  mensagem  String?
+  status    StatusLead @default(NOVO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("leads")
+}
+
 // Vínculo M—N usuário <-> empresa (acesso compartilhado).
 model AcessoEmpresa {
   id        String   @id @default(uuid())
@@ -219,6 +246,13 @@ model Emitente {
   ambiente      Ambiente @default(HOMOLOGACAO)
   serie         Int      @default(1)
   proximoNumero Int      @default(1)
+
+  // NFC-e (modelo 65) — série/numeração próprias + CSC (Código de Segurança do
+  // Contribuinte) emitido pela SEFAZ, usado no hash do QR Code.
+  serieNFCe         Int     @default(1)
+  proximoNumeroNFCe Int     @default(1)
+  cscNFCe           String? // texto do CSC (segredo)
+  idCscNFCe         String? // identificador do CSC (cIdToken), 1-6 dígitos
 
   // certificado A1 — PFX+senha criptografados (AES-256-GCM) + metadados
   certData      String?   @db.Text
@@ -384,6 +418,9 @@ model Nota {
   protocolo           String?
   autorizadaEm        DateTime?
   xmlAutorizado       String?  @db.Text
+
+  // NFC-e: conteúdo do QR Code (para o DANFE em cupom)
+  qrCode              String?  @db.Text
 
   // cancelamento
   protocoloCancelamento String?

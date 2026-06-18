@@ -8,7 +8,6 @@ import Aurora from "./ui/Aurora";
 import Reveal from "./ui/Reveal";
 import ScrollVelocity from "./ui/ScrollVelocity";
 
-const WPP_VENDAS = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Quero falar sobre um plano do easy-nfe.");
 const WPP_PARCEIRO = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Sou contador(a) e quero ser parceiro(a) do easy-nfe. Gostaria de saber como funciona o programa de parcerias para contadores.");
 
 const RECURSOS = [
@@ -131,8 +130,8 @@ export default async function Landing() {
             WhatsApp e e-mail integrados. Tudo em uma plataforma só.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link href="/login" className="w-full rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:-translate-y-0.5 sm:w-auto">
-              Acessar minha conta
+            <Link href="/cadastro" className="w-full rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:-translate-y-0.5 sm:w-auto">
+              Começar grátis
             </Link>
             <a href="#planos" className="w-full rounded-xl bg-white/10 px-6 py-3 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/20 sm:w-auto">
               Ver planos
@@ -340,11 +339,11 @@ export default async function Landing() {
                           ))}
                         </ul>
                         {p.sobConsulta ? (
-                          <a href={WPP_VENDAS} target="_blank" rel="noopener noreferrer" className={"mt-7 rounded-xl px-5 py-2.5 text-center text-sm font-semibold transition " + (destaque ? "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg shadow-violet-500/25 hover:-translate-y-0.5" : "bg-slate-100 text-slate-900 hover:bg-slate-200")}>
+                          <Link href={`/cadastro?plano=${p.id}`} className={"mt-7 rounded-xl px-5 py-2.5 text-center text-sm font-semibold transition " + (destaque ? "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg shadow-violet-500/25 hover:-translate-y-0.5" : "bg-slate-100 text-slate-900 hover:bg-slate-200")}>
                             Fale com nossos vendedores
-                          </a>
+                          </Link>
                         ) : (
-                          <Link href="/login" className={"mt-7 rounded-xl px-5 py-2.5 text-center text-sm font-semibold transition " + (destaque ? "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg shadow-violet-500/25 hover:-translate-y-0.5" : "bg-slate-100 text-slate-900 hover:bg-slate-200")}>
+                          <Link href={`/cadastro?plano=${p.id}`} className={"mt-7 rounded-xl px-5 py-2.5 text-center text-sm font-semibold transition " + (destaque ? "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg shadow-violet-500/25 hover:-translate-y-0.5" : "bg-slate-100 text-slate-900 hover:bg-slate-200")}>
                             Começar agora
                           </Link>
                         )}
