@@ -9,11 +9,13 @@ export default function Tabs({
   abas,
   idInicial,
   alturaConteudo,
+  onMudarAba,
 }: {
   abas: Aba[];
   idInicial?: string;
   /** Altura fixa da área de conteúdo (ex.: "360px"). Mantém o modal estável entre abas. */
   alturaConteudo?: string;
+  onMudarAba?: (id: string) => void;
 }) {
   const [ativa, setAtiva] = useState(idInicial ?? abas[0]?.id);
   const indice = abas.findIndex((a) => a.id === ativa);
@@ -26,7 +28,7 @@ export default function Tabs({
           return (
             <button
               key={a.id}
-              onClick={() => setAtiva(a.id)}
+              onClick={() => { setAtiva(a.id); onMudarAba?.(a.id); }}
               className={
                 "relative cursor-pointer px-4 py-2.5 text-sm font-medium transition-colors " +
                 (sel ? "text-[var(--primary)]" : "text-[var(--muted)] hover:text-[var(--foreground)]")

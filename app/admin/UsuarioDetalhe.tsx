@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, Field, Input, Select } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Tabs from "@/app/ui/Tabs";
@@ -32,6 +32,16 @@ export default function UsuarioDetalhe({
   const [planos, setPlanos] = useState<Required<PlanoDados>[]>([]);
   const [empresas, setEmpresas] = useState<EmpresaAdmin[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
+  const [aba, setAba] = useState("conta");
+  const [salvando, setSalvando] = useState(false);
+  // aba ativa registra aqui seu save; o botão único do rodapé o aciona.
+  const salvarRef = useRef<(() => void | Promise<void>) | null>(null);
+
+  async function salvarAtual() {
+    setSalvando(true);
+    try { await salvarRef.current?.(); } finally { setSalvando(false); }
+  }
+  const temSalvar = aba === "conta" || aba === "licenca";
 
   async function recarregar() {
     const det = await detalheUsuario(userId);
@@ -51,14 +61,23 @@ export default function UsuarioDetalhe({
   }
 
   return (
-    <Modal aberto onFechar={onFechar} titulo={`${d.nome || d.email}`} largura="max-w-4xl">
+    <Modal
+      aberto
+      onFechar={onFechar}
+      titulo={`${d.nome || d.email}`}
+      largura="max-w-4xl"
+      rodape={temSalvar ? (
+        <Button onClick={salvarAtual} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</Button>
+      ) : undefined}
+    >
       <div className="space-y-4">
         {msg && <p className="rounded-lg bg-[var(--success-soft)] px-3 py-2 text-sm font-medium text-[var(--success)]">{msg}</p>}
         <Tabs
           alturaConteudo="460px"
+          onMudarAba={setAba}
           abas={[
-            { id: "conta", label: "Conta", content: <Conta d={d} onMudou={recarregar} flash={setMsg} /> },
-            { id: "licenca", label: "Licença", content: <Licenca d={d} planos={planos} onMudou={recarregar} flash={setMsg} /> },
+            { id: "conta", label: "Conta", content: <Conta d={d} onMudou={recarregar} flash={setMsg} registrar={(fn) => (salvarRef.current = fn)} /> },
+            { id: "licenca", label: "Licença", content: <Licenca d={d} planos={planos} onMudou={recarregar} flash={setMsg} registrar={(fn) => (salvarRef.current = fn)} /> },
             { id: "empresas", label: `Empresas (${d.empresas.length})`, content: <Empresas d={d} empresas={empresas} onMudou={recarregar} flash={setMsg} /> },
             { id: "faturas", label: `Faturas (${d.faturas.length})`, content: <Faturas d={d} onMudou={recarregar} flash={setMsg} /> },
           ]}
@@ -69,12 +88,13 @@ export default function UsuarioDetalhe({
 }
 
 type Sub = { d: Detalhe; onMudou: () => void; flash: (m: string) => void };
+type ComSalvar = { registrar: (fn: () => void | Promise<void>) => void };
 
 function Secao({ children }: { titulo: string; children: React.ReactNode }) {
   return <section>{children}</section>;
 }
 
-function Conta({ d, onMudou, flash }: Sub) {
+function Conta({ d, onMudou, flash, registrar }: Sub & ComSalvar) {
   const [nome, setNome] = useState(d.nome);
   const [email, setEmail] = useState(d.email);
   const [role, setRole] = useState(d.role);
@@ -86,14 +106,14 @@ function Conta({ d, onMudou, flash }: Sub) {
     setErro(null);
     const r = await atualizarUsuario(d.id, { nome, email, role: role as "USER" | "SUPORTE" | "ADMIN" | "CONTADOR", ativo });
     if (!r.ok) { setErro(r.erro); return; }
-    flash("Conta atualizada."); onMudou();
+    if (senha) {
+      const rs = await redefinirSenha(d.id, senha);
+      if (!rs.ok) { setErro(rs.erro); return; }
+      setSenha("");
+    }
+    flash(senha ? "Conta e senha atualizadas." : "Conta atualizada."); onMudou();
   }
-  async function trocarSenha() {
-    setErro(null);
-    const r = await redefinirSenha(d.id, senha);
-    if (!r.ok) { setErro(r.erro); return; }
-    setSenha(""); flash("Senha redefinida.");
-  }
+  useEffect(() => { registrar(salvar); });
 
   return (
     <Secao titulo="Conta">
@@ -105,12 +125,8 @@ function Conta({ d, onMudou, flash }: Sub) {
           <Field label="Papel"><Select opcoes={ROLES} value={role} onChange={(e) => setRole(e.target.value as typeof role)} /></Field>
           <Field label="Status"><Select opcoes={[{ value: "true", label: "Ativo" }, { value: "false", label: "Bloqueado" }]} value={String(ativo)} onChange={(e) => setAtivo(e.target.value === "true")} /></Field>
         </div>
-        <div className="flex items-end gap-3">
-          <Field label="Redefinir senha" hint="Mín. 8 caracteres" className="flex-1"><Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="nova senha" /></Field>
-          <Button variante="secondary" onClick={trocarSenha} disabled={senha.length < 8}>Trocar senha</Button>
-        </div>
+        <Field label="Redefinir senha" hint="Deixe em branco p/ manter. Mín. 8 caracteres."><Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="nova senha" /></Field>
         {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
-        <div className="flex justify-end"><Button onClick={salvar}>Salvar conta</Button></div>
       </Card>
     </Secao>
   );
@@ -122,7 +138,7 @@ function isoEmDias(dias: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
-function Licenca({ d, planos, onMudou, flash }: Sub & { planos: Required<PlanoDados>[] }) {
+function Licenca({ d, planos, onMudou, flash, registrar }: Sub & ComSalvar & { planos: Required<PlanoDados>[] }) {
   const [planoId, setPlanoId] = useState(d.licenca?.planoId ?? "");
   const [status, setStatus] = useState(d.licenca?.status ?? "TRIAL");
   // trial padrão = 7 dias; validade já reflete daqui 7 dias quando não houver uma definida.
@@ -150,6 +166,7 @@ function Licenca({ d, planos, onMudou, flash }: Sub & { planos: Required<PlanoDa
     if (!r.ok) { setErro(r.erro); return; }
     flash("Licença atualizada."); onMudou();
   }
+  useEffect(() => { registrar(salvar); });
 
   const opcoesPlano = planos.map((p) => ({ id: p.id, nome: p.nome, preco: p.preco as number | undefined, periodicidade: p.periodicidade, limite: p.limiteEmpresas }));
 
@@ -197,7 +214,6 @@ function Licenca({ d, planos, onMudou, flash }: Sub & { planos: Required<PlanoDa
           )}
         </div>
         {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
-        <div className="flex justify-end"><Button onClick={salvar}>Salvar licença</Button></div>
       </Card>
     </Secao>
   );
@@ -205,6 +221,7 @@ function Licenca({ d, planos, onMudou, flash }: Sub & { planos: Required<PlanoDa
 
 function Empresas({ d, empresas, onMudou, flash }: Sub & { empresas: EmpresaAdmin[] }) {
   const [vincularId, setVincularId] = useState("");
+  const [vincularPapel, setVincularPapel] = useState<"dono" | "membro">("membro");
   const [erro, setErro] = useState<string | null>(null);
   const [novaForm, setNovaForm] = useState(false);
 
@@ -215,9 +232,15 @@ function Empresas({ d, empresas, onMudou, flash }: Sub & { empresas: EmpresaAdmi
   async function vincular() {
     if (!vincularId) return;
     setErro(null);
-    const r = await vincularUsuarioEmpresa({ userId: d.id, empresaId: vincularId, papel: "membro" });
+    const r = await vincularUsuarioEmpresa({ userId: d.id, empresaId: vincularId, papel: vincularPapel });
     if (!r.ok) { setErro(r.erro); return; }
-    setVincularId(""); flash("Empresa vinculada."); onMudou();
+    setVincularId(""); setVincularPapel("membro"); flash("Empresa vinculada."); onMudou();
+  }
+  async function trocarPapel(empresaId: string, papel: "dono" | "membro") {
+    setErro(null);
+    const r = await vincularUsuarioEmpresa({ userId: d.id, empresaId, papel });
+    if (!r.ok) { setErro(r.erro); return; }
+    flash(`Papel alterado para ${papel}.`); onMudou();
   }
   async function desvincular(empresaId: string) {
     const r = await desvincularUsuarioEmpresa(d.id, empresaId);
@@ -233,9 +256,14 @@ function Empresas({ d, empresas, onMudou, flash }: Sub & { empresas: EmpresaAdmi
         ) : (
           <ul className="divide-y divide-[var(--border)]">
             {d.empresas.map((e) => (
-              <li key={e.id} className="flex items-center justify-between py-2 text-sm">
+              <li key={e.id} className="flex items-center justify-between gap-2 py-2 text-sm">
                 <span><span className="font-medium">{e.razaoSocial}</span> <span className="text-[var(--muted)]">· {e.cnpj}</span> <Badge tom={e.papel === "dono" ? "primary" : "neutral"}>{e.papel}</Badge></span>
-                <button onClick={() => desvincular(e.id)} className="text-xs font-medium text-[var(--danger)] hover:underline">desvincular</button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button variante="secondary" onClick={() => trocarPapel(e.id, e.papel === "dono" ? "membro" : "dono")} className="!px-3 !py-1.5 !text-xs">
+                    {e.papel === "dono" ? "Tornar membro" : "Tornar dono"}
+                  </Button>
+                  <Button variante="danger" onClick={() => desvincular(e.id)} className="!px-3 !py-1.5 !text-xs">Desvincular</Button>
+                </div>
               </li>
             ))}
           </ul>
@@ -245,8 +273,11 @@ function Empresas({ d, empresas, onMudou, flash }: Sub & { empresas: EmpresaAdmi
           <Field label="Vincular empresa existente" className="flex-1">
             <Select opcoes={[{ value: "", label: "Selecione…" }, ...disponiveis.map((e) => ({ value: e.id, label: `${e.razaoSocial} · ${e.cnpj}` }))]} value={vincularId} onChange={(e) => setVincularId(e.target.value)} />
           </Field>
+          <Field label="Papel">
+            <Select opcoes={[{ value: "membro", label: "Membro" }, { value: "dono", label: "Dono" }]} value={vincularPapel} onChange={(e) => setVincularPapel(e.target.value as "dono" | "membro")} />
+          </Field>
           <Button variante="secondary" onClick={vincular} disabled={!vincularId}>Vincular</Button>
-          <Button variante="ghost" onClick={() => setNovaForm((v) => !v)}>+ Nova empresa</Button>
+          <Button variante="secondary" onClick={() => setNovaForm((v) => !v)}>+ Nova empresa</Button>
         </div>
 
         {novaForm && <NovaEmpresa userId={d.id} onCriou={() => { setNovaForm(false); flash("Empresa criada e vinculada."); onMudou(); }} />}

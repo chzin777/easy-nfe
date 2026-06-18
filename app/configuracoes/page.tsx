@@ -26,6 +26,7 @@ import {
   listarEquipe,
   adicionarMembro,
   removerMembro,
+  alterarPapelMembro,
   type CertStatus,
   type EmpresaDados,
   type EmpresaResumo,
@@ -50,6 +51,10 @@ const empresaVazia: EmpresaDados = {
   ambiente: "homologacao",
   serie: "1",
   proximoNumero: "1",
+  serieNFCe: "1",
+  proximoNumeroNFCe: "1",
+  cscNFCe: "",
+  idCscNFCe: "",
 };
 
 export default function ConfiguracoesPage() {
@@ -153,6 +158,7 @@ function AbaEquipe() {
   const [email, setEmail] = useState("");
   const [nome, setNome] = useState("");
   const [senha, setSenha] = useState("");
+  const [papel, setPapel] = useState<"dono" | "membro">("membro");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
 
@@ -167,14 +173,20 @@ function AbaEquipe() {
   async function adicionar() {
     setSalvando(true);
     setErro(null);
-    const r = await adicionarMembro({ email, nome, senha });
+    const r = await adicionarMembro({ email, nome, senha, papel });
     setSalvando(false);
     if (!r.ok) { setErro(r.erro); return; }
-    setEmail(""); setNome(""); setSenha("");
+    setEmail(""); setNome(""); setSenha(""); setPapel("membro");
     await recarregar();
   }
   async function remover(userId: string) {
     const r = await removerMembro(userId);
+    if (!r.ok) { setErro(r.erro); return; }
+    await recarregar();
+  }
+  async function trocarPapel(userId: string, novo: "dono" | "membro") {
+    setErro(null);
+    const r = await alterarPapelMembro(userId, novo);
     if (!r.ok) { setErro(r.erro); return; }
     await recarregar();
   }
@@ -206,30 +218,50 @@ function AbaEquipe() {
                 <span className={"ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " + (m.papel === "dono" ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "bg-slate-100 text-slate-600")}>{m.papel}</span>
                 {m.voce && <span className="ml-1 text-xs text-[var(--muted)]">(você)</span>}
               </span>
-              {m.papel !== "dono" && (
-                <button onClick={() => remover(m.userId)} className="text-xs font-medium text-[var(--danger)] hover:underline">remover</button>
+              {info.voceEhDono && !m.voce && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variante="secondary"
+                    onClick={() => trocarPapel(m.userId, m.papel === "dono" ? "membro" : "dono")}
+                    className="!px-3 !py-1.5 !text-xs"
+                  >
+                    {m.papel === "dono" ? "Tornar membro" : "Tornar dono"}
+                  </Button>
+                  <Button variante="danger" onClick={() => remover(m.userId)} className="!px-3 !py-1.5 !text-xs">Remover</Button>
+                </div>
               )}
             </li>
           ))}
         </ul>
       </div>
 
-      <section>
-        <SectionTitle>Adicionar membro</SectionTitle>
-        <p className="mb-3 text-xs text-[var(--muted)]">Se o e-mail já existir, ele só ganha acesso a esta empresa. Senão, cria a conta.</p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Nome"><Input value={nome} onChange={(e) => setNome(e.target.value)} /></Field>
-          <Field label="E-mail" required><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-          <Field label="Senha (se novo)" hint="Mín. 8 caracteres"><Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} /></Field>
-        </div>
-        {erro && <p className="mt-3 text-sm font-medium text-[var(--danger)]">{erro}</p>}
-        <div className="mt-4">
-          <Button onClick={adicionar} disabled={salvando || !info.podeAdicionar || !email}>
-            {salvando ? "Adicionando…" : "Adicionar à equipe"}
-          </Button>
-          {!info.podeAdicionar && <span className="ml-3 text-sm text-[var(--warning)]">Limite do plano atingido.</span>}
-        </div>
-      </section>
+      {info.voceEhDono && (
+        <section>
+          <SectionTitle>Adicionar membro</SectionTitle>
+          <p className="mb-3 text-xs text-[var(--muted)]">Se o e-mail já existir, ele só ganha acesso a esta empresa. Senão, cria a conta.</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Nome"><Input value={nome} onChange={(e) => setNome(e.target.value)} /></Field>
+            <Field label="E-mail" required><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+            <Field label="Senha (se novo)" hint="Mín. 8 caracteres"><Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} /></Field>
+            <Field label="Papel" hint="Dono gerencia equipe, dados e certificado">
+              <Select
+                opcoes={[{ value: "membro", label: "Membro" }, { value: "dono", label: "Dono" }]}
+                value={papel}
+                onChange={(e) => setPapel(e.target.value as "dono" | "membro")}
+              />
+            </Field>
+          </div>
+          {erro && <p className="mt-3 text-sm font-medium text-[var(--danger)]">{erro}</p>}
+          <div className="mt-4">
+            <Button onClick={adicionar} disabled={salvando || !info.podeAdicionar || !email}>
+              {salvando ? "Adicionando…" : "Adicionar à equipe"}
+            </Button>
+            {!info.podeAdicionar && <span className="ml-3 text-sm text-[var(--warning)]">Limite do plano atingido.</span>}
+          </div>
+        </section>
+      )}
+
+      {!info.voceEhDono && erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
     </div>
   );
 }
@@ -458,6 +490,28 @@ function AbaAmbiente({
           </Field>
           <Field label="Próximo nº NF-e (mod. 55)">
             <Input type="number" min="1" value={form.proximoNumero} onChange={(e) => setE("proximoNumero", e.target.value)} />
+          </Field>
+        </div>
+      </section>
+
+      <section>
+        <SectionTitle>NFC-e (modelo 65)</SectionTitle>
+        <p className="mb-3 text-sm text-[var(--muted)]">
+          O CSC (Código de Segurança do Contribuinte) e seu identificador são emitidos pela SEFAZ após o
+          credenciamento NFC-e. Sem eles o QR Code não pode ser gerado.
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Série NFC-e">
+            <Input value={form.serieNFCe} onChange={(e) => setE("serieNFCe", e.target.value)} />
+          </Field>
+          <Field label="Próximo nº NFC-e (mod. 65)">
+            <Input type="number" min="1" value={form.proximoNumeroNFCe} onChange={(e) => setE("proximoNumeroNFCe", e.target.value)} />
+          </Field>
+          <Field label="ID do CSC (cIdToken)" hint="1 a 6 dígitos">
+            <Input value={form.idCscNFCe} onChange={(e) => setE("idCscNFCe", e.target.value)} />
+          </Field>
+          <Field label="CSC (token)">
+            <Input value={form.cscNFCe} onChange={(e) => setE("cscNFCe", e.target.value)} />
           </Field>
         </div>
       </section>

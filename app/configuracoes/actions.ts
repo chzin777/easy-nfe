@@ -113,6 +113,11 @@ export type EmpresaDados = {
   ambiente: "homologacao" | "producao";
   serie: string;
   proximoNumero: string;
+  // NFC-e (modelo 65)
+  serieNFCe: string;
+  proximoNumeroNFCe: string;
+  cscNFCe: string;
+  idCscNFCe: string;
 };
 
 export type EmpresaResumo = { id: string; razaoSocial: string; cnpj: string; ativa: boolean };
@@ -169,6 +174,10 @@ export async function obterEmpresaAtiva(): Promise<EmpresaDados | null> {
     ambiente: e.ambiente === "PRODUCAO" ? "producao" : "homologacao",
     serie: String(e.serie),
     proximoNumero: String(e.proximoNumero),
+    serieNFCe: String(e.serieNFCe),
+    proximoNumeroNFCe: String(e.proximoNumeroNFCe),
+    cscNFCe: e.cscNFCe ?? "",
+    idCscNFCe: e.idCscNFCe ?? "",
   };
 }
 
@@ -200,6 +209,10 @@ export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id
       ambiente: dados.ambiente === "producao" ? ("PRODUCAO" as const) : ("HOMOLOGACAO" as const),
       serie: Number(dados.serie) || 1,
       proximoNumero: Number(dados.proximoNumero) || 1,
+      serieNFCe: Number(dados.serieNFCe) || 1,
+      proximoNumeroNFCe: Number(dados.proximoNumeroNFCe) || 1,
+      cscNFCe: dados.cscNFCe?.trim() || null,
+      idCscNFCe: dados.idCscNFCe?.replace(/\D/g, "") || null,
     };
 
     const { role } = await exigirSessao();
@@ -207,13 +220,9 @@ export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id
 
     let id: string;
     if (dados.id) {
-      // Edição: admin edita qualquer empresa; usuário comum só as que tem acesso.
-      if (!admin) {
-        const acesso = await prisma.acessoEmpresa.findUnique({
-          where: { userId_empresaId: { userId, empresaId: dados.id } },
-          select: { id: true },
-        });
-        if (!acesso) return { ok: false, erro: "Empresa não encontrada." };
+      // Edição: admin edita qualquer empresa; senão, só o dono.
+      if (!admin && !(await ehDono(userId, role, dados.id))) {
+        return { ok: false, erro: "Apenas o dono da empresa pode editar os dados." };
       }
       await prisma.emitente.update({ where: { id: dados.id }, data: dadosBase });
       id = dados.id;
@@ -267,7 +276,9 @@ export async function salvarCertificado(
   pfxBase64: string,
   senha: string,
 ): Promise<{ ok: true } | { ok: false; erro: string }> {
+  const { uid, role } = await exigirSessao();
   const empresaId = await exigirEmpresa();
+  if (!(await ehDono(uid, role, empresaId))) return { ok: false, erro: "Apenas o dono da empresa pode alterar o certificado." };
   const info = await inspecionarCertificado(pfxBase64, senha);
   if (!info.ok) return { ok: false, erro: info.erro };
 
@@ -291,7 +302,9 @@ export async function salvarCertificado(
 }
 
 export async function removerCertificado(): Promise<void> {
+  const { uid, role } = await exigirSessao();
   const empresaId = await exigirEmpresa();
+  await exigirDono(uid, role, empresaId);
   await prisma.emitente.update({
     where: { id: empresaId },
     data: { certData: null, certTitular: null, certValidoAte: null },
@@ -328,15 +341,25 @@ export type EquipeInfo = {
   usados: number;
   podeAdicionar: boolean;
   permitido: boolean; // plano permite equipe (>1 ou ilimitado)
+  voceEhDono: boolean; // só dono (ou admin) gerencia papéis/membros
 };
 
-async function exigirDono(uid: string, role: string, empresaId: string) {
-  if (isAdminRole(role)) return; // admin/suporte gerenciam qualquer empresa
+async function ehDono(uid: string, role: string, empresaId: string): Promise<boolean> {
+  if (isAdminRole(role)) return true; // admin/suporte gerenciam qualquer empresa
   const acesso = await prisma.acessoEmpresa.findUnique({
     where: { userId_empresaId: { userId: uid, empresaId } },
     select: { papel: true },
   });
-  if (!acesso || acesso.papel !== "dono") throw new Error("Apenas o dono da empresa gerencia a equipe.");
+  return acesso?.papel === "dono";
+}
+
+async function exigirDono(uid: string, role: string, empresaId: string) {
+  if (!(await ehDono(uid, role, empresaId))) throw new Error("Apenas o dono da empresa pode fazer isso.");
+}
+
+// Conta quantos donos a empresa tem — usado para não deixar a empresa sem dono.
+async function totalDonos(empresaId: string): Promise<number> {
+  return prisma.acessoEmpresa.count({ where: { empresaId, papel: "dono" } });
 }
 
 export async function listarEquipe(): Promise<EquipeInfo> {
@@ -363,6 +386,7 @@ export async function listarEquipe(): Promise<EquipeInfo> {
     usados: lim.usados,
     podeAdicionar: admin || lim.podeAdicionar,
     permitido: admin || limite < 0 || limite > 1,
+    voceEhDono: await ehDono(uid, role, empresaId),
   };
 }
 
@@ -370,6 +394,7 @@ export async function adicionarMembro(input: {
   email: string;
   nome: string;
   senha: string;
+  papel?: "dono" | "membro";
 }): Promise<{ ok: true } | { ok: false; erro: string }> {
   try {
     const { uid, role } = await exigirSessao();
@@ -399,7 +424,40 @@ export async function adicionarMembro(input: {
     });
     if (jaTem) return { ok: false, erro: "Esse usuário já tem acesso a esta empresa." };
 
-    await prisma.acessoEmpresa.create({ data: { userId: user.id, empresaId, papel: "membro" } });
+    await prisma.acessoEmpresa.create({ data: { userId: user.id, empresaId, papel: input.papel === "dono" ? "dono" : "membro" } });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Promove/rebaixa um membro. Multi-dono: vários donos coexistem, mas a empresa
+// nunca pode ficar sem nenhum dono.
+export async function alterarPapelMembro(
+  userId: string,
+  papel: "dono" | "membro",
+): Promise<{ ok: true } | { ok: false; erro: string }> {
+  try {
+    const { uid, role } = await exigirSessao();
+    const empresaId = await exigirEmpresa();
+    await exigirDono(uid, role, empresaId);
+
+    const atual = await prisma.acessoEmpresa.findUnique({
+      where: { userId_empresaId: { userId, empresaId } },
+      select: { papel: true },
+    });
+    if (!atual) return { ok: false, erro: "Membro não encontrado nesta empresa." };
+    if (atual.papel === papel) return { ok: true };
+
+    // Rebaixar o último dono deixaria a empresa órfã.
+    if (atual.papel === "dono" && papel === "membro" && (await totalDonos(empresaId)) <= 1) {
+      return { ok: false, erro: "A empresa precisa de ao menos um dono. Promova outro antes de rebaixar este." };
+    }
+
+    await prisma.acessoEmpresa.update({
+      where: { userId_empresaId: { userId, empresaId } },
+      data: { papel },
+    });
     return { ok: true };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
@@ -411,8 +469,17 @@ export async function removerMembro(userId: string): Promise<{ ok: true } | { ok
     const { uid, role } = await exigirSessao();
     const empresaId = await exigirEmpresa();
     await exigirDono(uid, role, empresaId);
-    // Não remove o dono.
-    await prisma.acessoEmpresa.deleteMany({ where: { userId, empresaId, papel: { not: "dono" } } });
+
+    const alvo = await prisma.acessoEmpresa.findUnique({
+      where: { userId_empresaId: { userId, empresaId } },
+      select: { papel: true },
+    });
+    if (!alvo) return { ok: true };
+    // Não deixa remover o último dono — a empresa ficaria sem ninguém no comando.
+    if (alvo.papel === "dono" && (await totalDonos(empresaId)) <= 1) {
+      return { ok: false, erro: "A empresa precisa de ao menos um dono. Promova outro antes de remover este." };
+    }
+    await prisma.acessoEmpresa.deleteMany({ where: { userId, empresaId } });
     return { ok: true };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
