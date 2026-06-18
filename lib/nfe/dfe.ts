@@ -58,7 +58,9 @@ function soapAN(
       {
         hostname: u.hostname, port: 443, path: u.pathname, method: "POST",
         key: cert.keyPem, cert: cert.certPem, rejectUnauthorized: false,
-        servername: u.hostname, minVersion: "TLSv1.2",
+        // Força TLS 1.2: em TLS 1.3 o client-cert iria por post-handshake auth (que o
+        // Node não faz), e o Ambiente Nacional responde 403 por não receber o certificado.
+        servername: u.hostname, minVersion: "TLSv1.2", maxVersion: "TLSv1.2",
         headers: {
           "Content-Type": "application/soap+xml; charset=utf-8",
           "Content-Length": Buffer.byteLength(envelope),
