@@ -108,7 +108,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       : null;
 
     const tpAmb = empresa.ambiente === "PRODUCAO" ? "1" : "2";
-    const numero = empresa.proximoNumero;
+    let numero = empresa.proximoNumero;
 
     const itensNFe = input.itens.map((i) => {
       const p = porId.get(i.produtoId);
@@ -167,7 +167,21 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       itens: itensNFe,
     };
 
-    const r = await emitirNFe(cert, dados);
+    // Auto-correção de numeração: a SEFAZ não expõe "último número emitido", então
+    // ao receber 539 (duplicidade — número já usado, ex.: notas de outro sistema)
+    // avança o nNF e tenta de novo. Salto exponencial cobre gaps grandes em poucas
+    // tentativas; gaps na numeração são fiscalmente permitidos.
+    let r = await emitirNFe(cert, dados);
+    let salto = 1;
+    let tentativas = 0;
+    while (!r.ok && r.cStat === "539" && tentativas < 25) {
+      numero += salto;
+      salto *= 2;
+      tentativas++;
+      dados.nNF = String(numero);
+      r = await emitirNFe(cert, dados);
+    }
+
     const valorTotal = itensNFe.reduce((s, it) => s + it.qCom * it.vUnCom, 0);
 
     let avisoPersistencia: string | undefined;
@@ -202,8 +216,10 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
             },
           },
         }),
-        // Avança numeração só se autorizada.
-        ...(r.ok
+        // Avança a numeração quando autorizada (próximo número) ou quando a busca
+        // por duplicidade esgotou (continua acima da faixa ocupada). Em outras
+        // rejeições mantém o número para reemitir após corrigir a causa.
+        ...(r.ok || r.cStat === "539"
           ? [prisma.emitente.update({ where: { id: empresa.id }, data: { proximoNumero: numero + 1 } })]
           : []),
       ]);
