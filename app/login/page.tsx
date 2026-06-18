@@ -27,12 +27,12 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           <div className="mb-10 flex items-center">
             <Image
-              src="/images/logo/Easy%20NFe%20-%20logo%20completa.png"
+              src="/images/logo/logo-completa.png"
               alt="easy-nfe"
-              width={320}
-              height={110}
+              width={863}
+              height={309}
               priority
-              className="h-20 w-auto"
+              className="h-16 w-auto"
             />
           </div>
 
