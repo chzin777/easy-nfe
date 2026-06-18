@@ -27,26 +27,31 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
         ? "NF-e CANCELADA"
         : "NF-e sem Autorização de Uso da SEFAZ";
 
+  // "SEM VALOR FISCAL" só em homologação. Em produção, nota autorizada não tem marca.
   const watermark =
     nota.status === "cancelada"
       ? "CANCELADA"
-      : nota.status === "autorizada"
+      : nota.ambiente === "homologacao"
         ? "SEM VALOR FISCAL"
-        : "SEM VALOR FISCAL";
+        : nota.status === "autorizada"
+          ? ""
+          : "SEM AUTORIZACAO";
 
   return (
     <div className="relative mx-auto w-full bg-white font-sans text-[9px] leading-tight text-black">
       {/* Marca d'água */}
-      <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
-        <span
-          className={
-            "rotate-[-18deg] whitespace-nowrap text-[44px] font-bold uppercase tracking-wide " +
-            (nota.status === "cancelada" ? "text-red-500/15" : "text-slate-400/15")
-          }
-        >
-          {watermark}
-        </span>
-      </div>
+      {watermark && (
+        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
+          <span
+            className={
+              "rotate-[-18deg] whitespace-nowrap text-[44px] font-bold uppercase tracking-wide " +
+              (nota.status === "cancelada" ? "text-red-500/15" : "text-slate-400/15")
+            }
+          >
+            {watermark}
+          </span>
+        </div>
+      )}
 
       <div className="relative z-10">
         {/* ---- Canhoto ---- */}

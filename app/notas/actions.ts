@@ -282,6 +282,7 @@ export type NotaCompleta = {
   tipoNota: string;
   naturezaOperacao: string;
   status: "autorizada" | "rascunho" | "cancelada" | "rejeitada" | "denegada";
+  ambiente: "producao" | "homologacao";
   emitidaEm: string;
   valorTotal: number;
   chaveAcesso: string;
@@ -327,6 +328,7 @@ export async function listarNotas(): Promise<NotaCompleta[]> {
     tipoNota: n.tipoNota,
     naturezaOperacao: n.naturezaOperacao,
     status: STATUS_UI[n.status] ?? "rascunho",
+    ambiente: n.ambiente === "PRODUCAO" ? "producao" : "homologacao",
     emitidaEm: n.emitidaEm.toISOString(),
     valorTotal: Number(n.valorTotal),
     chaveAcesso: n.chaveAcesso ?? "",
@@ -433,5 +435,18 @@ export async function cancelarNota(input: CancelarInput): Promise<CancelarResult
     const msg = e instanceof Error ? e.message : String(e);
     if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
     return { ok: false, erro: msg };
+  }
+}
+
+// XML autorizado (nfeProc) de uma nota, para download. Escopado à empresa ativa.
+export async function obterXmlNota(notaId: string): Promise<{ ok: true; xml: string; nome: string } | { ok: false; erro: string }> {
+  try {
+    const empresaId = await exigirEmpresa();
+    const nota = await prisma.nota.findFirst({ where: { id: notaId, emitenteId: empresaId }, select: { xmlAutorizado: true, chaveAcesso: true, numero: true } });
+    if (!nota) return { ok: false, erro: "Nota não encontrada." };
+    if (!nota.xmlAutorizado) return { ok: false, erro: "Esta nota não tem XML autorizado (não foi autorizada pela SEFAZ)." };
+    return { ok: true, xml: nota.xmlAutorizado, nome: `${nota.chaveAcesso || nota.numero}.xml` };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
   }
 }

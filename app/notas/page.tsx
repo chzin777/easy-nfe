@@ -21,7 +21,7 @@ import Danfe from "@/app/ui/Danfe";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { STATUS_NOTA, TIPOS_NOTA, rotulo } from "@/lib/mock-data";
 import type { StatusNota } from "@/lib/types";
-import { listarNotas, cancelarNota, type NotaCompleta } from "./actions";
+import { listarNotas, cancelarNota, obterXmlNota, type NotaCompleta } from "./actions";
 
 const tomStatus: Record<StatusNota, "success" | "danger" | "warning" | "neutral" | "primary"> = {
   autorizada: "success",
@@ -59,6 +59,16 @@ export default function NotasEmitidasPage() {
 
   function imprimir() {
     window.print();
+  }
+
+  async function baixarXml(nota: NotaCompleta) {
+    const r = await obterXmlNota(nota.id);
+    if (!r.ok) { alert(r.erro); return; }
+    const blob = new Blob([r.xml], { type: "application/xml;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = r.nome; a.click();
+    URL.revokeObjectURL(url);
   }
 
   const filtradas = useMemo(() => {
@@ -191,7 +201,12 @@ export default function NotasEmitidasPage() {
       chave: "status",
       cabecalho: "Status",
       alinhar: "center",
-      render: (n) => <Badge tom={tomStatus[n.status]}>{n.status}</Badge>,
+      render: (n) => (
+        <div className="flex flex-col items-center gap-1">
+          <Badge tom={tomStatus[n.status]}>{n.status}</Badge>
+          {n.ambiente === "homologacao" && <Badge tom="warning">homologação</Badge>}
+        </div>
+      ),
     },
     {
       chave: "acoes",
@@ -335,6 +350,9 @@ export default function NotasEmitidasPage() {
         rodape={
           <>
             <Button variante="secondary" onClick={() => setVisualizar(null)}>Fechar</Button>
+            {visualizar?.status === "autorizada" && (
+              <Button variante="secondary" onClick={() => visualizar && baixarXml(visualizar)}>Salvar XML</Button>
+            )}
             <Button onClick={imprimir}>Imprimir / Salvar PDF</Button>
           </>
         }
