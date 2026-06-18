@@ -189,7 +189,7 @@ export default function ClientesPage() {
       <Modal
         aberto={modo === "editar"}
         onFechar={fechar}
-        titulo={`Cliente #${editId ? clientes.find((c) => c.id === editId)?.codigoInterno : ""}`}
+        titulo={(editId ? clientes.find((c) => c.id === editId)?.nome : "") || "Cliente"}
         rodape={
           <div className="flex w-full items-center justify-between">
             <Button variante="ghost" className="text-[var(--danger)]" onClick={excluir} disabled={salvando}>Excluir</Button>

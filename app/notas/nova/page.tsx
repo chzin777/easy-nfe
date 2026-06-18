@@ -18,6 +18,7 @@ import type { ItemNota, Cliente, Produto, Transportadora } from "@/lib/types";
 import { emitirNota, type EmitirInput, type EmitirResultado } from "../actions";
 import { explicarRejeicao } from "@/lib/nfe/mensagens";
 import { listarClientes } from "@/app/clientes/actions";
+import NovoClienteModal from "@/app/clientes/NovoClienteModal";
 import ClientePicker from "./ClientePicker";
 import ProdutoPicker from "./ProdutoPicker";
 import TransportadoraPicker from "./TransportadoraPicker";
@@ -41,6 +42,7 @@ export default function NovaNotaPage() {
 
   const [emitindo, setEmitindo] = useState(false);
   const [resultado, setResultado] = useState<EmitirResultado | null>(null);
+  const [corrigirCliente, setCorrigirCliente] = useState<Cliente | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -306,6 +308,17 @@ export default function NovaNotaPage() {
           <div className="space-y-3 text-sm">
             <div className="rounded-lg bg-[var(--danger-soft,#fee2e2)] px-3 py-2.5 font-medium text-[var(--danger)]">Falha ao emitir</div>
             <p className="text-[var(--muted)]">{resultado.erro}</p>
+            {resultado.codigo === "endereco_dest" && (
+              <Button
+                onClick={() => {
+                  const alvo = clientes.find((c) => c.id === (resultado.clienteId ?? clienteId)) ?? cliente ?? null;
+                  setResultado(null);
+                  setCorrigirCliente(alvo);
+                }}
+              >
+                Corrigir endereço do cliente
+              </Button>
+            )}
           </div>
         )}
 
@@ -346,6 +359,17 @@ export default function NovaNotaPage() {
           </div>
         )}
       </Modal>
+
+      {corrigirCliente && (
+        <NovoClienteModal
+          clienteInicial={corrigirCliente}
+          onFechar={() => setCorrigirCliente(null)}
+          onCriado={(c) => {
+            setClientes((lista) => lista.map((x) => (x.id === c.id ? c : x)));
+            setCorrigirCliente(null);
+          }}
+        />
+      )}
     </div>
   );
 }

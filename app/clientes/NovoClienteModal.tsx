@@ -7,7 +7,7 @@ import Stepper, { Step } from "@/app/ui/Stepper";
 import { ContatoFields, EnderecoFields } from "@/app/ui/PessoaFields";
 import { TIPOS_CONTRIBUINTE } from "@/lib/mock-data";
 import type { Cliente } from "@/lib/types";
-import { criarCliente, type ClienteInput } from "./actions";
+import { criarCliente, atualizarCliente, type ClienteInput } from "./actions";
 
 const vazio: ClienteInput = {
   tipoContribuinte: "1",
@@ -18,21 +18,35 @@ const vazio: ClienteInput = {
   endereco: { cep: "", logradouro: "", numero: "", complemento: "", bairro: "", municipio: "", uf: "GO" },
 };
 
-// Modal de cadastro de cliente em etapas (stepper). Reutilizado na página e nos pickers.
+// Modal de cliente em etapas (stepper). Cria (sem clienteInicial) ou edita (com).
+// Reutilizado na página, nos pickers e no fluxo de correção da emissão.
 export default function NovoClienteModal({
   onFechar,
   onCriado,
+  clienteInicial,
 }: {
   onFechar: () => void;
   onCriado: (c: Cliente) => void;
+  clienteInicial?: Cliente;
 }) {
-  const [form, setForm] = useState<ClienteInput>(vazio);
+  const editando = !!clienteInicial;
+  const [form, setForm] = useState<ClienteInput>(() => {
+    if (!clienteInicial) return vazio;
+    const { id: _id, codigoInterno: _ci, ...resto } = clienteInicial;
+    void _id; void _ci;
+    return resto as ClienteInput;
+  });
   const [erro, setErro] = useState<string | null>(null);
 
   async function salvar() {
     setErro(null);
     try {
-      onCriado(await criarCliente(form));
+      if (clienteInicial) {
+        await atualizarCliente(clienteInicial.id, form);
+        onCriado({ ...clienteInicial, ...form });
+      } else {
+        onCriado(await criarCliente(form));
+      }
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
     }
@@ -41,7 +55,7 @@ export default function NovoClienteModal({
   return (
     <StepperModal onFechar={onFechar} largura="max-w-2xl">
       <Stepper
-        completeButtonText="Cadastrar cliente"
+        completeButtonText={editando ? "Salvar cliente" : "Cadastrar cliente"}
         onFinalStepCompleted={salvar}
         canProceed={(s) => (s === 1 ? form.nome.trim() !== "" && form.documento.trim() !== "" : true)}
       >

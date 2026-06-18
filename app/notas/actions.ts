@@ -63,7 +63,7 @@ export type EmitirResultado =
       numero: number;
       avisoPersistencia?: string;
     }
-  | { ok: false; erro: string };
+  | { ok: false; erro: string; codigo?: string; clienteId?: string };
 
 // Emite a NF-e da empresa ativa. Resolve emitente, cliente e produtos do banco —
 // o cliente só envia ids + o certificado (que vive apenas na sessão do navegador).
@@ -90,6 +90,8 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     if (faltando.length) {
       return {
         ok: false,
+        codigo: "endereco_dest",
+        clienteId: cliente.id,
         erro: `Complete o endereço do cliente "${cliente.nome}" antes de emitir (faltando: ${faltando.join(", ")}). A NF-e modelo 55 exige o endereço do destinatário.`,
       };
     }
