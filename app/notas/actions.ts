@@ -6,10 +6,6 @@ import {
   cancelarNFe,
   consultarStatus,
 } from "@/lib/nfe";
-import { montarNFe } from "@/lib/nfe/xml";
-import { assinar } from "@/lib/nfe/sign";
-import { dataHoraBrasilia } from "@/lib/nfe/chave";
-import { soap } from "@/lib/nfe/soap";
 import type { DadosNFe, EnderecoNFe } from "@/lib/nfe/types";
 import { resolverCodMunicipio } from "@/lib/nfe/ibge";
 import { prisma } from "@/lib/prisma";
@@ -421,96 +417,5 @@ export async function cancelarNota(input: CancelarInput): Promise<CancelarResult
     const msg = e instanceof Error ? e.message : String(e);
     if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
     return { ok: false, erro: msg };
-  }
-}
-
-// ----------------------------------------------------------------------------
-// DIAGNÓSTICO: monta e assina o XML (NF-e + enviNFe) SEM enviar à SEFAZ.
-// Usado para validar o lote contra o schema localmente. Temporário.
-// ----------------------------------------------------------------------------
-export async function previewXmlNota(input: EmitirInput): Promise<{ ok: true; xml: string } | { ok: false; erro: string }> {
-  try {
-    const empresaId = await exigirEmpresa();
-    const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
-    const cUF = UF_IBGE[empresa.uf];
-    if (!cUF) return { ok: false, erro: `UF inválida: ${empresa.uf}` };
-    const cliente = await prisma.cliente.findFirst({ where: { id: input.clienteId, empresaId } });
-    if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
-    const produtos = await prisma.produto.findMany({ where: { empresaId, id: { in: input.itens.map((i) => i.produtoId) } } });
-    const porId = new Map(produtos.map((p) => [p.id, p]));
-    const tpAmb = empresa.ambiente === "PRODUCAO" ? "1" : "2";
-
-    const itensNFe = input.itens.map((i) => {
-      const p = porId.get(i.produtoId)!;
-      return {
-        cProd: String(p.codigoInterno), cEAN: p.codigoBarras || "SEM GTIN", xProd: p.nome,
-        ncm: p.ncm, cfop: p.cfopPadrao || "5102", uCom: p.unidade, qCom: i.quantidade,
-        vUnCom: Number(p.preco), orig: p.origem, cest: p.cest || undefined,
-      };
-    });
-
-    const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
-    const cert = carregarCertificado(pfxBase64, senha);
-    const cMunEmit = await resolverCodMunicipio(empresa.codMunicipio?.trim() || empresa.municipio, empresa.uf);
-    const destUf = cliente.uf ?? empresa.uf;
-    const cMunDest = await resolverCodMunicipio(cliente.municipio ?? empresa.municipio, destUf);
-
-    const dados: DadosNFe = {
-      tpAmb, cUF, serie: String(empresa.serie), nNF: String(empresa.proximoNumero),
-      natOp: "VENDA DE MERCADORIA", modFrete: input.modFrete || "9", infCpl: input.infCpl,
-      emit: { cnpj: empresa.cnpj, xNome: empresa.razaoSocial, xFant: empresa.nomeFantasia || undefined, ie: empresa.ie, crt: empresa.crt, ender: { ...endEmpresa(empresa), cMun: cMunEmit } },
-      dest: {
-        doc: cliente.documento, xNome: tpAmb === "2" ? HOMOLOG_XNOME : cliente.nome,
-        ie: cliente.inscricaoEstadual ?? undefined, indIEDest: cliente.tipoContribuinte || "9",
-        ender: { xLgr: cliente.logradouro ?? "", nro: cliente.numero ?? "", xCpl: cliente.complemento || undefined, xBairro: cliente.bairro ?? "", municipio: cliente.municipio ?? empresa.municipio, uf: destUf, cMun: cMunDest, cep: cliente.cep ?? "" },
-      },
-      itens: itensNFe,
-    };
-
-    const cNFdbg = String(Math.floor(Math.random() * 9e7) + 1e7);
-    const { xml, chave } = montarNFe(dados, dataHoraBrasilia(), cNFdbg);
-    const assinada = assinar(xml, `NFe${chave}`, cert, "infNFe");
-    const enviNFe = `<enviNFe versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe"><idLote>1</idLote><indSinc>1</indSinc>${assinada}</enviNFe>`;
-    return { ok: true, xml: enviNFe };
-  } catch (e) {
-    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
-  }
-}
-
-// DEBUG: envia o lote à SEFAZ e devolve a RESPOSTA BRUTA (sem parsear). Temporário.
-export async function enviarXmlDebug(input: EmitirInput): Promise<{ ok: true; resposta: string } | { ok: false; erro: string }> {
-  try {
-    const empresaId = await exigirEmpresa();
-    const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
-    const cUF = UF_IBGE[empresa.uf];
-    if (!cUF) return { ok: false, erro: `UF inválida: ${empresa.uf}` };
-    const cliente = await prisma.cliente.findFirst({ where: { id: input.clienteId, empresaId } });
-    if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
-    const produtos = await prisma.produto.findMany({ where: { empresaId, id: { in: input.itens.map((i) => i.produtoId) } } });
-    const porId = new Map(produtos.map((p) => [p.id, p]));
-    const tpAmb = empresa.ambiente === "PRODUCAO" ? "1" : "2";
-    const itensNFe = input.itens.map((i) => {
-      const p = porId.get(i.produtoId)!;
-      return { cProd: String(p.codigoInterno), cEAN: p.codigoBarras || "SEM GTIN", xProd: p.nome, ncm: p.ncm, cfop: p.cfopPadrao || "5102", uCom: p.unidade, qCom: i.quantidade, vUnCom: Number(p.preco), orig: p.origem, cest: p.cest || undefined };
-    });
-    const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
-    const cert = carregarCertificado(pfxBase64, senha);
-    const cMunEmit = await resolverCodMunicipio(empresa.codMunicipio?.trim() || empresa.municipio, empresa.uf);
-    const destUf = cliente.uf ?? empresa.uf;
-    const cMunDest = await resolverCodMunicipio(cliente.municipio ?? empresa.municipio, destUf);
-    const dados: DadosNFe = {
-      tpAmb, cUF, serie: String(empresa.serie), nNF: String(empresa.proximoNumero), natOp: "VENDA DE MERCADORIA", modFrete: input.modFrete || "9",
-      emit: { cnpj: empresa.cnpj, xNome: empresa.razaoSocial, xFant: empresa.nomeFantasia || undefined, ie: empresa.ie, crt: empresa.crt, ender: { ...endEmpresa(empresa), cMun: cMunEmit } },
-      dest: { doc: cliente.documento, xNome: tpAmb === "2" ? HOMOLOG_XNOME : cliente.nome, ie: cliente.inscricaoEstadual ?? undefined, indIEDest: cliente.tipoContribuinte || "9", ender: { xLgr: cliente.logradouro ?? "", nro: cliente.numero ?? "", xCpl: cliente.complemento || undefined, xBairro: cliente.bairro ?? "", municipio: cliente.municipio ?? empresa.municipio, uf: destUf, cMun: cMunDest, cep: cliente.cep ?? "" } },
-      itens: itensNFe,
-    };
-    const cNFdbg = String(Math.floor(Math.random() * 9e7) + 1e7);
-    const { xml, chave } = montarNFe(dados, dataHoraBrasilia(), cNFdbg);
-    const assinada = assinar(xml, `NFe${chave}`, cert, "infNFe");
-    const enviNFe = `<enviNFe versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe"><idLote>1</idLote><indSinc>1</indSinc>${assinada}</enviNFe>`;
-    const r = await soap(tpAmb, "autoriza", enviNFe, cert);
-    return { ok: true, resposta: `HTTP ${r.status}\n\n${r.body}` };
-  } catch (e) {
-    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
   }
 }
