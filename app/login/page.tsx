@@ -32,7 +32,7 @@ export default function LoginPage() {
               width={863}
               height={309}
               priority
-              className="h-16 w-auto"
+              className="h-24 w-auto"
             />
           </div>
 
