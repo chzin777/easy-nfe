@@ -25,9 +25,9 @@ export default function LoginPage() {
       {/* Lado esquerdo — formulário */}
       <div className="flex items-center justify-center bg-white px-6 py-12">
         <div className="w-full max-w-sm">
-          <div className="mb-10 flex items-center gap-2.5">
-            <span className="relative h-9 w-9 shrink-0">
-              <Image src="/images/logo/Easy%20NFe%20-%20logo%20completa.png" alt="easy-nfe" fill className="object-contain" />
+          <div className="mb-10 flex items-center">
+            <span className="relative block h-12 w-48 shrink-0">
+              <Image src="/images/logo/Easy%20NFe%20-%20logo%20completa.png" alt="easy-nfe" fill className="object-contain object-left" priority />
             </span>
           </div>
 
