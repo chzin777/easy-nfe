@@ -1,7 +1,6 @@
 "use server";
 
-import forge from "node-forge";
-import { carregarCertificado, consultarStatus } from "@/lib/nfe";
+import { carregarCertificado } from "@/lib/nfe";
 import {
   consultarDFe,
   manifestarDestinatario,
@@ -292,84 +291,6 @@ export async function manifestar(input: ManifestarInput): Promise<ManifestarResu
   }
 }
 
-export type DiagnosticoCert = {
-  ok: boolean;
-  erro?: string;
-  ambiente?: string;
-  cnpjEmpresa?: string;
-  expirado?: boolean;
-  validoAte?: string | null;
-  numCerts?: number;
-  cadeia?: { cn: string; ca: boolean }[];
-  temIntermediario?: boolean;
-};
-
-// Diagnostica o certificado da empresa ativa — identifica as 2 causas do HTTP 403
-// na SEFAZ: certificado expirado, ou cadeia ICP-Brasil incompleta no PFX.
-export async function diagnosticarCertificado(): Promise<DiagnosticoCert> {
-  try {
-    const empresaId = await exigirEmpresa();
-    const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
-    const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
-
-    const p12 = forge.pkcs12.pkcs12FromAsn1(
-      forge.asn1.fromDer(forge.util.decode64(pfxBase64)),
-      senha,
-    );
-    const certs = (p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] ?? [])
-      .map((b) => b.cert)
-      .filter((c): c is forge.pki.Certificate => !!c);
-
-    const cadeia = certs.map((c) => {
-      const cn = (c.subject.getField("CN")?.value as string) ?? "(sem CN)";
-      const bc = c.getExtension("basicConstraints") as { cA?: boolean } | undefined;
-      return { cn, ca: bc?.cA === true };
-    });
-
-    // Folha = não-CA; expiração olha a folha.
-    const folha = certs.find((c) => {
-      const bc = c.getExtension("basicConstraints") as { cA?: boolean } | undefined;
-      return bc?.cA !== true;
-    }) ?? certs[0];
-    const validoAte = folha?.validity.notAfter ?? null;
-    const expirado = validoAte ? validoAte.getTime() < Date.now() : false;
-    const temIntermediario = cadeia.some((c) => c.ca);
-
-    return {
-      ok: true,
-      ambiente: empresa.ambiente,
-      cnpjEmpresa: empresa.cnpj,
-      expirado,
-      validoAte: validoAte?.toISOString() ?? null,
-      numCerts: certs.length,
-      cadeia,
-      temIntermediario,
-    };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
-    return { ok: false, erro: msg };
-  }
-}
-
-// Teste de conexão mTLS: chama o Status do Serviço da SEFAZ-GO (mesmo caminho da
-// emissão). Isola se o problema é o mTLS em si (Vercel) ou só o Ambiente Nacional.
-export async function testarConexaoSefaz(): Promise<{ ok: boolean; cStat: string | null; xMotivo: string | null; erro?: string }> {
-  try {
-    const empresaId = await exigirEmpresa();
-    const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
-    const cUF = UF_IBGE[empresa.uf];
-    if (!cUF) return { ok: false, cStat: null, xMotivo: null, erro: `UF inválida: ${empresa.uf}` };
-    const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
-    const cert = carregarCertificado(pfxBase64, senha);
-    const r = await consultarStatus(cert, empresa.ambiente === "PRODUCAO" ? "1" : "2", cUF);
-    return { ok: r.ok, cStat: r.cStat, xMotivo: r.xMotivo };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, cStat: null, xMotivo: null, erro: msg };
-  }
-}
-
 // XML bruto de um documento recebido (para download).
 export async function baixarXmlRecebida(notaId: string): Promise<{ ok: boolean; xml?: string; nome?: string; erro?: string }> {
   try {
@@ -380,71 +301,5 @@ export async function baixarXmlRecebida(notaId: string): Promise<{ ok: boolean; 
     return { ok: true, xml: nota.xml, nome };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
-  }
-}
-
-// DEBUG: faz a requisição crua ao Ambiente Nacional (DistribuicaoDFe) e devolve
-// status + TODOS os headers + corpo, para diagnosticar o HTTP 403. Temporário.
-export async function debugDFe(): Promise<{ ok: boolean; texto: string }> {
-  const https = await import("node:https");
-  const { constants } = await import("node:crypto");
-  try {
-    const empresaId = await exigirEmpresa();
-    const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
-    const cUF = UF_IBGE[empresa.uf] ?? "52";
-    const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
-    const cert = carregarCertificado(pfxBase64, senha);
-    const tpAmb = empresa.ambiente === "PRODUCAO" ? "1" : "2";
-    const url = tpAmb === "1"
-      ? "https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx"
-      : "https://hom1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx";
-    const cnpj = empresa.cnpj.replace(/\D/g, "");
-    const inner =
-      `<distDFeInt versao="1.01" xmlns="http://www.portalfiscal.inf.br/nfe">` +
-      `<tpAmb>${tpAmb}</tpAmb><cUFAutor>${cUF}</cUFAutor><CNPJ>${cnpj}</CNPJ>` +
-      `<distNSU><ultNSU>000000000000000</ultNSU></distNSU></distDFeInt>`;
-    const envelope =
-      `<?xml version="1.0" encoding="utf-8"?>` +
-      `<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">` +
-      `<soap:Body><nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe"><nfeDadosMsg>${inner}</nfeDadosMsg></nfeDistDFeInteresse></soap:Body>` +
-      `</soap:Envelope>`;
-    const u = new URL(url);
-    type Res = { status: number; proto: string | null; cipher: string; body: string };
-    function tentar(comCert: boolean): Promise<Res> {
-      return new Promise((resolve) => {
-        const base: Record<string, unknown> = {
-          hostname: u.hostname, port: 443, path: u.pathname, method: "POST",
-          rejectUnauthorized: false, servername: u.hostname,
-          minVersion: "TLSv1.2", maxVersion: "TLSv1.2",
-          secureOptions: constants.SSL_OP_LEGACY_SERVER_CONNECT,
-          headers: { "Content-Type": "application/soap+xml; charset=utf-8", "Content-Length": Buffer.byteLength(envelope), "User-Agent": "easy-nfe/1.0" },
-        };
-        if (comCert) { base.key = cert.keyPem; base.cert = cert.chainPem; }
-        const req = https.request(base, (res) => {
-          let d = ""; res.on("data", (c) => (d += c));
-          const sock = res.socket as unknown as { getProtocol?: () => string | null; getCipher?: () => { name: string } };
-          res.on("end", () => resolve({
-            status: res.statusCode ?? 0,
-            proto: sock.getProtocol?.() ?? null,
-            cipher: sock.getCipher?.().name ?? "?",
-            body: d.slice(0, 300),
-          }));
-        });
-        req.on("error", (e) => resolve({ status: -1, proto: null, cipher: String((e as Error).message), body: "" }));
-        req.write(envelope); req.end();
-      });
-    }
-    const comCert = await tentar(true);
-    const semCert = await tentar(false);
-    return {
-      ok: true,
-      texto:
-        `URL: ${url}\nCNPJ: ${cnpj} | tpAmb: ${tpAmb}\n` +
-        `certPem certs: ${(cert.certPem.match(/BEGIN CERT/g) || []).length} | chainPem certs: ${(cert.chainPem.match(/BEGIN CERT/g) || []).length}\n\n` +
-        `[COM cert] HTTP ${comCert.status} | ${comCert.proto} ${comCert.cipher}\n${comCert.body}\n\n` +
-        `[SEM cert] HTTP ${semCert.status} | ${semCert.proto} ${semCert.cipher}\n${semCert.body}`,
-    };
-  } catch (e) {
-    return { ok: false, texto: e instanceof Error ? `${e.name}: ${e.message}` : String(e) };
   }
 }
