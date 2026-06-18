@@ -24,6 +24,7 @@ import {
   baixarXmlRecebida,
   diagnosticarCertificado,
   testarConexaoSefaz,
+  debugDFe,
   type RecebidaUI,
   type ResumoSinc,
 } from "./actions";
@@ -140,6 +141,17 @@ export default function NotasRecebidasPage() {
         ? "✓ mTLS OK! O certificado é aceito. Logo o 403 do DFe é específico do Ambiente Nacional."
         : "⚠ Resposta inesperada — veja cStat/xMotivo acima.",
     ]);
+  }
+
+  async function rodarDebugDFe() {
+    setDiag(["Consultando Ambiente Nacional (cru)…"]);
+    const r = await debugDFe();
+    const blob = new Blob([r.texto], { type: "text/plain;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "debug-dfe.txt"; a.click();
+    URL.revokeObjectURL(url);
+    setDiag(r.texto.split("\n").slice(0, 6));
   }
 
   function abrirManifesto(d: RecebidaUI) {
@@ -270,6 +282,9 @@ export default function NotasRecebidasPage() {
             </Button>
             <Button variante="secondary" onClick={testarConexao}>
               Testar conexão
+            </Button>
+            <Button variante="secondary" onClick={rodarDebugDFe}>
+              DFe (debug)
             </Button>
             <Button onClick={sincronizar} disabled={sincronizando}>
               {sincronizando ? "Sincronizando…" : "Sincronizar com SEFAZ"}

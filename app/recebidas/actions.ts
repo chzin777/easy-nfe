@@ -382,3 +382,42 @@ export async function baixarXmlRecebida(notaId: string): Promise<{ ok: boolean; 
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
   }
 }
+
+// DEBUG: faz a requisição crua ao Ambiente Nacional (DistribuicaoDFe) e devolve
+// status + TODOS os headers + corpo, para diagnosticar o HTTP 403. Temporário.
+export async function debugDFe(): Promise<{ ok: boolean; texto: string }> {
+  const https = await import("node:https");
+  try {
+    const empresaId = await exigirEmpresa();
+    const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
+    const cUF = UF_IBGE[empresa.uf] ?? "52";
+    const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
+    const cert = carregarCertificado(pfxBase64, senha);
+    const tpAmb = empresa.ambiente === "PRODUCAO" ? "1" : "2";
+    const url = tpAmb === "1"
+      ? "https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx"
+      : "https://hom1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx";
+    const cnpj = empresa.cnpj.replace(/\D/g, "");
+    const inner =
+      `<distDFeInt versao="1.01" xmlns="http://www.portalfiscal.inf.br/nfe">` +
+      `<tpAmb>${tpAmb}</tpAmb><cUFAutor>${cUF}</cUFAutor><CNPJ>${cnpj}</CNPJ>` +
+      `<distNSU><ultNSU>000000000000000</ultNSU></distNSU></distDFeInt>`;
+    const envelope =
+      `<?xml version="1.0" encoding="utf-8"?>` +
+      `<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">` +
+      `<soap:Body><nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe"><nfeDadosMsg>${inner}</nfeDadosMsg></nfeDistDFeInteresse></soap:Body>` +
+      `</soap:Envelope>`;
+    const u = new URL(url);
+    const resultado: { status: number; headers: string; body: string } = await new Promise((resolve, reject) => {
+      const req = https.request(
+        { hostname: u.hostname, port: 443, path: u.pathname, method: "POST", key: cert.keyPem, cert: cert.certPem, rejectUnauthorized: false, servername: u.hostname, minVersion: "TLSv1.2", maxVersion: "TLSv1.2", headers: { "Content-Type": "application/soap+xml; charset=utf-8", "Content-Length": Buffer.byteLength(envelope), "User-Agent": "easy-nfe/1.0" } },
+        (res) => { let d = ""; res.on("data", (c) => (d += c)); res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: JSON.stringify(res.headers, null, 2), body: d })); },
+      );
+      req.on("error", reject);
+      req.write(envelope); req.end();
+    });
+    return { ok: true, texto: `URL: ${url}\nHTTP ${resultado.status}\n\nHEADERS:\n${resultado.headers}\n\nBODY:\n${resultado.body}` };
+  } catch (e) {
+    return { ok: false, texto: e instanceof Error ? `${e.name}: ${e.message}` : String(e) };
+  }
+}
