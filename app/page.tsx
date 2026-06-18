@@ -395,9 +395,13 @@ export default async function Landing() {
       <footer className="bg-slate-950 py-10 text-slate-400">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 sm:flex-row">
           <div className="flex items-center text-white">
-            <span className="relative block h-9 w-40 shrink-0">
-              <Image src="/images/logo/Easy%20NFe%20-%20logo%20completa.png" alt="easy-nfe" fill className="object-contain object-left" />
-            </span>
+            <Image
+              src="/images/logo/Easy%20NFe%20-%20logo%20completa.png"
+              alt="easy-nfe"
+              width={260}
+              height={84}
+              className="h-14 w-auto"
+            />
           </div>
           <p className="text-xs">© {2026} easy-nfe · Emissão de NF-e. Todos os direitos reservados.</p>
         </div>

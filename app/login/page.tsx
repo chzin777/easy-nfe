@@ -26,9 +26,14 @@ export default function LoginPage() {
       <div className="flex items-center justify-center bg-white px-6 py-12">
         <div className="w-full max-w-sm">
           <div className="mb-10 flex items-center">
-            <span className="relative block h-12 w-48 shrink-0">
-              <Image src="/images/logo/Easy%20NFe%20-%20logo%20completa.png" alt="easy-nfe" fill className="object-contain object-left" priority />
-            </span>
+            <Image
+              src="/images/logo/Easy%20NFe%20-%20logo%20completa.png"
+              alt="easy-nfe"
+              width={320}
+              height={110}
+              priority
+              className="h-20 w-auto"
+            />
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Bem-vindo de volta</h1>
