@@ -6,7 +6,15 @@ import { PrismaPg } from "@prisma/adapter-pg";
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function criar(): PrismaClient {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+  // Em serverless (Vercel) cada instância abre seu próprio pool; o pooler do Supabase
+  // em session mode limita a 15 clientes. Mantém poucas conexões por instância e
+  // libera ociosas rápido para não estourar (EMAXCONNSESSION).
+  const adapter = new PrismaPg({
+    connectionString: process.env.DATABASE_URL,
+    max: 3,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000,
+  });
   return new PrismaClient({ adapter });
 }
 
