@@ -32,16 +32,14 @@ export function carregarCertificado(
     throw new Error("Certificado A1 inválido: chave ou certificado ausente.");
   }
 
-  // Folha = certificado do titular (não-CA); o resto é a cadeia intermediária.
-  // O Ambiente Nacional (Serpro/IIS) exige a cadeia completa, senão devolve HTTP 403.
+  // Usa SOMENTE a folha (certificado do titular). A assinatura da NF-e deve conter
+  // apenas o certificado do signatário — incluir a cadeia gera múltiplos
+  // <X509Certificate> e rejeição de schema (225). No mTLS a folha basta: o
+  // servidor da SEFAZ monta a cadeia a partir do seu próprio repositório de CAs.
   const folha = certBags.find((c) => !ehCA(c)) ?? certBags[0];
-  const intermediarios = certBags.filter((c) => c !== folha);
-  const certPem =
-    forge.pki.certificateToPem(folha) +
-    intermediarios.map((c) => forge.pki.certificateToPem(c)).join("");
 
   return {
-    certPem,
+    certPem: forge.pki.certificateToPem(folha),
     keyPem: forge.pki.privateKeyToPem(keyBag.key),
   };
 }
