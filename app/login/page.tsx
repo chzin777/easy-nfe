@@ -27,9 +27,8 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           <div className="mb-10 flex items-center gap-2.5">
             <span className="relative h-9 w-9 shrink-0">
-              <Image src="/logo-nobg.png" alt="easy-nfe" fill className="object-contain" />
+              <Image src="/images/logo/Easy%20NFe%20-%20logo%20completa.png" alt="easy-nfe" fill className="object-contain" />
             </span>
-            <span className="text-lg font-bold tracking-tight">easy-nfe</span>
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Bem-vindo de volta</h1>

@@ -35,6 +35,8 @@ scripts/test-*.mjs
 /public/images/*
 # exceto assets versionados da landing (prints de avaliações)
 !/public/images/prints
+# exceto a logo da marca (usada na sidebar/landing/login)
+!/public/images/logo
 
 # memória interna de ferramentas
 /memory

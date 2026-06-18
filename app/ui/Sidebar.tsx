@@ -91,7 +91,7 @@ export default function Sidebar() {
           transition={{ type: "spring", stiffness: 300, damping: 18 }}
           className="relative h-10 w-10 shrink-0"
         >
-          <Image src="/logo-nobg.png" alt="easy-nfe" fill className="object-contain" />
+          <Image src="/images/logo/logo.png" alt="easy-nfe" fill className="object-contain" />
         </motion.div>
         <div className="leading-tight">
           <p className="text-sm font-semibold text-white">easy-nfe</p>

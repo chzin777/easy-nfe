@@ -97,7 +97,7 @@ export default async function Landing() {
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2.5 text-white">
             <span className="relative h-8 w-8 shrink-0">
-              <Image src="/logo-nobg.png" alt="easy-nfe" fill className="object-contain" />
+              <Image src="/images/logo/logo.png" alt="easy-nfe" fill className="object-contain" />
             </span>
             <span className="text-base font-bold tracking-tight">Easy NFe</span>
           </div>
@@ -396,9 +396,8 @@ export default async function Landing() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 sm:flex-row">
           <div className="flex items-center gap-2 text-white">
             <span className="relative h-7 w-7 shrink-0">
-              <Image src="/logo-nobg.png" alt="easy-nfe" fill className="object-contain" />
+              <Image src="/images/logo/Easy%20NFe%20-%20logo%20completa.png" alt="easy-nfe" fill className="object-contain" />
             </span>
-            <span className="font-bold">easy-nfe</span>
           </div>
           <p className="text-xs">© {2026} easy-nfe · Emissão de NF-e. Todos os direitos reservados.</p>
         </div>
