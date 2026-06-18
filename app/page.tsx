@@ -49,15 +49,25 @@ const FAQ = [
   { p: "Como começo?", r: "Crie sua conta, configure a empresa e o certificado e já pode emitir em homologação. Tem 7 dias grátis." },
 ];
 
+// Planos p/ a landing. DB indisponivel (cold start/pooler) nao derruba a pagina.
+async function carregarPlanos() {
+  try {
+    return await prisma.plano.findMany({
+      where: { ativo: true },
+      orderBy: { ordem: "asc" },
+      include: { beneficios: { orderBy: { ordem: "asc" }, select: { chave: true, nome: true } } },
+    });
+  } catch (e) {
+    console.error("landing: falha ao carregar planos", e);
+    return [];
+  }
+}
+
 export default async function Landing() {
   // Logado vai direto pro painel.
   if (await lerSessao()) redirect("/painel");
 
-  const planos = await prisma.plano.findMany({
-    where: { ativo: true },
-    orderBy: { ordem: "asc" },
-    include: { beneficios: { orderBy: { ordem: "asc" }, select: { chave: true, nome: true } } },
-  });
+  const planos = await carregarPlanos();
   const planoAnterior = (ordem: number) =>
     planos.filter((x) => x.ordem < ordem).sort((a, b) => b.ordem - a.ordem)[0];
   const nomePlanoAnterior = (ordem: number) => planoAnterior(ordem)?.nome;
