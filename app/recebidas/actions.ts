@@ -410,7 +410,7 @@ export async function debugDFe(): Promise<{ ok: boolean; texto: string }> {
     const u = new URL(url);
     const resultado: { status: number; headers: string; body: string } = await new Promise((resolve, reject) => {
       const req = https.request(
-        { hostname: u.hostname, port: 443, path: u.pathname, method: "POST", key: cert.keyPem, cert: cert.certPem, rejectUnauthorized: false, servername: u.hostname, minVersion: "TLSv1.2", maxVersion: "TLSv1.2", headers: { "Content-Type": "application/soap+xml; charset=utf-8", "Content-Length": Buffer.byteLength(envelope), "User-Agent": "easy-nfe/1.0" } },
+        { hostname: u.hostname, port: 443, path: u.pathname, method: "POST", key: cert.keyPem, cert: cert.chainPem, rejectUnauthorized: false, servername: u.hostname, minVersion: "TLSv1.2", maxVersion: "TLSv1.2", headers: { "Content-Type": "application/soap+xml; charset=utf-8", "Content-Length": Buffer.byteLength(envelope), "User-Agent": "easy-nfe/1.0" } },
         (res) => { let d = ""; res.on("data", (c) => (d += c)); res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: JSON.stringify(res.headers, null, 2), body: d })); },
       );
       req.on("error", reject);

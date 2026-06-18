@@ -2,7 +2,8 @@ import forge from "node-forge";
 
 export type Certificado = {
   keyPem: string;
-  certPem: string;
+  certPem: string;  // SOMENTE a folha — usado na assinatura XML (1 X509Certificate)
+  chainPem: string; // folha + cadeia intermediária — usado no handshake mTLS
 };
 
 // Extrai chave privada + certificado de um A1 (.pfx/.p12) em base64.
@@ -32,14 +33,17 @@ export function carregarCertificado(
     throw new Error("Certificado A1 inválido: chave ou certificado ausente.");
   }
 
-  // Usa SOMENTE a folha (certificado do titular). A assinatura da NF-e deve conter
-  // apenas o certificado do signatário — incluir a cadeia gera múltiplos
-  // <X509Certificate> e rejeição de schema (225). No mTLS a folha basta: o
-  // servidor da SEFAZ monta a cadeia a partir do seu próprio repositório de CAs.
+  // Folha = certificado do titular (não-CA). A ASSINATURA usa só a folha (incluir a
+  // cadeia gera múltiplos <X509Certificate> = rejeição 225). Já o mTLS precisa enviar
+  // a CADEIA completa: o Ambiente Nacional (Serpro) recusa (HTTP 403) quando recebe
+  // só a folha. Por isso devolvemos os dois.
   const folha = certBags.find((c) => !ehCA(c)) ?? certBags[0];
+  const intermediarios = certBags.filter((c) => c !== folha);
+  const folhaPem = forge.pki.certificateToPem(folha);
 
   return {
-    certPem: forge.pki.certificateToPem(folha),
+    certPem: folhaPem,
+    chainPem: folhaPem + intermediarios.map((c) => forge.pki.certificateToPem(c)).join(""),
     keyPem: forge.pki.privateKeyToPem(keyBag.key),
   };
 }

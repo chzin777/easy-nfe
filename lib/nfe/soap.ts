@@ -52,7 +52,7 @@ export function soap(
         path: u.pathname,
         method: "POST",
         key: cert.keyPem,
-        cert: cert.certPem,
+        cert: cert.chainPem, // envia folha + cadeia no handshake mTLS
         rejectUnauthorized: false, // cadeias da SEFAZ homologação são problemáticas
         headers: {
           "Content-Type": "application/soap+xml; charset=utf-8",
