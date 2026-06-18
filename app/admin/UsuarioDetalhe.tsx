@@ -13,6 +13,7 @@ import {
   listarEmpresasAdmin, type EmpresaAdmin,
   criarEmpresaParaUsuario, vincularUsuarioEmpresa, desvincularUsuarioEmpresa,
   gerarFaturas, marcarFaturaPaga, marcarFaturaPendente, excluirFatura,
+  gerarBoletoAssinatura,
 } from "./actions";
 
 const ROLES = [
@@ -310,6 +311,26 @@ function Faturas({ d, onMudou, flash }: Sub) {
   const [data, setData] = useState(hojeISO);
   const [metodo, setMetodo] = useState("pix");
   const [erro, setErro] = useState<string | null>(null);
+  const [boletoFor, setBoletoFor] = useState<string | null>(null);
+  const [cpf, setCpf] = useState(d.cpfCnpj ?? "");
+  const [gerandoBoleto, setGerandoBoleto] = useState(false);
+
+  async function gerarBoleto(f: Detalhe["faturas"][number]) {
+    setErro(null);
+    setGerandoBoleto(true);
+    const r = await gerarBoletoAssinatura({
+      userId: d.id, cpfCnpj: cpf, competencia: f.competencia,
+      valor: f.valor, vencimento: f.vencimento.slice(0, 10),
+    });
+    setGerandoBoleto(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    setBoletoFor(null);
+    flash("Boleto gerado no Asaas.");
+    onMudou();
+  }
+  function copiar(txt: string) {
+    navigator.clipboard?.writeText(txt).then(() => flash("Linha digitável copiada."));
+  }
 
   function abrirPagamento(id: string) {
     setPagandoId(pagandoId === id ? null : id);
@@ -389,6 +410,36 @@ function Faturas({ d, onMudou, flash }: Sub) {
                     <Field label="Método" className="flex-1"><Select opcoes={METODOS} value={metodo} onChange={(e) => setMetodo(e.target.value)} /></Field>
                     <Button variante="secondary" onClick={() => setPagandoId(null)}>Cancelar</Button>
                     <Button onClick={() => confirmarPaga(f.id)}>Confirmar</Button>
+                  </div>
+                )}
+
+                {/* Boleto Asaas */}
+                {f.status !== "PAGA" && f.status !== "CANCELADA" && (
+                  <div className="mt-2">
+                    {f.bankSlipUrl ? (
+                      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-slate-50 p-2.5 text-xs">
+                        <a href={f.bankSlipUrl} target="_blank" rel="noreferrer" className="font-medium text-[var(--primary)] hover:underline">Abrir boleto (PDF)</a>
+                        {f.linhaDigitavel && (
+                          <>
+                            <span className="font-mono text-[var(--muted)]">{f.linhaDigitavel}</span>
+                            <button onClick={() => copiar(f.linhaDigitavel!)} className="rounded border border-[var(--border)] px-2 py-1 font-medium hover:bg-white">Copiar</button>
+                          </>
+                        )}
+                        <button onClick={() => setBoletoFor(boletoFor === f.id ? null : f.id)} className="ml-auto text-[var(--muted)] hover:underline">regerar</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setBoletoFor(boletoFor === f.id ? null : f.id)} className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50">
+                        Gerar boleto (Asaas)
+                      </button>
+                    )}
+
+                    {boletoFor === f.id && (
+                      <div className="mt-2 flex items-end gap-2 rounded-lg border border-[var(--border)] bg-white p-3">
+                        <Field label="CPF/CNPJ do assinante" className="flex-1" hint="Obrigatório p/ o boleto"><Input value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="só números" /></Field>
+                        <Button variante="secondary" onClick={() => setBoletoFor(null)}>Cancelar</Button>
+                        <Button onClick={() => gerarBoleto(f)} disabled={gerandoBoleto}>{gerandoBoleto ? "Gerando…" : "Gerar"}</Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </li>

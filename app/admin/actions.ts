@@ -49,10 +49,12 @@ export type UsuarioDetalhe = {
   nome: string;
   role: "USER" | "SUPORTE" | "ADMIN" | "CONTADOR";
   ativo: boolean;
+  cpfCnpj: string | null;
+  telefone: string | null;
   criadoEm: string;
   licenca: { planoId: string | null; plano: string | null; status: string; validadeEm: string | null } | null;
   empresas: { id: string; razaoSocial: string; cnpj: string; papel: string }[];
-  faturas: { id: string; planoNome: string; competencia: string; valor: number; vencimento: string; status: string; pagaEm: string | null; metodo: string | null }[];
+  faturas: { id: string; planoNome: string; competencia: string; valor: number; vencimento: string; status: string; pagaEm: string | null; metodo: string | null; bankSlipUrl: string | null; linhaDigitavel: string | null; invoiceUrl: string | null }[];
 };
 
 export async function detalheUsuario(userId: string): Promise<UsuarioDetalhe | null> {
@@ -72,6 +74,8 @@ export async function detalheUsuario(userId: string): Promise<UsuarioDetalhe | n
     nome: u.nome ?? "",
     role: u.role,
     ativo: u.ativo,
+    cpfCnpj: u.cpfCnpj,
+    telefone: u.telefone,
     criadoEm: u.createdAt.toISOString(),
     licenca: u.licenca
       ? {
@@ -96,6 +100,9 @@ export async function detalheUsuario(userId: string): Promise<UsuarioDetalhe | n
       status: f.status,
       pagaEm: f.pagaEm?.toISOString() ?? null,
       metodo: f.metodo,
+      bankSlipUrl: f.bankSlipUrl,
+      linhaDigitavel: f.linhaDigitavel,
+      invoiceUrl: f.invoiceUrl,
     })),
   };
 }
@@ -630,6 +637,88 @@ export async function excluirFatura(id: string): Promise<Resultado> {
     await exigirAdmin();
     await prisma.fatura.delete({ where: { id } });
     return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Cobrança da assinatura via boleto (Asaas) — conta única do easy-nfe.
+// ----------------------------------------------------------------------------
+export type BoletoResultado =
+  | { ok: true; bankSlipUrl: string | null; linhaDigitavel: string | null; invoiceUrl: string | null }
+  | { ok: false; erro: string };
+
+export async function gerarBoletoAssinatura(input: {
+  userId: string;
+  cpfCnpj: string;
+  telefone?: string;
+  competencia: string; // "2026-06"
+  valor: number;
+  vencimento: string; // "2026-06-10"
+}): Promise<BoletoResultado> {
+  try {
+    await exigirAdmin();
+    const { criarOuAtualizarCliente, criarCobrancaBoleto, obterLinhaDigitavel } = await import("@/lib/asaas");
+
+    const cpf = input.cpfCnpj.replace(/\D/g, "");
+    if (cpf.length !== 11 && cpf.length !== 14) {
+      return { ok: false, erro: "CPF/CNPJ do assinante inválido." };
+    }
+    if (!(input.valor > 0)) return { ok: false, erro: "Valor inválido." };
+
+    const user = await prisma.user.findUnique({
+      where: { id: input.userId },
+      include: { licenca: { include: { plano: true } } },
+    });
+    if (!user) return { ok: false, erro: "Usuário não encontrado." };
+
+    // Garante o cliente no Asaas (reaproveita o id salvo).
+    const cliente = await criarOuAtualizarCliente({
+      id: user.asaasCustomerId,
+      nome: user.nome || user.email,
+      cpfCnpj: cpf,
+      email: user.email,
+      telefone: input.telefone || user.telefone,
+      externalReference: user.id,
+    });
+
+    const planoNome = user.licenca?.plano?.nome ?? "Assinatura easy-nfe";
+    const cobranca = await criarCobrancaBoleto({
+      customer: cliente.id,
+      value: input.valor,
+      dueDate: input.vencimento,
+      description: `${planoNome} — competência ${input.competencia}`,
+      externalReference: `${user.id}:${input.competencia}`,
+    });
+
+    let linhaDigitavel: string | null = null;
+    try {
+      linhaDigitavel = (await obterLinhaDigitavel(cobranca.id)).identificationField;
+    } catch {
+      /* linha digitável pode demorar a ficar pronta — segue sem ela */
+    }
+
+    // Persiste dados do assinante + a fatura/boleto.
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { cpfCnpj: cpf, telefone: input.telefone || user.telefone, asaasCustomerId: cliente.id },
+    });
+
+    await prisma.fatura.upsert({
+      where: { userId_competencia: { userId: user.id, competencia: input.competencia } },
+      create: {
+        userId: user.id, planoNome, competencia: input.competencia, valor: input.valor,
+        vencimento: new Date(input.vencimento), status: "PENDENTE", metodo: "boleto",
+        asaasPaymentId: cobranca.id, bankSlipUrl: cobranca.bankSlipUrl, invoiceUrl: cobranca.invoiceUrl, linhaDigitavel,
+      },
+      update: {
+        valor: input.valor, vencimento: new Date(input.vencimento), metodo: "boleto",
+        asaasPaymentId: cobranca.id, bankSlipUrl: cobranca.bankSlipUrl, invoiceUrl: cobranca.invoiceUrl, linhaDigitavel,
+      },
+    });
+
+    return { ok: true, bankSlipUrl: cobranca.bankSlipUrl, linhaDigitavel, invoiceUrl: cobranca.invoiceUrl };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
   }

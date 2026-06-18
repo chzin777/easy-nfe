@@ -59,6 +59,11 @@ model User {
   role      Role     @default(USER)
   ativo     Boolean  @default(true)
 
+  // Cobrança da assinatura (Asaas)
+  cpfCnpj         String?
+  telefone        String?
+  asaasCustomerId String? // id do cliente no Asaas (reaproveitado entre faturas)
+
   empresas   Emitente[] // empresas criadas por este usuário (dono original)
   acessos    AcessoEmpresa[]
   licenca    Licenca?
@@ -152,6 +157,12 @@ model Fatura {
   status      StatusFatura @default(PENDENTE)
   pagaEm      DateTime?
   metodo      String? // pix | cartao | boleto | transferencia (ao marcar paga)
+
+  // Boleto Asaas
+  asaasPaymentId String?  @unique
+  bankSlipUrl    String? // PDF do boleto
+  invoiceUrl     String? // fatura/checkout Asaas
+  linhaDigitavel String? // identificationField (linha digitável)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
