@@ -1,4 +1,5 @@
 import https from "node:https";
+import { constants } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import type { Certificado } from "./cert";
 import { dataHoraBrasilia } from "./chave";
@@ -57,10 +58,12 @@ function soapAN(
     const req = https.request(
       {
         hostname: u.hostname, port: 443, path: u.pathname, method: "POST",
-        // Envia a cadeia completa (folha+intermediários): o Ambiente Nacional (Serpro)
-        // recusa com 403 quando recebe só a folha no handshake mTLS.
         key: cert.keyPem, cert: cert.chainPem, rejectUnauthorized: false,
         servername: u.hostname, minVersion: "TLSv1.2", maxVersion: "TLSv1.2",
+        // O IIS do Ambiente Nacional pede o client-cert via RENEGOCIAÇÃO (não no
+        // handshake inicial). Node 24/OpenSSL 3 bloqueia renegociação legada por
+        // padrão → cert não é apresentado → HTTP 403. Habilita a renegociação legada.
+        secureOptions: constants.SSL_OP_LEGACY_SERVER_CONNECT,
         headers: {
           "Content-Type": "application/soap+xml; charset=utf-8",
           "Content-Length": Buffer.byteLength(envelope),

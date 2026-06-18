@@ -387,6 +387,7 @@ export async function baixarXmlRecebida(notaId: string): Promise<{ ok: boolean; 
 // status + TODOS os headers + corpo, para diagnosticar o HTTP 403. Temporário.
 export async function debugDFe(): Promise<{ ok: boolean; texto: string }> {
   const https = await import("node:https");
+  const { constants } = await import("node:crypto");
   try {
     const empresaId = await exigirEmpresa();
     const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
@@ -410,7 +411,7 @@ export async function debugDFe(): Promise<{ ok: boolean; texto: string }> {
     const u = new URL(url);
     const resultado: { status: number; headers: string; body: string } = await new Promise((resolve, reject) => {
       const req = https.request(
-        { hostname: u.hostname, port: 443, path: u.pathname, method: "POST", key: cert.keyPem, cert: cert.chainPem, rejectUnauthorized: false, servername: u.hostname, minVersion: "TLSv1.2", maxVersion: "TLSv1.2", headers: { "Content-Type": "application/soap+xml; charset=utf-8", "Content-Length": Buffer.byteLength(envelope), "User-Agent": "easy-nfe/1.0" } },
+        { hostname: u.hostname, port: 443, path: u.pathname, method: "POST", key: cert.keyPem, cert: cert.chainPem, rejectUnauthorized: false, servername: u.hostname, minVersion: "TLSv1.2", maxVersion: "TLSv1.2", secureOptions: constants.SSL_OP_LEGACY_SERVER_CONNECT, headers: { "Content-Type": "application/soap+xml; charset=utf-8", "Content-Length": Buffer.byteLength(envelope), "User-Agent": "easy-nfe/1.0" } },
         (res) => { let d = ""; res.on("data", (c) => (d += c)); res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: JSON.stringify(res.headers, null, 2), body: d })); },
       );
       req.on("error", reject);
