@@ -12,7 +12,7 @@ import {
   limiteEquipe,
 } from "@/lib/empresa";
 import { definirEmpresaAtiva, hashSenha } from "@/lib/auth";
-import { codigoMunicipio } from "@/lib/nfe/municipios";
+import { resolverCodMunicipio as resolverCodMunicipioIBGE } from "@/lib/nfe/ibge";
 import { encriptar } from "@/lib/crypto";
 import { temFeature } from "@/lib/permissoes";
 
@@ -172,14 +172,6 @@ export async function obterEmpresaAtiva(): Promise<EmpresaDados | null> {
   };
 }
 
-function resolverCodMunicipio(municipio: string): string {
-  try {
-    return codigoMunicipio(municipio);
-  } catch {
-    return "";
-  }
-}
-
 // Cria (sem id) ou atualiza (com id) a empresa. Sempre define como ativa. Devolve o id.
 export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id: string } | { ok: false; erro: string }> {
   try {
@@ -187,6 +179,8 @@ export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id
     if (!dados.razaoSocial.trim() || !dados.cnpj.trim()) {
       return { ok: false, erro: "Razão social e CNPJ são obrigatórios." };
     }
+    // Resolve o código IBGE via API (sem tabela local); não bloqueia o cadastro se falhar.
+    const codMunicipio = await resolverCodMunicipioIBGE(dados.endereco.municipio, dados.endereco.uf).catch(() => "");
     const dadosBase = {
       razaoSocial: dados.razaoSocial,
       nomeFantasia: dados.nomeFantasia || null,
@@ -198,7 +192,7 @@ export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id
       numero: dados.endereco.numero,
       complemento: dados.endereco.complemento || null,
       bairro: dados.endereco.bairro,
-      codMunicipio: resolverCodMunicipio(dados.endereco.municipio),
+      codMunicipio,
       municipio: dados.endereco.municipio,
       uf: dados.endereco.uf,
       telefone: dados.telefone || null,

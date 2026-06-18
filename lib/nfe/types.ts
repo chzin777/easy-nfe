@@ -6,7 +6,8 @@ export type EnderecoNFe = {
   nro: string;
   xCpl?: string;
   xBairro: string;
-  municipio: string; // nome; o código IBGE é resolvido por municipios.ts
+  municipio: string; // nome do município
+  cMun?: string; // código IBGE (7 dígitos) já resolvido — preferido quando presente
   uf: string;
   cep: string; // só dígitos
   fone?: string; // só dígitos

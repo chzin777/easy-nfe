@@ -7,6 +7,7 @@ import {
   consultarStatus,
 } from "@/lib/nfe";
 import type { DadosNFe, EnderecoNFe } from "@/lib/nfe/types";
+import { resolverCodMunicipio } from "@/lib/nfe/ibge";
 import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
 import { decriptar } from "@/lib/crypto";
@@ -129,6 +130,12 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
     const cert = carregarCertificado(pfxBase64, senha);
 
+    // Código IBGE do município (cMun) resolvido via API do IBGE — sem tabela local.
+    // Usa o código já salvo na empresa quando válido; senão resolve pelo nome+UF.
+    const cMunEmit = await resolverCodMunicipio(empresa.codMunicipio?.trim() || empresa.municipio, empresa.uf);
+    const destUf = cliente.uf ?? empresa.uf;
+    const cMunDest = await resolverCodMunicipio(cliente.municipio ?? empresa.municipio, destUf);
+
     const dados: DadosNFe = {
       tpAmb,
       cUF,
@@ -143,7 +150,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
         xFant: empresa.nomeFantasia || undefined,
         ie: empresa.ie,
         crt: empresa.crt,
-        ender: endEmpresa(empresa),
+        ender: { ...endEmpresa(empresa), cMun: cMunEmit },
       },
       dest: {
         doc: cliente.documento,
@@ -153,8 +160,8 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
         ender: {
           xLgr: cliente.logradouro ?? "", nro: cliente.numero ?? "",
           xCpl: cliente.complemento || undefined, xBairro: cliente.bairro ?? "",
-          municipio: cliente.municipio ?? empresa.municipio, uf: cliente.uf ?? empresa.uf,
-          cep: cliente.cep ?? "",
+          municipio: cliente.municipio ?? empresa.municipio, uf: destUf,
+          cMun: cMunDest, cep: cliente.cep ?? "",
         },
       },
       itens: itensNFe,

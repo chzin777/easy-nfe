@@ -1,5 +1,4 @@
 import { montarChave } from "./chave";
-import { codigoMunicipio } from "./municipios";
 import type { DadosNFe, EnderecoNFe, ItemNFe } from "./types";
 
 // Escapa caracteres reservados de XML em conteúdo textual.
@@ -23,7 +22,7 @@ function tagDoc(doc: string): string {
 }
 
 function enderXml(tag: string, e: EnderecoNFe): string {
-  const cMun = codigoMunicipio(e.municipio);
+  const cMun = e.cMun ?? "";
   const cep = e.cep.replace(/\D/g, "");
   return (
     `<${tag}>` +
@@ -92,7 +91,7 @@ export function montarNFe(
   });
 
   const vTotal = dados.itens.reduce((s, i) => s + i.qCom * i.vUnCom, 0);
-  const cMunFG = codigoMunicipio(dados.emit.ender.municipio);
+  const cMunFG = dados.emit.ender.cMun ?? "";
   const dets = dados.itens.map((it, i) => detXml(it, i + 1, dados.emit.crt)).join("");
 
   const ide =
