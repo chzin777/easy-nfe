@@ -15,7 +15,7 @@ import Modal from "@/app/ui/Modal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import { TIPOS_NOTA, MODALIDADES_FRETE, rotulo } from "@/lib/mock-data";
 import type { ItemNota, Cliente, Produto, Transportadora } from "@/lib/types";
-import { emitirNota, type EmitirInput, type EmitirResultado } from "../actions";
+import { emitirNota, previewXmlNota, type EmitirInput, type EmitirResultado } from "../actions";
 import { explicarRejeicao } from "@/lib/nfe/mensagens";
 import { listarClientes } from "@/app/clientes/actions";
 import NovoClienteModal from "@/app/clientes/NovoClienteModal";
@@ -110,6 +110,33 @@ export default function NovaNotaPage() {
     setResultado(r);
   }
 
+  // Diagnóstico: baixa o XML (enviNFe assinado) que seria enviado à SEFAZ — sem enviar.
+  async function baixarXmlDiag() {
+    if (!clienteId || itens.length === 0) {
+      setResultado({ ok: false, erro: "Selecione cliente e ao menos um produto antes de gerar o XML." });
+      return;
+    }
+    const r = await previewXmlNota({
+      clienteId,
+      transportadoraId: transportadoraId || null,
+      tipoNota,
+      modFrete,
+      infCpl: info || undefined,
+      itens: itens.map((i) => ({ produtoId: i.produtoId, quantidade: i.quantidade })),
+    });
+    if (!r.ok) {
+      setResultado({ ok: false, erro: r.erro });
+      return;
+    }
+    const blob = new Blob([r.xml], { type: "application/xml;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "diagnostico-envinfe.xml";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   // Frete diferente de "9 - Sem ocorrência" exige transportadora.
   const transporteOk = modFrete === "9" || transportadoraId !== "";
 
@@ -125,6 +152,11 @@ export default function NovaNotaPage() {
       <PageHeader
         titulo="Emitir nova nota fiscal"
         subtitulo="Monte a nota em etapas: tipo, produtos, transporte e finalização."
+        acao={
+          <Button variante="secondary" onClick={baixarXmlDiag}>
+            Baixar XML (diagnóstico)
+          </Button>
+        }
       />
 
       <Stepper
