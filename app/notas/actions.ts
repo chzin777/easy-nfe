@@ -467,7 +467,8 @@ export async function previewXmlNota(input: EmitirInput): Promise<{ ok: true; xm
       itens: itensNFe,
     };
 
-    const { xml, chave } = montarNFe(dados, dataHoraBrasilia(), "12345678");
+    const cNFdbg = String(Math.floor(Math.random() * 9e7) + 1e7);
+    const { xml, chave } = montarNFe(dados, dataHoraBrasilia(), cNFdbg);
     const assinada = assinar(xml, `NFe${chave}`, cert, "infNFe");
     const enviNFe = `<enviNFe versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe"><idLote>1</idLote><indSinc>1</indSinc>${assinada}</enviNFe>`;
     return { ok: true, xml: enviNFe };
@@ -503,7 +504,8 @@ export async function enviarXmlDebug(input: EmitirInput): Promise<{ ok: true; re
       dest: { doc: cliente.documento, xNome: tpAmb === "2" ? HOMOLOG_XNOME : cliente.nome, ie: cliente.inscricaoEstadual ?? undefined, indIEDest: cliente.tipoContribuinte || "9", ender: { xLgr: cliente.logradouro ?? "", nro: cliente.numero ?? "", xCpl: cliente.complemento || undefined, xBairro: cliente.bairro ?? "", municipio: cliente.municipio ?? empresa.municipio, uf: destUf, cMun: cMunDest, cep: cliente.cep ?? "" } },
       itens: itensNFe,
     };
-    const { xml, chave } = montarNFe(dados, dataHoraBrasilia(), "12345678");
+    const cNFdbg = String(Math.floor(Math.random() * 9e7) + 1e7);
+    const { xml, chave } = montarNFe(dados, dataHoraBrasilia(), cNFdbg);
     const assinada = assinar(xml, `NFe${chave}`, cert, "infNFe");
     const enviNFe = `<enviNFe versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe"><idLote>1</idLote><indSinc>1</indSinc>${assinada}</enviNFe>`;
     const r = await soap(tpAmb, "autoriza", enviNFe, cert);
