@@ -21,21 +21,20 @@ export default function LoginPage() {
   }, [estado]);
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
+    <div className="relative grid min-h-screen lg:grid-cols-2">
+      {/* Logo no canto superior esquerdo da página (fora do form) */}
+      <Image
+        src="/images/logo/logo-completa.png"
+        alt="easy-nfe"
+        width={863}
+        height={309}
+        priority
+        className="absolute left-6 top-6 z-20 h-12 w-auto sm:left-8 sm:top-8"
+      />
+
       {/* Lado esquerdo — formulário */}
       <div className="flex items-center justify-center bg-white px-6 py-12">
         <div className="w-full max-w-sm">
-          <div className="mb-10 flex items-center">
-            <Image
-              src="/images/logo/logo-completa.png"
-              alt="easy-nfe"
-              width={863}
-              height={309}
-              priority
-              className="h-24 w-auto"
-            />
-          </div>
-
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Bem-vindo de volta</h1>
           <p className="mt-1.5 text-sm text-[var(--muted)]">Acesse sua conta para emitir e gerenciar suas notas.</p>
 
