@@ -49,8 +49,9 @@ function soapAN(
     `<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">` +
     `<soap:Body><${operacao} xmlns="${wsdlNs}"><nfeDadosMsg>${inner}</nfeDadosMsg></${operacao}></soap:Body>` +
     `</soap:Envelope>`;
-  // SOAPAction: Java/.NET enviam como header HTTP próprio (mesmo em SOAP 1.2).
-  const soapAction = `${wsdlNs}/${operacao}`;
+  // Transporte idêntico ao da emissão (GO), que funciona: SOAP 1.2 sem header
+  // SOAPAction (em SOAP 1.2 o action vai no Content-Type, não em header próprio —
+  // o header extra faz o IIS da SEFAZ responder 403).
   const u = new URL(url);
   return new Promise((resolve, reject) => {
     const req = https.request(
@@ -60,9 +61,7 @@ function soapAN(
         servername: u.hostname, minVersion: "TLSv1.2",
         headers: {
           "Content-Type": "application/soap+xml; charset=utf-8",
-          "SOAPAction": soapAction,
           "Content-Length": Buffer.byteLength(envelope),
-          "Accept": "application/soap+xml, text/xml, */*",
           "User-Agent": "easy-nfe/1.0",
         },
       },
