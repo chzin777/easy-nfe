@@ -201,11 +201,16 @@ export default function NotasEmitidasPage() {
       chave: "status",
       cabecalho: "Status",
       alinhar: "center",
+      render: (n) => <Badge tom={tomStatus[n.status]}>{n.status}</Badge>,
+    },
+    {
+      chave: "ambiente",
+      cabecalho: "Ambiente",
+      alinhar: "center",
       render: (n) => (
-        <div className="flex flex-col items-center gap-1">
-          <Badge tom={tomStatus[n.status]}>{n.status}</Badge>
-          {n.ambiente === "homologacao" && <Badge tom="warning">homologação</Badge>}
-        </div>
+        <Badge tom={n.ambiente === "homologacao" ? "warning" : "neutral"}>
+          {n.ambiente === "homologacao" ? "homologação" : "produção"}
+        </Badge>
       ),
     },
     {
