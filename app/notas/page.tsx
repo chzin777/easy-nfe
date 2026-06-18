@@ -72,6 +72,28 @@ export default function NotasEmitidasPage() {
     });
   }, [notas, busca, filtroStatus, filtroTipo]);
 
+  // KPIs calculados sobre o conjunto filtrado (acompanham busca/filtros).
+  const kpis = useMemo(() => {
+    const aut = filtradas.filter((n) => n.status === "autorizada");
+    const canceladas = filtradas.filter((n) => n.status === "cancelada").length;
+    const rejeitadas = filtradas.filter((n) => n.status === "rejeitada" || n.status === "denegada").length;
+    const valorAut = aut.reduce((s, n) => s + n.valorTotal, 0);
+    const agora = new Date();
+    const valorMes = aut.reduce((s, n) => {
+      const d = new Date(n.emitidaEm);
+      return d.getMonth() === agora.getMonth() && d.getFullYear() === agora.getFullYear() ? s + n.valorTotal : s;
+    }, 0);
+    return {
+      total: filtradas.length,
+      autorizadas: aut.length,
+      canceladas,
+      rejeitadas,
+      valorAut,
+      valorMes,
+      ticket: aut.length ? valorAut / aut.length : 0,
+    };
+  }, [filtradas]);
+
   function abrirEvento(nota: NotaCompleta, tipo: AcaoEvento["tipo"]) {
     setEvento({ nota, tipo });
     setJustificativa("");
@@ -205,6 +227,13 @@ export default function NotasEmitidasPage() {
         acao={<Button variante="secondary" onClick={exportarCsv}>Exportar CSV</Button>}
       />
 
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi rotulo="Notas (filtro atual)" valor={String(kpis.total)} sub={`${kpis.autorizadas} autorizadas`} />
+        <Kpi rotulo="Valor autorizado" valor={formatBRL(kpis.valorAut)} sub={`ticket médio ${formatBRL(kpis.ticket)}`} tom="success" />
+        <Kpi rotulo="Faturado no mês" valor={formatBRL(kpis.valorMes)} sub="notas autorizadas neste mês" tom="primary" />
+        <Kpi rotulo="Canceladas / rejeitadas" valor={`${kpis.canceladas} / ${kpis.rejeitadas}`} sub="no filtro atual" tom={kpis.canceladas + kpis.rejeitadas > 0 ? "danger" : "neutral"} />
+      </div>
+
       <Card>
         <div className="grid grid-cols-1 gap-3 border-b border-[var(--border)] p-4 sm:grid-cols-[1fr_200px_200px]">
           <Input
@@ -317,5 +346,31 @@ export default function NotasEmitidasPage() {
         )}
       </Modal>
     </div>
+  );
+}
+
+function Kpi({
+  rotulo,
+  valor,
+  sub,
+  tom = "neutral",
+}: {
+  rotulo: string;
+  valor: string;
+  sub?: string;
+  tom?: "neutral" | "success" | "primary" | "danger";
+}) {
+  const cor = {
+    neutral: "text-[var(--foreground)]",
+    success: "text-[var(--success)]",
+    primary: "text-[var(--primary)]",
+    danger: "text-[var(--danger)]",
+  }[tom];
+  return (
+    <Card className="p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">{rotulo}</p>
+      <p className={"mt-1 text-2xl font-bold tabular-nums " + cor}>{valor}</p>
+      {sub && <p className="mt-0.5 text-xs text-[var(--muted)]">{sub}</p>}
+    </Card>
   );
 }
