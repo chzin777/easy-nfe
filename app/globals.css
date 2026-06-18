@@ -123,6 +123,9 @@ body {
   #danfe-print,
   #danfe-print * {
     visibility: visible;
+    /* Garante que fundos/cores e a marca d'água saiam iguais ao preview. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   #danfe-print {
     position: absolute;
@@ -131,12 +134,14 @@ body {
     width: 100%;
     padding: 0;
     margin: 0;
+    /* Mantém o texto base do DANFE no mesmo tamanho do preview. */
+    font-size: 9px;
   }
   .nao-imprimir {
     display: none !important;
   }
   @page {
     size: A4;
-    margin: 12mm;
+    margin: 6mm;
   }
 }
