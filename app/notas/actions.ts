@@ -81,6 +81,19 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     const cliente = await prisma.cliente.findFirst({ where: { id: input.clienteId, empresaId } });
     if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
 
+    // NF-e modelo 55 exige endereço completo do destinatário (SEFAZ rejeita 225 sem ele).
+    const camposEnd: [string, string | null][] = [
+      ["logradouro", cliente.logradouro], ["número", cliente.numero], ["bairro", cliente.bairro],
+      ["município", cliente.municipio], ["UF", cliente.uf], ["CEP", cliente.cep],
+    ];
+    const faltando = camposEnd.filter(([, v]) => !v || !String(v).trim()).map(([k]) => k);
+    if (faltando.length) {
+      return {
+        ok: false,
+        erro: `Complete o endereço do cliente "${cliente.nome}" antes de emitir (faltando: ${faltando.join(", ")}). A NF-e modelo 55 exige o endereço do destinatário.`,
+      };
+    }
+
     if (input.itens.length === 0) return { ok: false, erro: "A nota não tem itens." };
     const produtos = await prisma.produto.findMany({
       where: { empresaId, id: { in: input.itens.map((i) => i.produtoId) } },

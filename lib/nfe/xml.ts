@@ -119,7 +119,8 @@ export function montarNFe(
     `<dest>` +
     tagDoc(d.doc) +
     `<xNome>${esc(d.xNome)}</xNome>` +
-    enderXml("enderDest", d.ender) +
+    // enderDest é opcional no schema; só inclui se houver logradouro (evita tags vazias = rejeição 225).
+    (d.ender?.xLgr?.trim() ? enderXml("enderDest", d.ender) : "") +
     // Schema NFe 4.00: indIEDest precede IE. Inverter gera rejeição 225 (falha de schema).
     `<indIEDest>${d.indIEDest}</indIEDest>` +
     (d.indIEDest === "1" && d.ie ? `<IE>${d.ie.replace(/\D/g, "")}</IE>` : "") +
