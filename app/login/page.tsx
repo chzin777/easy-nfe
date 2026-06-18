@@ -29,7 +29,7 @@ export default function LoginPage() {
         width={863}
         height={309}
         priority
-        className="absolute left-6 top-6 z-20 h-12 w-auto sm:left-8 sm:top-8"
+        className="absolute left-6 top-6 z-20 h-20 w-auto sm:left-8 sm:top-8"
       />
 
       {/* Lado esquerdo — formulário */}
