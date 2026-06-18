@@ -409,15 +409,41 @@ export async function debugDFe(): Promise<{ ok: boolean; texto: string }> {
       `<soap:Body><nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe"><nfeDadosMsg>${inner}</nfeDadosMsg></nfeDistDFeInteresse></soap:Body>` +
       `</soap:Envelope>`;
     const u = new URL(url);
-    const resultado: { status: number; headers: string; body: string } = await new Promise((resolve, reject) => {
-      const req = https.request(
-        { hostname: u.hostname, port: 443, path: u.pathname, method: "POST", key: cert.keyPem, cert: cert.chainPem, rejectUnauthorized: false, servername: u.hostname, minVersion: "TLSv1.2", maxVersion: "TLSv1.2", secureOptions: constants.SSL_OP_LEGACY_SERVER_CONNECT, headers: { "Content-Type": "application/soap+xml; charset=utf-8", "Content-Length": Buffer.byteLength(envelope), "User-Agent": "easy-nfe/1.0" } },
-        (res) => { let d = ""; res.on("data", (c) => (d += c)); res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: JSON.stringify(res.headers, null, 2), body: d })); },
-      );
-      req.on("error", reject);
-      req.write(envelope); req.end();
-    });
-    return { ok: true, texto: `URL: ${url}\nHTTP ${resultado.status}\n\nHEADERS:\n${resultado.headers}\n\nBODY:\n${resultado.body}` };
+    type Res = { status: number; proto: string | null; cipher: string; body: string };
+    function tentar(comCert: boolean): Promise<Res> {
+      return new Promise((resolve) => {
+        const base: Record<string, unknown> = {
+          hostname: u.hostname, port: 443, path: u.pathname, method: "POST",
+          rejectUnauthorized: false, servername: u.hostname,
+          minVersion: "TLSv1.2", maxVersion: "TLSv1.2",
+          secureOptions: constants.SSL_OP_LEGACY_SERVER_CONNECT,
+          headers: { "Content-Type": "application/soap+xml; charset=utf-8", "Content-Length": Buffer.byteLength(envelope), "User-Agent": "easy-nfe/1.0" },
+        };
+        if (comCert) { base.key = cert.keyPem; base.cert = cert.chainPem; }
+        const req = https.request(base, (res) => {
+          let d = ""; res.on("data", (c) => (d += c));
+          const sock = res.socket as unknown as { getProtocol?: () => string | null; getCipher?: () => { name: string } };
+          res.on("end", () => resolve({
+            status: res.statusCode ?? 0,
+            proto: sock.getProtocol?.() ?? null,
+            cipher: sock.getCipher?.().name ?? "?",
+            body: d.slice(0, 300),
+          }));
+        });
+        req.on("error", (e) => resolve({ status: -1, proto: null, cipher: String((e as Error).message), body: "" }));
+        req.write(envelope); req.end();
+      });
+    }
+    const comCert = await tentar(true);
+    const semCert = await tentar(false);
+    return {
+      ok: true,
+      texto:
+        `URL: ${url}\nCNPJ: ${cnpj} | tpAmb: ${tpAmb}\n` +
+        `certPem certs: ${(cert.certPem.match(/BEGIN CERT/g) || []).length} | chainPem certs: ${(cert.chainPem.match(/BEGIN CERT/g) || []).length}\n\n` +
+        `[COM cert] HTTP ${comCert.status} | ${comCert.proto} ${comCert.cipher}\n${comCert.body}\n\n` +
+        `[SEM cert] HTTP ${semCert.status} | ${semCert.proto} ${semCert.cipher}\n${semCert.body}`,
+    };
   } catch (e) {
     return { ok: false, texto: e instanceof Error ? `${e.name}: ${e.message}` : String(e) };
   }
