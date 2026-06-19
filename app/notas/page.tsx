@@ -70,21 +70,36 @@ export default function NotasEmitidasPage() {
         import("jspdf"),
       ]);
       const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-      const img = canvas.toDataURL("image/png");
       const pdf = new jsPDF({ unit: "pt", format: "a4" });
       const pw = pdf.internal.pageSize.getWidth();
       const ph = pdf.internal.pageSize.getHeight();
-      const imgH = (canvas.height * pw) / canvas.width;
-      if (imgH <= ph) {
-        pdf.addImage(img, "PNG", 0, 0, pw, imgH);
+      const M = 28; // margem ~10mm em todos os lados
+      const contentW = pw - M * 2;
+      const usableH = ph - M * 2;
+      const fullH = (canvas.height * contentW) / canvas.width; // altura total em pt
+
+      if (fullH <= usableH) {
+        pdf.addImage(canvas.toDataURL("image/png"), "PNG", M, M, contentW, fullH);
       } else {
-        // Documento mais alto que a página → fatia em múltiplas páginas A4.
-        let position = 0;
-        let remaining = imgH;
-        while (remaining > 0) {
-          pdf.addImage(img, "PNG", 0, position, pw, imgH);
-          remaining -= ph;
-          if (remaining > 0) { pdf.addPage(); position -= ph; }
+        // Fatia o canvas em pedaços do tamanho de uma página útil → margem limpa
+        // em todas as páginas (sem vazar para a faixa de margem).
+        const pxPorPagina = Math.floor((usableH / contentW) * canvas.width);
+        let sy = 0;
+        while (sy < canvas.height) {
+          const sliceH = Math.min(pxPorPagina, canvas.height - sy);
+          const slice = document.createElement("canvas");
+          slice.width = canvas.width;
+          slice.height = sliceH;
+          const ctx = slice.getContext("2d");
+          if (ctx) {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, slice.width, slice.height);
+            ctx.drawImage(canvas, 0, sy, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+          }
+          const drawH = (sliceH * contentW) / canvas.width;
+          pdf.addImage(slice.toDataURL("image/png"), "PNG", M, M, contentW, drawH);
+          sy += sliceH;
+          if (sy < canvas.height) pdf.addPage();
         }
       }
       pdf.save(`DANFE-${nota.numero}.pdf`);
