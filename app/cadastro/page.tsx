@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma, comRetry } from "@/lib/prisma";
 import CadastroForm from "./CadastroForm";
 
 export const metadata = { title: "Criar conta · easy-nfe" };
@@ -7,11 +7,11 @@ export type PlanoOpcao = { id: string; nome: string; sobConsulta: boolean };
 
 async function carregarPlanos(): Promise<PlanoOpcao[]> {
   try {
-    const rows = await prisma.plano.findMany({
+    const rows = await comRetry(() => prisma.plano.findMany({
       where: { ativo: true },
       orderBy: { ordem: "asc" },
       select: { id: true, nome: true, sobConsulta: true },
-    });
+    }));
     return rows;
   } catch (e) {
     console.error("cadastro: falha ao carregar planos", e);
@@ -28,5 +28,5 @@ export default async function CadastroPage({
   const planos = await carregarPlanos();
   const selecionado = planoId ? planos.find((p) => p.id === planoId) ?? null : null;
 
-  return <CadastroForm planos={planos} selecionado={selecionado} />;
+  return <CadastroForm selecionado={selecionado} />;
 }

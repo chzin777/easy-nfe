@@ -1,25 +1,22 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
-import { Button, Field, Input, Select } from "@/app/ui/primitives";
+import { Button, Field, Input } from "@/app/ui/primitives";
 import { cadastrarTrial, criarLead, type CadastroResultado, type LeadResultado } from "./actions";
 import type { PlanoOpcao } from "./page";
 
 type Modo = "trial" | "contato";
 
 export default function CadastroForm({
-  planos,
   selecionado,
 }: {
-  planos: PlanoOpcao[];
   selecionado: PlanoOpcao | null;
 }) {
   // Plano sob consulta cai direto no contato; senão, trial 7 dias.
   const [modo, setModo] = useState<Modo>(selecionado?.sobConsulta ? "contato" : "trial");
-  const planosTrial = planos.filter((p) => !p.sobConsulta);
-  const [planoId, setPlanoId] = useState(selecionado && !selecionado.sobConsulta ? selecionado.id : "");
 
   const [trialState, trialAction, trialPend] = useActionState<CadastroResultado | null, FormData>(cadastrarTrial, null);
   const [leadState, leadAction, leadPend] = useActionState<LeadResultado | null, FormData>(criarLead, null);
@@ -32,7 +29,7 @@ export default function CadastroForm({
     if (trialState && "ok" in trialState) window.location.href = trialState.destino;
   }, [trialState]);
 
-  const planoNomeSel = selecionado?.nome ?? planosTrial.find((p) => p.id === planoId)?.nome ?? "";
+  const planoNomeSel = selecionado?.nome ?? "";
 
   return (
     <div className="relative grid min-h-screen lg:grid-cols-2">
@@ -52,7 +49,7 @@ export default function CadastroForm({
             <>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">Teste grátis por 7 dias</h1>
               <p className="mt-1.5 text-sm text-[var(--muted)]">
-                Sem cartão. Crie sua conta{planoNomeSel ? ` no plano ${planoNomeSel}` : ""} e comece a emitir.
+                Sem cartão. Crie sua conta e comece a emitir no plano Básico.
               </p>
 
               <form action={trialAction} className="mt-8 space-y-4">
@@ -68,19 +65,6 @@ export default function CadastroForm({
                 <Field label="Senha" required hint="Mín. 8 caracteres">
                   <Input name="senha" type="password" placeholder="••••••••" autoComplete="new-password" required />
                 </Field>
-
-                {selecionado && !selecionado.sobConsulta ? (
-                  <input type="hidden" name="planoId" value={selecionado.id} />
-                ) : (
-                  <Field label="Plano">
-                    <Select
-                      name="planoId"
-                      opcoes={[{ value: "", label: "Decido depois" }, ...planosTrial.map((p) => ({ value: p.id, label: p.nome }))]}
-                      value={planoId}
-                      onChange={(e) => setPlanoId(e.target.value)}
-                    />
-                  </Field>
-                )}
 
                 {trialErro && <ErroBox>{trialErro}</ErroBox>}
 
@@ -113,7 +97,7 @@ export default function CadastroForm({
             <>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">Fale com nossa equipe</h1>
               <p className="mt-1.5 text-sm text-[var(--muted)]">
-                Deixe seus dados{planoNomeSel ? ` (plano ${planoNomeSel})` : ""} e entramos em contato.
+                Deixe seus dados e entramos em contato.
               </p>
 
               <form action={leadAction} className="mt-8 space-y-4">
@@ -157,15 +141,40 @@ export default function CadastroForm({
             </>
           )}
 
-          <p className="mt-8 text-center text-xs text-[var(--muted)]">
-            Já tem conta?{" "}
-            <Link href="/login" className="font-medium text-[var(--primary)] hover:underline">Entrar</Link>
+          <div className="mt-6 flex items-center gap-3">
+            <span className="h-px flex-1 bg-[var(--border)]" />
+            <span className="text-xs text-[var(--muted)]">ou</span>
+            <span className="h-px flex-1 bg-[var(--border)]" />
+          </div>
+
+          <motion.a
+            href="/login"
+            whileHover={{ scale: 1.03, y: -1 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            className="mt-4 flex w-full items-center justify-center rounded-lg border border-[var(--primary)] py-2.5 text-sm font-semibold text-[var(--primary)] transition-colors hover:bg-[var(--primary)] hover:text-white"
+          >
+            Entrar
+          </motion.a>
+
+          <p className="mt-6 text-center text-xs text-[var(--muted)]">
+            Já tem conta? Acesse com seu e-mail e senha.
           </p>
         </div>
       </div>
 
       {/* Painel direito */}
       <div className="relative hidden overflow-hidden bg-gradient-to-br from-[var(--primary)] via-[var(--primary-2)] to-indigo-700 lg:flex lg:flex-col lg:justify-center lg:px-14">
+        <Image
+          src="https://wallpapers.com/images/hd/purple-abstract-2gf414bg9xvsakmf.jpg"
+          alt="easy-nfe"
+          fill
+          priority
+          sizes="50vw"
+          className="object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/85 via-[var(--primary-2)]/80 to-indigo-900/85" />
+
         <div className="relative z-10 max-w-md text-white">
           <h2 className="text-3xl font-bold leading-tight">Comece a emitir hoje, sem burocracia.</h2>
           <p className="mt-4 text-sm leading-relaxed text-white/85">

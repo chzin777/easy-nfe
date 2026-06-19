@@ -10,7 +10,7 @@ import { sair } from "@/app/auth/actions";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const publica = pathname === "/" || pathname === "/login";
+  const publica = pathname === "/" || pathname === "/login" || pathname === "/cadastro";
   const [estado, setEstado] = useState<EstadoLicenca | null>(null);
 
   useEffect(() => {

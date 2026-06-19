@@ -2,13 +2,15 @@ import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { lerSessao } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, comRetry } from "@/lib/prisma";
 import { formatBRL } from "@/lib/format";
 import Aurora from "./ui/Aurora";
 import Reveal from "./ui/Reveal";
 import ScrollVelocity from "./ui/ScrollVelocity";
+import ScrollLink from "./ui/ScrollLink";
 
 const WPP_PARCEIRO = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Sou contador(a) e quero ser parceiro(a) do easy-nfe. Gostaria de saber como funciona o programa de parcerias para contadores.");
+const WPP_VENDAS = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Tenho dúvidas sobre os planos do easy-nfe e gostaria de ajuda para escolher o ideal para minha empresa.");
 
 const RECURSOS = [
   { titulo: "Emissão de NF-e", desc: "Modelo 55 com autorização síncrona na SEFAZ em segundos.", icon: <IFile /> },
@@ -51,11 +53,11 @@ const FAQ = [
 // Planos p/ a landing. DB indisponivel (cold start/pooler) nao derruba a pagina.
 async function carregarPlanos() {
   try {
-    return await prisma.plano.findMany({
+    return await comRetry(() => prisma.plano.findMany({
       where: { ativo: true },
       orderBy: { ordem: "asc" },
       include: { beneficios: { orderBy: { ordem: "asc" }, select: { chave: true, nome: true } } },
-    });
+    }));
   } catch (e) {
     console.error("landing: falha ao carregar planos", e);
     return [];
@@ -70,12 +72,21 @@ export default async function Landing() {
   const planoAnterior = (ordem: number) =>
     planos.filter((x) => x.ordem < ordem).sort((a, b) => b.ordem - a.ordem)[0];
   const nomePlanoAnterior = (ordem: number) => planoAnterior(ordem)?.nome;
+  const planoSeguinte = (ordem: number) =>
+    planos.filter((x) => x.ordem > ordem).sort((a, b) => a.ordem - b.ordem)[0];
   // Com "Tudo do {anterior}", esconde os benefícios já cobertos pelo plano de baixo (redundância).
   const beneficiosVisiveis = (p: (typeof planos)[number]) => {
     const temTudoAnterior = p.beneficios.some((b) => b.chave === "tudo_anterior");
     if (!temTudoAnterior) return p.beneficios;
     const anteriores = new Set((planoAnterior(p.ordem)?.beneficios ?? []).map((b) => b.chave));
     return p.beneficios.filter((b) => b.chave === "tudo_anterior" || !anteriores.has(b.chave));
+  };
+  // Desvantagens = benefícios que o próximo plano tem e este não (motiva o upgrade).
+  const desvantagens = (p: (typeof planos)[number]) => {
+    const prox = planoSeguinte(p.ordem);
+    if (!prox) return [];
+    const tem = new Set(p.beneficios.map((b) => b.chave));
+    return prox.beneficios.filter((b) => b.chave !== "tudo_anterior" && !tem.has(b.chave));
   };
 
   const destaqueId = planos.find((p) => p.popular)?.id;
@@ -90,26 +101,33 @@ export default async function Landing() {
   const agruparPorCategoria = grupos.some((g) => g.categoria !== "");
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-900">
+    <div id="topo" className="min-h-screen bg-slate-950 text-slate-900">
       {/* Navbar */}
       <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/50 backdrop-blur-md">
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2.5 text-white">
+          <ScrollLink href="#topo" className="flex items-center gap-2.5 text-white transition hover:opacity-80">
             <span className="relative h-8 w-8 shrink-0">
               <Image src="/images/logo/logo.png" alt="easy-nfe" fill className="object-contain" />
             </span>
             <span className="text-base font-bold tracking-tight">Easy NFe</span>
-          </div>
+          </ScrollLink>
           <div className="hidden items-center gap-8 text-sm text-slate-300 sm:flex">
-            <a href="#recursos" className="transition hover:text-white">Recursos</a>
-            <a href="#como-funciona" className="transition hover:text-white">Como funciona</a>
-            <a href="#planos" className="transition hover:text-white">Planos</a>
-            <a href="#parceiros" className="transition hover:text-white">Parceiros</a>
-            <a href="#faq" className="transition hover:text-white">FAQ</a>
+            <ScrollLink href="#recursos" className="transition hover:text-white">Recursos</ScrollLink>
+            <ScrollLink href="#como-funciona" className="transition hover:text-white">Como funciona</ScrollLink>
+            <ScrollLink href="#planos" className="transition hover:text-white">Planos</ScrollLink>
+            <ScrollLink href="#parceiros" className="transition hover:text-white">Parceiros</ScrollLink>
+            <ScrollLink href="#faq" className="transition hover:text-white">FAQ</ScrollLink>
           </div>
-          <Link href="/login" className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white ring-1 ring-white/15 transition hover:bg-white/20">
-            Entrar
-          </Link>
+          <div className="flex items-center gap-2.5">
+            <Link href="/cadastro" className="group relative hidden items-center gap-1.5 overflow-hidden rounded-lg bg-white px-4 py-2 text-sm font-bold text-[var(--primary)] shadow-lg shadow-violet-500/30 ring-1 ring-white/60 transition hover:-translate-y-0.5 hover:shadow-violet-400/50 sm:inline-flex">
+              <span className="absolute -left-1/3 top-0 h-full w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/70 to-transparent transition-all duration-700 group-hover:left-[120%]" />
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" className="text-amber-500"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg>
+              Teste grátis 7 dias
+            </Link>
+            <Link href="/login" className="rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:-translate-y-0.5">
+              Entrar
+            </Link>
+          </div>
         </nav>
       </header>
 
@@ -130,13 +148,27 @@ export default async function Landing() {
             WhatsApp e e-mail integrados. Tudo em uma plataforma só.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link href="/cadastro" className="w-full rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:-translate-y-0.5 sm:w-auto">
-              Começar grátis
+            <Link href="/cadastro" className="animate-pulse-trial w-full rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-7 py-3.5 text-base font-semibold text-white transition hover:-translate-y-0.5 sm:w-auto">
+              Testar grátis por 7 dias
             </Link>
-            <a href="#planos" className="w-full rounded-xl bg-white/10 px-6 py-3 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/20 sm:w-auto">
+            <ScrollLink href="#planos" className="w-full rounded-xl bg-white/10 px-6 py-3.5 text-center text-base font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/20 sm:w-auto">
               Ver planos
-            </a>
+            </ScrollLink>
           </div>
+          <p className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-sm text-slate-400">
+            <span className="inline-flex items-center gap-1.5">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-violet-400"><path d="M20 6 9 17l-5-5" /></svg>
+              Sem cartão de crédito
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-violet-400"><path d="M20 6 9 17l-5-5" /></svg>
+              Cancele quando quiser
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-violet-400"><path d="M20 6 9 17l-5-5" /></svg>
+              Emita em minutos
+            </span>
+          </p>
         </div>
       </section>
 
@@ -232,54 +264,51 @@ export default async function Landing() {
       {/* Parcerias com contadores */}
       <section id="parceiros" className="bg-slate-50 py-24">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-gradient-to-br from-slate-900 to-slate-800 p-10 text-white sm:p-14">
-            <div className="grid items-center gap-10 lg:grid-cols-2">
-              <Reveal>
-                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-violet-300">
-                  Para contadores
-                </span>
-                <h2 className="mt-4 text-3xl font-bold tracking-tight">Seja parceiro contábil do easy-nfe</h2>
-                <p className="mt-3 text-slate-300">
-                  Indique o easy-nfe para seus clientes e ganhe comissão recorrente. Seus clientes emitem NF-e em segundos
-                  e você acompanha tudo com mais agilidade — menos planilha, menos retrabalho.
-                </p>
-                <ul className="mt-6 space-y-2.5 text-sm">
-                  {[
-                    "Comissão recorrente por cliente ativo",
-                    "Painel e suporte dedicados ao parceiro",
-                    "Condições especiais para a sua carteira",
-                    "Onboarding e treinamento da sua equipe",
-                  ].map((t) => (
-                    <li key={t} className="flex gap-2"><span className="text-violet-400">✓</span><span className="text-slate-200">{t}</span></li>
-                  ))}
-                </ul>
-                <a
-                  href={WPP_PARCEIRO}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-8 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:-translate-y-0.5"
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm5.8 14.16c-.24.68-1.42 1.32-1.95 1.36-.5.04-.97.22-3.27-.68-2.77-1.09-4.53-3.92-4.66-4.1-.14-.18-1.13-1.5-1.13-2.86 0-1.36.71-2.03.97-2.31.24-.27.54-.34.71-.34.18 0 .36 0 .51.01.16.01.39-.06.6.46.24.55.81 1.91.88 2.05.07.14.12.3.02.48-.09.18-.14.3-.27.46-.14.16-.29.36-.41.48-.14.14-.28.29-.12.56.16.27.71 1.17 1.53 1.9 1.05.94 1.94 1.23 2.21 1.37.27.14.43.12.59-.07.16-.18.68-.79.86-1.06.18-.27.36-.22.6-.13.24.09 1.55.73 1.81.86.27.14.45.2.51.31.07.11.07.64-.17 1.32Z" /></svg>
-                  Quero ser parceiro
-                </a>
-              </Reveal>
-              <Reveal className="hidden lg:block">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-8 backdrop-blur">
-                  <div className="grid grid-cols-2 gap-6 text-center">
-                    {[
-                      { n: "Recorrente", l: "Comissão por cliente" },
-                      { n: "Sem custo", l: "Para começar" },
-                      { n: "Suporte", l: "Humano e dedicado" },
-                      { n: "7 dias", l: "Grátis pros clientes" },
-                    ].map((s) => (
-                      <div key={s.l}>
-                        <p className="text-2xl font-extrabold text-violet-300">{s.n}</p>
-                        <p className="mt-1 text-xs text-slate-400">{s.l}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </Reveal>
+          <div className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-gradient-to-br from-slate-900 to-slate-800 p-8 text-white sm:p-12 lg:p-16">
+            <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-violet-600/20 blur-3xl" />
+
+            {/* Cabeçalho */}
+            <Reveal className="relative mx-auto max-w-2xl text-center">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-violet-300">
+                Programa para contadores
+              </span>
+              <h2 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl">Seja parceiro contábil do easy-nfe</h2>
+              <p className="mt-4 text-slate-300">
+                Indique o easy-nfe e ganhe comissão recorrente por cliente ativo. Eles emitem NF-e em segundos;
+                você acompanha tudo com menos planilha e menos retrabalho.
+              </p>
+            </Reveal>
+
+            {/* Vantagens com ícones */}
+            <div className="relative mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                { t: "Comissão recorrente", d: "Receba todo mês por cada cliente ativo que indicar.", icon: <IPlug /> },
+                { t: "Zero custo pra começar", d: "Sem mensalidade nem meta de entrada no programa.", icon: <ILock /> },
+                { t: "Painel do parceiro", d: "Indicações, clientes ativos e comissões em um só lugar.", icon: <IFile /> },
+                { t: "Suporte dedicado", d: "Canal direto com nosso time para você e sua carteira.", icon: <IChat /> },
+                { t: "Condições especiais", d: "Planos diferenciados para os clientes que vierem por você.", icon: <IDoc /> },
+                { t: "Onboarding e treinamento", d: "Capacitamos sua equipe para emitir sem fricção.", icon: <IBuilding /> },
+              ].map((v) => (
+                <Reveal key={v.t} className="rounded-2xl border border-white/10 bg-white/5 p-6 transition hover:border-violet-400/40 hover:bg-white/[0.07]">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-2)] text-white">{v.icon}</div>
+                  <h3 className="mt-4 font-semibold">{v.t}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{v.d}</p>
+                </Reveal>
+              ))}
+            </div>
+
+            {/* CTA */}
+            <div className="relative mt-12 flex flex-col items-center gap-4 text-center">
+              <a
+                href={WPP_PARCEIRO}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="animate-pulse-trial inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-7 py-3.5 text-sm font-semibold text-white transition hover:-translate-y-0.5"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm5.8 14.16c-.24.68-1.42 1.32-1.95 1.36-.5.04-.97.22-3.27-.68-2.77-1.09-4.53-3.92-4.66-4.1-.14-.18-1.13-1.5-1.13-2.86 0-1.36.71-2.03.97-2.31.24-.27.54-.34.71-.34.18 0 .36 0 .51.01.16.01.39-.06.6.46.24.55.81 1.91.88 2.05.07.14.12.3.02.48-.09.18-.14.3-.27.46-.14.16-.29.36-.41.48-.14.14-.28.29-.12.56.16.27.71 1.17 1.53 1.9 1.05.94 1.94 1.23 2.21 1.37.27.14.43.12.59-.07.16-.18.68-.79.86-1.06.18-.27.36-.22.6-.13.24.09 1.55.73 1.81.86.27.14.45.2.51.31.07.11.07.64-.17 1.32Z" /></svg>
+                Quero ser parceiro
+              </a>
+              <p className="text-xs text-slate-400">Resposta rápida pelo WhatsApp · sem compromisso</p>
             </div>
           </div>
         </div>
@@ -337,11 +366,29 @@ export default async function Landing() {
                           {beneficiosVisiveis(p).map((b, j) => (
                             <li key={j} className="flex gap-2"><span className="text-[var(--success)]">✓</span><span className="text-slate-600">{b.chave === "tudo_anterior" ? `Tudo do ${nomePlanoAnterior(p.ordem) ?? "plano anterior"}` : b.nome}</span></li>
                           ))}
+                          {desvantagens(p).map((b, j) => (
+                            <li key={`x-${j}`} className="flex gap-2"><span className="text-slate-300">✗</span><span className="text-slate-400 line-through">{b.nome}</span></li>
+                          ))}
                         </ul>
+                        {!p.sobConsulta && !planoSeguinte(p.ordem) && planos.length > 1 && (
+                          <span className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1 text-xs font-semibold text-[var(--primary)]">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1.5 9.6 6.4 4.2 7.2l3.9 3.8-.9 5.4 4.8-2.5 4.8 2.5-.9-5.4 3.9-3.8-5.4-.8z" /></svg>
+                            Plano mais completo · tudo incluso
+                          </span>
+                        )}
                         {p.sobConsulta ? (
                           <Link href={`/cadastro?plano=${p.id}`} className={"mt-7 rounded-xl px-5 py-2.5 text-center text-sm font-semibold transition " + (destaque ? "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg shadow-violet-500/25 hover:-translate-y-0.5" : "bg-slate-100 text-slate-900 hover:bg-slate-200")}>
                             Fale com nossos vendedores
                           </Link>
+                        ) : p.permiteTrial ? (
+                          <div className="mt-7 flex flex-col gap-2">
+                            <Link href={`/cadastro?plano=${p.id}`} className="animate-pulse-trial rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-5 py-2.5 text-center text-sm font-semibold text-white transition hover:-translate-y-0.5">
+                              Testar grátis por 7 dias
+                            </Link>
+                            <Link href={`/cadastro?plano=${p.id}`} className="rounded-xl bg-slate-100 px-5 py-2.5 text-center text-sm font-semibold text-slate-900 transition hover:bg-slate-200">
+                              Começar agora
+                            </Link>
+                          </div>
                         ) : (
                           <Link href={`/cadastro?plano=${p.id}`} className={"mt-7 rounded-xl px-5 py-2.5 text-center text-sm font-semibold transition " + (destaque ? "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg shadow-violet-500/25 hover:-translate-y-0.5" : "bg-slate-100 text-slate-900 hover:bg-slate-200")}>
                             Começar agora
@@ -354,6 +401,19 @@ export default async function Landing() {
               </div>
             ))
           )}
+
+          <div className="mt-12 flex flex-col items-center justify-center gap-3 text-center sm:flex-row">
+            <p className="text-sm text-[var(--muted)]">Não sabe qual plano escolher?</p>
+            <a
+              href={WPP_VENDAS}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-[#25D366]/30 bg-[#25D366]/10 px-5 py-2.5 text-sm font-semibold text-[#128C4A] transition hover:bg-[#25D366]/20"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm5.8 14.16c-.24.68-1.42 1.32-1.95 1.36-.5.04-.97.22-3.27-.68-2.77-1.09-4.53-3.92-4.66-4.1-.14-.18-1.13-1.5-1.13-2.86 0-1.36.71-2.03.97-2.31.24-.27.54-.34.71-.34.18 0 .36 0 .51.01.16.01.39-.06.6.46.24.55.81 1.91.88 2.05.07.14.12.3.02.48-.09.18-.14.3-.27.46-.14.16-.29.36-.41.48-.14.14-.28.29-.12.56.16.27.71 1.17 1.53 1.9 1.05.94 1.94 1.23 2.21 1.37.27.14.43.12.59-.07.16-.18.68-.79.86-1.06.18-.27.36-.22.6-.13.24.09 1.55.73 1.81.86.27.14.45.2.51.31.07.11.07.64-.17 1.32Z" /></svg>
+              Falar com vendas no WhatsApp
+            </a>
+          </div>
         </div>
       </section>
 
@@ -383,10 +443,15 @@ export default async function Landing() {
         <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
         <div className="relative mx-auto max-w-2xl px-6">
           <h2 className="text-3xl font-bold">Pronto para emitir sua primeira nota?</h2>
-          <p className="mt-3 text-white/85">Acesse sua conta e comece agora. Suporte humano de verdade.</p>
-          <Link href="/login" className="mt-8 inline-block rounded-xl bg-white px-7 py-3 text-sm font-semibold text-[var(--primary)] shadow-lg transition hover:-translate-y-0.5">
-            Entrar
-          </Link>
+          <p className="mt-3 text-white/85">Teste grátis por 7 dias, sem cartão. Suporte humano de verdade.</p>
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link href="/cadastro" className="w-full rounded-xl bg-white px-7 py-3 text-sm font-semibold text-[var(--primary)] shadow-lg transition hover:-translate-y-0.5 sm:w-auto">
+              Testar grátis por 7 dias
+            </Link>
+            <Link href="/login" className="w-full rounded-xl bg-white/10 px-7 py-3 text-sm font-semibold text-white ring-1 ring-white/30 transition hover:bg-white/20 sm:w-auto">
+              Entrar
+            </Link>
+          </div>
         </div>
       </section>
 

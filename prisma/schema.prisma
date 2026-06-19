@@ -99,6 +99,7 @@ model Plano {
   recursos       String[] // legado (texto livre) — substituído por `beneficios`
   ativo          Boolean  @default(true) // exibido na LP / disponível
   popular        Boolean  @default(false) // destaque "mais popular" na landing
+  permiteTrial   Boolean  @default(false) // libera teste grátis de 7 dias (botão na landing + cadastro self-serve)
   ordem          Int      @default(0)
 
   beneficios Beneficio[]

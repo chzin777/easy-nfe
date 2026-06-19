@@ -230,7 +230,7 @@ function AbaPlanos() {
   async function togglePopular(p: Required<PlanoDados>) { await definirPlanoPopular(p.id, !p.popular); recarregar(); }
 
   const porId = new Map(beneficios.map((b) => [b.id, b]));
-  const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, precoAntigo: 0, sobConsulta: false, categoria: "", periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, beneficioIds: [], ativo: true, popular: false, ordem: planos.length };
+  const vazio: PlanoDados = { nome: "", descricao: "", preco: 0, precoAntigo: 0, sobConsulta: false, categoria: "", periodicidade: "mensal", limiteEmpresas: 1, limiteUsuarios: 1, beneficioIds: [], ativo: true, popular: false, permiteTrial: false, ordem: planos.length };
 
   // Agrupa por categoria, na ordem do catálogo (sem categoria por último).
   const grupos: { categoria: string; itens: Required<PlanoDados>[] }[] = [];
@@ -443,6 +443,11 @@ function PlanoModal({ inicial, catalogo, planos, categorias, onFechar, onSalvo }
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={p.ativo} onChange={(e) => set("ativo", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
         Ativo (exibir na landing page)
+      </label>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={p.permiteTrial} disabled={p.sobConsulta} onChange={(e) => set("permiteTrial", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+        Libera teste grátis de 7 dias (botão “Testar grátis por 7 dias” na landing)
       </label>
     </div>
   );

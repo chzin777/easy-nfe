@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { motion } from "motion/react";
 import Image from "next/image";
 import { Button, Field, Input } from "@/app/ui/primitives";
 import { entrar, type AuthResultado } from "../auth/actions";
@@ -58,8 +59,24 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <p className="mt-8 text-center text-xs text-[var(--muted)]">
-            Não tem acesso? Fale com o administrador da sua empresa.
+          <div className="mt-6 flex items-center gap-3">
+            <span className="h-px flex-1 bg-[var(--border)]" />
+            <span className="text-xs text-[var(--muted)]">ou</span>
+            <span className="h-px flex-1 bg-[var(--border)]" />
+          </div>
+
+          <motion.a
+            href="/cadastro"
+            whileHover={{ scale: 1.03, y: -1 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            className="mt-4 flex w-full items-center justify-center rounded-lg border border-[var(--primary)] py-2.5 text-sm font-semibold text-[var(--primary)] transition-colors hover:bg-[var(--primary)] hover:text-white"
+          >
+            Criar conta grátis
+          </motion.a>
+
+          <p className="mt-6 text-center text-xs text-[var(--muted)]">
+            Teste grátis por 7 dias. Sem cartão de crédito.
           </p>
         </div>
       </div>
@@ -67,7 +84,7 @@ export default function LoginPage() {
       {/* Lado direito — imagem de fundo + texto por cima */}
       <div className="relative hidden overflow-hidden bg-gradient-to-br from-[var(--primary)] via-[var(--primary-2)] to-indigo-700 lg:flex lg:flex-col lg:justify-center lg:px-14">
         <Image
-          src="https://www.varitus.com.br/wp-content/uploads/2023/09/varitus-25-09-23.png"
+          src="https://wallpapers.com/images/hd/purple-abstract-2gf414bg9xvsakmf.jpg"
           alt="easy-nfe"
           fill
           priority

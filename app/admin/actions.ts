@@ -290,6 +290,7 @@ export type PlanoDados = {
   beneficioIds: string[];
   ativo: boolean;
   popular: boolean;
+  permiteTrial: boolean;
   ordem: number;
 };
 
@@ -480,6 +481,7 @@ export async function listarPlanos(): Promise<Required<PlanoDados>[]> {
     beneficioIds: p.beneficios.map((b) => b.id),
     ativo: p.ativo,
     popular: p.popular,
+    permiteTrial: p.permiteTrial,
     ordem: p.ordem,
   }));
 }
@@ -500,6 +502,7 @@ export async function salvarPlano(dados: PlanoDados): Promise<Resultado> {
       limiteUsuarios: dados.limiteUsuarios,
       ativo: dados.ativo,
       popular: dados.popular,
+      permiteTrial: dados.permiteTrial,
       ordem: dados.ordem,
     };
     const conexao = dados.beneficioIds.map((id) => ({ id }));

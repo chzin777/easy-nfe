@@ -50,6 +50,15 @@ export default function Sidebar() {
   const [empresas, setEmpresas] = useState<EmpresaResumo[]>([]);
   const [role, setRole] = useState<string | null>(null);
   const [features, setFeatures] = useState<string[] | null>(null);
+  const [colapsados, setColapsados] = useState<Set<string>>(new Set());
+
+  const alternarGrupo = (titulo: string) =>
+    setColapsados((prev) => {
+      const next = new Set(prev);
+      if (next.has(titulo)) next.delete(titulo);
+      else next.add(titulo);
+      return next;
+    });
 
   useEffect(() => {
     listarEmpresas().then(setEmpresas).catch(() => {});
@@ -101,13 +110,29 @@ export default function Sidebar() {
 
       <SeletorEmpresa empresas={empresas} />
 
-      <nav className="flex-1 space-y-6 px-3 py-2">
-        {gruposRender.map((g) => (
+      <nav className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-2">
+        {gruposRender.map((g) => {
+          const colapsado = colapsados.has(g.titulo);
+          return (
           <div key={g.titulo}>
-            <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <button
+              onClick={() => alternarGrupo(g.titulo)}
+              className="flex w-full items-center justify-between rounded-md px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 transition hover:text-slate-300"
+            >
               {g.titulo}
-            </p>
-            <ul className="space-y-1">
+              <motion.span animate={{ rotate: colapsado ? -90 : 0 }} transition={{ duration: 0.2 }} className="text-slate-600">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+              </motion.span>
+            </button>
+            <AnimatePresence initial={false}>
+              {!colapsado && (
+                <motion.ul
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                  className="space-y-1 overflow-hidden"
+                >
               {g.itens.map((item) => {
                 const ativo = item.href === hrefAtivo;
                 return (
@@ -143,9 +168,12 @@ export default function Sidebar() {
                   </li>
                 );
               })}
-            </ul>
+                </motion.ul>
+              )}
+            </AnimatePresence>
           </div>
-        ))}
+          );
+        })}
       </nav>
 
       <div className="mx-3 mb-4">

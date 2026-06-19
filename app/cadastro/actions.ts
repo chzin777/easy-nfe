@@ -18,7 +18,6 @@ export async function cadastrarTrial(
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const senha = String(formData.get("senha") ?? "");
   const telefone = String(formData.get("telefone") ?? "").trim();
-  const planoId = String(formData.get("planoId") ?? "").trim() || null;
 
   try {
     if (!nome) return { erro: "Informe seu nome." };
@@ -28,11 +27,12 @@ export async function cadastrarTrial(
     const existe = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (existe) return { erro: "Já existe uma conta com este e-mail. Faça login." };
 
-    let plano: { id: string; sobConsulta: boolean } | null = null;
-    if (planoId) {
-      plano = await prisma.plano.findUnique({ where: { id: planoId }, select: { id: true, sobConsulta: true } });
-      if (plano?.sobConsulta) return { erro: "Este plano é sob consulta. Use o formulário de contato." };
-    }
+    // Trial no plano marcado como "libera teste grátis" no admin (menor ordem se houver vários).
+    const plano = await prisma.plano.findFirst({
+      where: { ativo: true, sobConsulta: false, permiteTrial: true },
+      orderBy: { ordem: "asc" },
+      select: { id: true },
+    });
 
     const validadeEm = new Date();
     validadeEm.setDate(validadeEm.getDate() + 7);
