@@ -557,16 +557,21 @@ function AbaCertificado() {
     }
     setCarregando(true);
     setErro(null);
-    const r = await salvarCertificado(pfxB64, senha);
-    setCarregando(false);
-    if (r.ok) {
-      setPfxB64(null);
-      setSenha("");
-      setNomeArquivo(null);
-      if (inputRef.current) inputRef.current.value = "";
-      await recarregar();
-    } else {
-      setErro(r.erro);
+    try {
+      const r = await salvarCertificado(pfxB64, senha);
+      if (r.ok) {
+        setPfxB64(null);
+        setSenha("");
+        setNomeArquivo(null);
+        if (inputRef.current) inputRef.current.value = "";
+        await recarregar();
+      } else {
+        setErro(r.erro);
+      }
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Falha ao salvar o certificado. Tente novamente.");
+    } finally {
+      setCarregando(false);
     }
   }
 
