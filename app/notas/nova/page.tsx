@@ -110,8 +110,10 @@ export default function NovaNotaPage() {
     setResultado(r);
   }
 
-  // Frete diferente de "9 - Sem ocorrência" exige transportadora.
-  const transporteOk = modFrete === "9" || transportadoraId !== "";
+  // CIF (0), FOB (1) e "9 - Sem ocorrência" não exigem transportadora.
+  // Só modalidades 2/3/4 (terceiros / transporte próprio) obrigam.
+  const transpOpcional = ["0", "1", "9"].includes(modFrete);
+  const transporteOk = transpOpcional || transportadoraId !== "";
 
   function canProceed(step: number) {
     if (step === 1) return clienteId !== "";
@@ -252,11 +254,11 @@ export default function NovaNotaPage() {
                 }}
               />
             </Field>
-            <Field label="Transportadora" required={modFrete !== "9"} hint={modFrete === "9" ? "Não se aplica" : "Obrigatória para esta modalidade"}>
+            <Field label="Transportadora" required={!transpOpcional} hint={transpOpcional ? "Opcional para esta modalidade" : "Obrigatória para esta modalidade"}>
               <TransportadoraPicker
                 transportadoras={transportadoras}
                 value={transportadoraId}
-                permitirNenhum={modFrete === "9"}
+                permitirNenhum={transpOpcional}
                 onChange={setTransportadoraId}
                 onCriado={(t) => { setTransportadoras((prev) => [...prev, t]); setTransportadoraId(t.id); }}
               />
