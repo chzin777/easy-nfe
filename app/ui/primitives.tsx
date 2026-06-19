@@ -125,7 +125,7 @@ export function Select({
   );
 }
 
-type Variante = "primary" | "secondary" | "danger" | "ghost";
+type Variante = "primary" | "secondary" | "danger" | "dangerSoft" | "warning" | "ghost";
 
 const variantes: Record<Variante, string> = {
   primary:
@@ -135,6 +135,10 @@ const variantes: Record<Variante, string> = {
     "bg-white text-[var(--foreground)] hover:bg-slate-50 border-[var(--border)] hover:border-slate-300",
   danger:
     "bg-[var(--danger)] text-white hover:bg-red-700 border-transparent shadow-[0_4px_14px_rgba(220,38,38,0.3)]",
+  dangerSoft:
+    "bg-[var(--danger-soft)] text-[var(--danger)] border-red-200 hover:bg-red-100",
+  warning:
+    "bg-[var(--warning-soft)] text-[var(--warning)] border-amber-200 hover:bg-amber-100",
   ghost:
     "bg-transparent text-[var(--muted)] hover:bg-slate-100 hover:text-[var(--foreground)] border-transparent",
 };
@@ -154,7 +158,7 @@ export function Button({
       disabled={disabled}
       className={
         "inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border px-4 py-2 " +
-        "text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed " +
+        "whitespace-nowrap text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed " +
         variantes[variante] +
         " " +
         className

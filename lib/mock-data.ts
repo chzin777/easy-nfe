@@ -77,6 +77,13 @@ export function rotulo(opcoes: Opcao[], value: string): string {
   return opcoes.find((o) => o.value === value)?.label ?? value;
 }
 
+// Rótulo compacto do tipo p/ a coluna da tabela: "55 - Saída", "65 - Saída".
+const SENTIDO_TIPO: Record<string, string> = { saida: "Saída", entrada: "Entrada" };
+export function rotuloTipoCurto(value: string): string {
+  const [mod, sentido] = value.split("-");
+  return `${mod} - ${SENTIDO_TIPO[sentido] ?? sentido}`;
+}
+
 export const STATUS_NOTA: Opcao[] = [
   { value: "autorizada", label: "Autorizada" },
   { value: "rascunho", label: "Rascunho" },

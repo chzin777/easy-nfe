@@ -20,7 +20,7 @@ import Modal from "@/app/ui/Modal";
 import Danfe from "@/app/ui/Danfe";
 import DanfeNFCe from "@/app/ui/DanfeNFCe";
 import LightningLoader from "@/app/ui/LightningLoader";
-import { STATUS_NOTA, TIPOS_NOTA, rotulo } from "@/lib/mock-data";
+import { STATUS_NOTA, TIPOS_NOTA, rotulo, rotuloTipoCurto } from "@/lib/mock-data";
 import type { StatusNota } from "@/lib/types";
 import { listarNotas, cancelarNota, obterXmlNota, type NotaCompleta } from "./actions";
 
@@ -45,6 +45,7 @@ export default function NotasEmitidasPage() {
   const [visualizar, setVisualizar] = useState<NotaCompleta | null>(null);
   const [processando, setProcessando] = useState(false);
   const [erroEvento, setErroEvento] = useState<string | null>(null);
+  const [gerandoPdf, setGerandoPdf] = useState(false);
 
   async function recarregar() {
     const lista = await listarNotas();
@@ -58,8 +59,40 @@ export default function NotasEmitidasPage() {
     void recarregar();
   }, []);
 
-  function imprimir() {
-    window.print();
+  // Gera o PDF do DANFE renderizado (#danfe-print) e baixa o arquivo.
+  async function baixarPdf(nota: NotaCompleta) {
+    const el = document.getElementById("danfe-print");
+    if (!el) return;
+    setGerandoPdf(true);
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas-pro"),
+        import("jspdf"),
+      ]);
+      const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+      const img = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ unit: "pt", format: "a4" });
+      const pw = pdf.internal.pageSize.getWidth();
+      const ph = pdf.internal.pageSize.getHeight();
+      const imgH = (canvas.height * pw) / canvas.width;
+      if (imgH <= ph) {
+        pdf.addImage(img, "PNG", 0, 0, pw, imgH);
+      } else {
+        // Documento mais alto que a página → fatia em múltiplas páginas A4.
+        let position = 0;
+        let remaining = imgH;
+        while (remaining > 0) {
+          pdf.addImage(img, "PNG", 0, position, pw, imgH);
+          remaining -= ph;
+          if (remaining > 0) { pdf.addPage(); position -= ph; }
+        }
+      }
+      pdf.save(`DANFE-${nota.numero}.pdf`);
+    } catch {
+      alert("Falha ao gerar o PDF. Tente novamente.");
+    } finally {
+      setGerandoPdf(false);
+    }
   }
 
   async function baixarXml(nota: NotaCompleta) {
@@ -185,7 +218,7 @@ export default function NotasEmitidasPage() {
     {
       chave: "tipo",
       cabecalho: "Tipo",
-      render: (n) => <span className="text-xs">{rotulo(TIPOS_NOTA, n.tipoNota)}</span>,
+      render: (n) => <span className="text-xs">{rotuloTipoCurto(n.tipoNota)}</span>,
     },
     {
       chave: "emissao",
@@ -221,15 +254,14 @@ export default function NotasEmitidasPage() {
       render: (n) => (
         <div className="flex justify-end gap-1">
           <Button
-            variante="ghost"
+            variante="warning"
             disabled={n.status !== "autorizada"}
             onClick={(e) => { e.stopPropagation(); abrirEvento(n, "cce"); }}
           >
             CC-e
           </Button>
           <Button
-            variante="ghost"
-            className="text-[var(--danger)]"
+            variante="dangerSoft"
             disabled={n.status !== "autorizada"}
             onClick={(e) => { e.stopPropagation(); abrirEvento(n, "cancelamento"); }}
           >
@@ -359,7 +391,7 @@ export default function NotasEmitidasPage() {
             {visualizar?.status === "autorizada" && (
               <Button variante="secondary" onClick={() => visualizar && baixarXml(visualizar)}>Salvar XML</Button>
             )}
-            <Button onClick={imprimir}>Imprimir / Salvar PDF</Button>
+            <Button onClick={() => visualizar && baixarPdf(visualizar)} disabled={gerandoPdf}>{gerandoPdf ? "Gerando PDF…" : "Baixar PDF"}</Button>
           </>
         }
       >
