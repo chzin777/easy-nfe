@@ -9,8 +9,8 @@ import Reveal from "./ui/Reveal";
 import ScrollVelocity from "./ui/ScrollVelocity";
 import ScrollLink from "./ui/ScrollLink";
 
-const WPP_PARCEIRO = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Sou contador(a) e quero ser parceiro(a) do easy-nfe. Gostaria de saber como funciona o programa de parcerias para contadores.");
-const WPP_VENDAS = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Tenho dúvidas sobre os planos do easy-nfe e gostaria de ajuda para escolher o ideal para minha empresa.");
+const WPP_PARCEIRO = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Sou contador(a) e quero ser parceiro(a) do Easy-NFe. Gostaria de saber como funciona o programa de parcerias para contadores.");
+const WPP_VENDAS = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Tenho dúvidas sobre os planos do Easy-NFe e gostaria de ajuda para escolher o ideal para minha empresa.");
 
 const RECURSOS = [
   { titulo: "Emissão de NF-e", desc: "Modelo 55 com autorização síncrona na SEFAZ em segundos.", icon: <IFile /> },
@@ -107,7 +107,7 @@ export default async function Landing() {
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <ScrollLink href="#topo" className="flex items-center gap-2.5 text-white transition hover:opacity-80">
             <span className="relative h-8 w-8 shrink-0">
-              <Image src="/images/logo/logo.png" alt="easy-nfe" fill className="object-contain" />
+              <Image src="/images/logo/logo.png" alt="Easy-NFe" fill className="object-contain" />
             </span>
             <span className="text-base font-bold tracking-tight">Easy NFe</span>
           </ScrollLink>
@@ -243,7 +243,7 @@ export default async function Landing() {
         <div className="mx-auto max-w-6xl px-6">
           <Reveal className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight">Quem usa, recomenda</h2>
-            <p className="mt-3 text-[var(--muted)]">Negócios que trocaram a planilha pelo easy-nfe.</p>
+            <p className="mt-3 text-[var(--muted)]">Negócios que trocaram a planilha pelo Easy-NFe.</p>
           </Reveal>
           <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {["1", "2", "3"].map((n) => (
@@ -272,9 +272,9 @@ export default async function Landing() {
               <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-violet-300">
                 Programa para contadores
               </span>
-              <h2 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl">Seja parceiro contábil do easy-nfe</h2>
+              <h2 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl">Seja parceiro contábil do Easy-NFe</h2>
               <p className="mt-4 text-slate-300">
-                Indique o easy-nfe e ganhe comissão recorrente por cliente ativo. Eles emitem NF-e em segundos;
+                Indique o Easy-NFe e ganhe comissão recorrente por cliente ativo. Eles emitem NF-e em segundos;
                 você acompanha tudo com menos planilha e menos retrabalho.
               </p>
             </Reveal>
@@ -461,13 +461,13 @@ export default async function Landing() {
           <div className="flex items-center text-white">
             <Image
               src="/images/logo/logo-completa.png"
-              alt="easy-nfe"
+              alt="Easy-NFe"
               width={863}
               height={309}
               className="h-11 w-auto"
             />
           </div>
-          <p className="text-xs">© {2026} easy-nfe · Emissão de NF-e. Todos os direitos reservados.</p>
+          <p className="text-xs">© {2026} Easy-NFe · Emissão de NF-e. Todos os direitos reservados.</p>
         </div>
       </footer>
     </div>

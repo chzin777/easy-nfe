@@ -686,7 +686,7 @@ export async function gerarBoletoAssinatura(input: {
       externalReference: user.id,
     });
 
-    const planoNome = user.licenca?.plano?.nome ?? "Assinatura easy-nfe";
+    const planoNome = user.licenca?.plano?.nome ?? "Assinatura Easy-NFe";
     const cobranca = await criarCobrancaBoleto({
       customer: cliente.id,
       value: input.valor,

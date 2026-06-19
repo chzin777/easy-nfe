@@ -41,7 +41,7 @@ export default function IntegracaoPage() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <a
-              href={whatsapp("Olá! Quero ativar integrações no easy-nfe.")}
+              href={whatsapp("Olá! Quero ativar integrações no Easy-NFe.")}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-6 py-3 text-base font-semibold text-white shadow-[0_4px_14px_rgba(82,39,255,0.45)] transition hover:-translate-y-0.5"
@@ -55,7 +55,7 @@ export default function IntegracaoPage() {
       {/* ---- OS 5 DIFERENCIAIS ---- */}
       <section className="space-y-6">
         <motion.div {...fade()} className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight">O que faz o easy-nfe diferente</h2>
+          <h2 className="text-3xl font-bold tracking-tight">O que faz o Easy-NFe diferente</h2>
           <p className="mt-3 text-[var(--muted)]">Recursos que você não encontra num emissor comum.</p>
         </motion.div>
 
@@ -118,7 +118,7 @@ export default function IntegracaoPage() {
           </p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <a
-              href={whatsapp("Olá! Quero ativar integrações (e-commerce/WhatsApp/DFe) no easy-nfe.")}
+              href={whatsapp("Olá! Quero ativar integrações (e-commerce/WhatsApp/DFe) no Easy-NFe.")}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-white px-7 py-3 text-base font-semibold text-[var(--primary)] shadow-lg transition hover:-translate-y-0.5"
@@ -137,7 +137,7 @@ export default function IntegracaoPage() {
 const DIFERENCIAIS: { titulo: string; desc: string; icon: ReactNode; disponivel: boolean; tags?: string[] }[] = [
   {
     titulo: "Vendeu online, nota emitida",
-    desc: "Conecte sua loja e marketplaces: a cada pedido pago, o easy-nfe emite a NF-e automaticamente. Sem digitar pedido nenhum.",
+    desc: "Conecte sua loja e marketplaces: a cada pedido pago, o Easy-NFe emite a NF-e automaticamente. Sem digitar pedido nenhum.",
     icon: <Svg d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" extra={<><path d="M3 6h18" /><path d="M16 10a4 4 0 0 1-8 0" /></>} />,
     disponivel: false,
     tags: ["Nuvemshop", "Shopify", "Mercado Livre", "WooCommerce"],

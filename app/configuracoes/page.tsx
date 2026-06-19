@@ -55,6 +55,7 @@ const empresaVazia: EmpresaDados = {
   proximoNumeroNFCe: "1",
   cscNFCe: "",
   idCscNFCe: "",
+  casasDecimaisQtd: "2",
 };
 
 export default function ConfiguracoesPage() {
@@ -490,6 +491,22 @@ function AbaAmbiente({
           </Field>
           <Field label="Próximo nº NF-e (mod. 55)">
             <Input type="number" min="1" value={form.proximoNumero} onChange={(e) => setE("proximoNumero", e.target.value)} />
+          </Field>
+          <Field
+            label="Casas decimais na quantidade"
+            hint="Ex.: 2 permite 1,50 Kg · 3 permite 1,500 · usado na emissão"
+          >
+            <Select
+              opcoes={[
+                { value: "0", label: "0 — somente inteiros (1)" },
+                { value: "1", label: "1 casa (1,5)" },
+                { value: "2", label: "2 casas (1,50)" },
+                { value: "3", label: "3 casas (1,500)" },
+                { value: "4", label: "4 casas (1,5000)" },
+              ]}
+              value={form.casasDecimaisQtd}
+              onChange={(e) => setE("casasDecimaisQtd", e.target.value)}
+            />
           </Field>
         </div>
       </section>

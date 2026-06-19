@@ -118,6 +118,8 @@ export type EmpresaDados = {
   proximoNumeroNFCe: string;
   cscNFCe: string;
   idCscNFCe: string;
+  // casas decimais na quantidade dos itens (0–4)
+  casasDecimaisQtd: string;
 };
 
 export type EmpresaResumo = { id: string; razaoSocial: string; cnpj: string; ativa: boolean };
@@ -178,7 +180,16 @@ export async function obterEmpresaAtiva(): Promise<EmpresaDados | null> {
     proximoNumeroNFCe: String(e.proximoNumeroNFCe),
     cscNFCe: e.cscNFCe ?? "",
     idCscNFCe: e.idCscNFCe ?? "",
+    casasDecimaisQtd: String(e.casasDecimaisQtd),
   };
+}
+
+// Casas decimais da quantidade configuradas na empresa ativa (0–4, padrão 2).
+export async function obterCasasDecimaisQtd(): Promise<number> {
+  const id = await empresaAtivaId();
+  if (!id) return 2;
+  const e = await prisma.emitente.findUnique({ where: { id }, select: { casasDecimaisQtd: true } });
+  return e?.casasDecimaisQtd ?? 2;
 }
 
 // Cria (sem id) ou atualiza (com id) a empresa. Sempre define como ativa. Devolve o id.
@@ -213,6 +224,7 @@ export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id
       proximoNumeroNFCe: Number(dados.proximoNumeroNFCe) || 1,
       cscNFCe: dados.cscNFCe?.trim() || null,
       idCscNFCe: dados.idCscNFCe?.replace(/\D/g, "") || null,
+      casasDecimaisQtd: Math.min(4, Math.max(0, Number(dados.casasDecimaisQtd) || 0)),
     };
 
     const { role } = await exigirSessao();

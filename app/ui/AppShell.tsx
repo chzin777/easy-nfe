@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import AvisoLicenca from "./AvisoLicenca";
@@ -12,6 +13,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const publica = pathname === "/" || pathname === "/login" || pathname === "/cadastro";
   const [estado, setEstado] = useState<EstadoLicenca | null>(null);
+  const [menuAberto, setMenuAberto] = useState(false);
 
   useEffect(() => {
     if (publica) return;
@@ -54,18 +56,35 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
       <div className="flex flex-1">
-        <Sidebar />
+        <Sidebar aberto={menuAberto} onFechar={() => setMenuAberto(false)} />
         <main className="flex-1 overflow-x-hidden">
+          {/* Barra superior mobile com botão de menu */}
+          <div className="sticky top-0 z-30 flex items-center border-b border-[var(--border)] bg-[var(--surface)]/95 px-4 py-2.5 backdrop-blur lg:hidden">
+            <button
+              onClick={() => setMenuAberto(true)}
+              aria-label="Abrir menu"
+              className="-ml-1 rounded-lg p-1.5 text-[var(--foreground)] hover:bg-slate-100"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></svg>
+            </button>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2">
+              <div className="relative h-7 w-7 shrink-0">
+                <Image src="/images/logo/logo.png" alt="Easy-NFe" fill className="object-contain" />
+              </div>
+              <span className="text-sm font-semibold">Easy-NFe</span>
+            </div>
+          </div>
           {pathname !== "/admin" && !pathname.startsWith("/admin/") && (
-            <div className="flex items-center justify-center gap-2 border-b border-[var(--border)] bg-slate-900 px-4 py-2 text-center text-xs font-medium text-slate-300">
-              <span className="relative flex h-2 w-2">
+            <div className="flex items-center justify-center gap-2 border-b border-[var(--border)] bg-slate-900 px-4 py-2 text-center text-[11px] font-medium text-slate-300 sm:text-xs">
+              <span className="relative flex h-2 w-2 shrink-0">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
               </span>
-              Integração SEFAZ-GO ativa · emissão em homologação e produção
+              <span className="hidden sm:inline">Integração SEFAZ-GO ativa · emissão em homologação e produção</span>
+              <span className="sm:hidden">SEFAZ-GO ativa · homologação e produção</span>
             </div>
           )}
-          <div className="mx-auto max-w-6xl px-8 py-8">{children}</div>
+          <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</div>
         </main>
       </div>
     </div>

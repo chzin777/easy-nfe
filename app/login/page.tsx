@@ -26,7 +26,7 @@ export default function LoginPage() {
       {/* Logo no canto superior esquerdo da página (fora do form) */}
       <Image
         src="/images/logo/logo-completa.png"
-        alt="easy-nfe"
+        alt="Easy-NFe"
         width={863}
         height={309}
         priority
@@ -85,7 +85,7 @@ export default function LoginPage() {
       <div className="relative hidden overflow-hidden bg-gradient-to-br from-[var(--primary)] via-[var(--primary-2)] to-indigo-700 lg:flex lg:flex-col lg:justify-center lg:px-14">
         <Image
           src="https://wallpapers.com/images/hd/purple-abstract-2gf414bg9xvsakmf.jpg"
-          alt="easy-nfe"
+          alt="Easy-NFe"
           fill
           priority
           sizes="50vw"
@@ -120,7 +120,7 @@ export default function LoginPage() {
             <p className="text-sm italic leading-relaxed text-white/90">
               “Reduzimos o tempo de emissão de notas em 80%. A integração com nosso ERP foi o divisor de águas.”
             </p>
-            <p className="mt-3 text-xs font-semibold text-white/70">— Cliente easy-nfe</p>
+            <p className="mt-3 text-xs font-semibold text-white/70">— Cliente Easy-NFe</p>
           </div>
         </div>
       </div>

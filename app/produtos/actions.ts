@@ -101,3 +101,35 @@ export async function excluirProduto(id: string): Promise<void> {
   const empresaId = await exigirEmpresa();
   await prisma.produto.deleteMany({ where: { id, empresaId } });
 }
+
+// codigo = só dígitos. completo = true quando tem 8 dígitos (válido p/ NF-e);
+// false = posição geral (capítulo/posição), serve só pra refinar a busca.
+export type NcmSugestao = { codigo: string; descricao: string; completo: boolean };
+
+// Busca NCMs oficiais por termo na tabela da BrasilAPI (grátis, sem chave).
+export async function buscarNcm(termo: string): Promise<NcmSugestao[]> {
+  const q = termo.trim();
+  if (q.length < 2) return [];
+  try {
+    const resp = await fetch(
+      `https://brasilapi.com.br/api/ncm/v1?search=${encodeURIComponent(q)}`,
+      { signal: AbortSignal.timeout(8000), headers: { Accept: "application/json" } },
+    );
+    if (!resp.ok) return [];
+    const dados = (await resp.json()) as Array<{ codigo?: string; descricao?: string }>;
+    return dados
+      .filter((d) => d.codigo && d.descricao)
+      .map((d) => {
+        const digitos = d.codigo!.replace(/\D/g, "");
+        // Remove tags HTML e asteriscos da descrição oficial.
+        const descricao = d.descricao!.replace(/<[^>]+>/g, "").replace(/\*/g, "").trim();
+        return { codigo: digitos, descricao, completo: digitos.length === 8 };
+      })
+      .filter((d) => d.codigo.length >= 2 && d.codigo.length <= 8)
+      // 8 dígitos primeiro, depois por código.
+      .sort((a, b) => Number(b.completo) - Number(a.completo) || a.codigo.localeCompare(b.codigo))
+      .slice(0, 40);
+  } catch {
+    return [];
+  }
+}

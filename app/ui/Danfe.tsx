@@ -284,7 +284,7 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
 
         <div className="mt-1 flex justify-between text-[7px] text-slate-500">
           <span>Data e hora da impressão: {dataEmissao} {horaEmissao}</span>
-          <span>easy-nfe · documento de demonstração · sem valor fiscal</span>
+          <span>Easy-NFe · documento de demonstração · sem valor fiscal</span>
         </div>
       </div>
     </div>

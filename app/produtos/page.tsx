@@ -26,6 +26,8 @@ import {
   excluirProduto,
 } from "./actions";
 import NovoProdutoModal from "./NovoProdutoModal";
+import NcmPicker from "./NcmPicker";
+import MoneyInput from "@/app/ui/MoneyInput";
 
 type Form = Omit<Produto, "id" | "codigoInterno">;
 
@@ -155,8 +157,8 @@ export default function ProdutosPage() {
       <Field label="Unidade de medida" required>
         <Select opcoes={UNIDADES} value={form.unidade} onChange={(e) => set("unidade", e.target.value)} />
       </Field>
-      <Field label="NCM" required hint="8 dígitos">
-        <Input value={form.ncm} onChange={(e) => set("ncm", e.target.value)} placeholder="00000000" />
+      <Field label="NCM" required hint="8 dígitos · busque pelo nome do produto">
+        <NcmPicker value={form.ncm} onChange={(v) => set("ncm", v)} nomeProduto={form.nome} />
       </Field>
     </div>
   );
@@ -167,7 +169,7 @@ export default function ProdutosPage() {
         <Select opcoes={ORIGENS} value={form.origem} onChange={(e) => set("origem", e.target.value)} />
       </Field>
       <Field label="Preço" required>
-        <Input type="number" step="0.01" min="0" value={form.preco} onChange={(e) => set("preco", Number(e.target.value))} />
+        <MoneyInput value={form.preco} onChange={(v) => set("preco", v)} />
       </Field>
       <Field label="Descrição do produto" className="sm:col-span-2">
         <Textarea value={form.descricao} onChange={(e) => set("descricao", e.target.value)} />

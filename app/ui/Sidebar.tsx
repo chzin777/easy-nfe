@@ -45,12 +45,24 @@ const grupos: Grupo[] = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({
+  aberto = false,
+  onFechar,
+}: {
+  aberto?: boolean;
+  onFechar?: () => void;
+}) {
   const pathname = usePathname();
   const [empresas, setEmpresas] = useState<EmpresaResumo[]>([]);
   const [role, setRole] = useState<string | null>(null);
   const [features, setFeatures] = useState<string[] | null>(null);
   const [colapsados, setColapsados] = useState<Set<string>>(new Set());
+
+  // Fecha o drawer mobile ao navegar.
+  useEffect(() => {
+    onFechar?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   const alternarGrupo = (titulo: string) =>
     setColapsados((prev) => {
@@ -92,7 +104,34 @@ export default function Sidebar() {
     .sort((a, b) => b.length - a.length)[0];
 
   return (
-    <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col bg-gradient-to-b from-[var(--sidebar)] to-[var(--sidebar-2)] text-slate-300">
+    <>
+      {/* Backdrop do drawer mobile */}
+      <AnimatePresence>
+        {aberto && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onFechar}
+            className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      <aside
+        className={
+          "fixed inset-y-0 left-0 z-50 flex h-screen w-72 max-w-[85vw] shrink-0 flex-col bg-gradient-to-b from-[var(--sidebar)] to-[var(--sidebar-2)] text-slate-300 transition-transform duration-300 ease-in-out " +
+          "lg:sticky lg:top-0 lg:z-auto lg:w-64 lg:max-w-none lg:translate-x-0 " +
+          (aberto ? "translate-x-0 shadow-2xl" : "-translate-x-full")
+        }
+      >
+        <button
+          onClick={onFechar}
+          aria-label="Fechar menu"
+          className="absolute right-3 top-3 rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+        </button>
       <div className="flex items-center gap-3 px-5 pb-3 pt-5">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
@@ -100,10 +139,10 @@ export default function Sidebar() {
           transition={{ type: "spring", stiffness: 300, damping: 18 }}
           className="relative h-10 w-10 shrink-0"
         >
-          <Image src="/images/logo/logo.png" alt="easy-nfe" fill className="object-contain" />
+          <Image src="/images/logo/logo.png" alt="Easy-NFe" fill className="object-contain" />
         </motion.div>
         <div className="leading-tight">
-          <p className="text-sm font-semibold text-white">easy-nfe</p>
+          <p className="text-sm font-semibold text-white">Easy-NFe</p>
           <p className="text-xs text-slate-400">Emissão de NF-e · GO</p>
         </div>
       </div>
@@ -185,6 +224,7 @@ export default function Sidebar() {
         </form>
       </div>
     </aside>
+    </>
   );
 }
 

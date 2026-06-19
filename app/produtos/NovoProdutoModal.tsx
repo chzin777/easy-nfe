@@ -7,6 +7,8 @@ import Stepper, { Step } from "@/app/ui/Stepper";
 import { ORIGENS, UNIDADES } from "@/lib/mock-data";
 import type { Produto } from "@/lib/types";
 import { criarProduto, type ProdutoInput } from "./actions";
+import NcmPicker from "./NcmPicker";
+import MoneyInput from "@/app/ui/MoneyInput";
 
 const vazio: ProdutoInput = {
   codigoBarras: "",
@@ -56,14 +58,16 @@ export default function NovoProdutoModal({
             <Field label="Código de barras (GTIN/EAN)"><Input value={form.codigoBarras} onChange={(e) => set("codigoBarras", e.target.value)} placeholder="Sem GTIN" /></Field>
             <Field label="Nome do produto" required><Input value={form.nome} onChange={(e) => set("nome", e.target.value)} /></Field>
             <Field label="Unidade de medida" required><Select opcoes={UNIDADES} value={form.unidade} onChange={(e) => set("unidade", e.target.value)} /></Field>
-            <Field label="NCM" required hint="8 dígitos"><Input value={form.ncm} onChange={(e) => set("ncm", e.target.value)} placeholder="00000000" /></Field>
+            <Field label="NCM" required hint="8 dígitos · busque pelo nome do produto">
+              <NcmPicker value={form.ncm} onChange={(v) => set("ncm", v)} nomeProduto={form.nome} />
+            </Field>
           </div>
         </Step>
         <Step>
           <SectionTitle>Origem, preço e descrição</SectionTitle>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Tipo de origem" required><Select opcoes={ORIGENS} value={form.origem} onChange={(e) => set("origem", e.target.value)} /></Field>
-            <Field label="Preço" required><Input type="number" step="0.01" min="0" value={form.preco} onChange={(e) => set("preco", Number(e.target.value))} /></Field>
+            <Field label="Preço" required><MoneyInput value={form.preco} onChange={(v) => set("preco", v)} /></Field>
             <Field label="Descrição do produto" className="sm:col-span-2"><Textarea value={form.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
           </div>
         </Step>

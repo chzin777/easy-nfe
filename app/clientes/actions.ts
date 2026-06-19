@@ -91,3 +91,44 @@ export async function excluirCliente(id: string): Promise<void> {
   const empresaId = await exigirEmpresa();
   await prisma.cliente.deleteMany({ where: { id, empresaId } });
 }
+
+export type DadosCnpj = {
+  razaoSocial: string;
+  nomeFantasia: string;
+  telefone: string;
+  email: string;
+  endereco: { cep: string; logradouro: string; numero: string; complemento: string; bairro: string; municipio: string; uf: string };
+};
+
+// Consulta dados públicos do CNPJ na BrasilAPI (grátis, sem chave).
+export async function buscarCnpj(cnpj: string): Promise<DadosCnpj | null> {
+  const d = cnpj.replace(/\D/g, "");
+  if (d.length !== 14) return null;
+  try {
+    const resp = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${d}`, {
+      signal: AbortSignal.timeout(8000),
+      headers: { Accept: "application/json" },
+    });
+    if (!resp.ok) return null;
+    const j = (await resp.json()) as Record<string, unknown>;
+    const s = (k: string) => (typeof j[k] === "string" ? (j[k] as string) : "");
+    const n = (k: string) => (j[k] == null ? "" : String(j[k]));
+    return {
+      razaoSocial: s("razao_social"),
+      nomeFantasia: s("nome_fantasia"),
+      telefone: n("ddd_telefone_1"),
+      email: s("email"),
+      endereco: {
+        cep: n("cep"),
+        logradouro: s("logradouro"),
+        numero: n("numero"),
+        complemento: s("complemento"),
+        bairro: s("bairro"),
+        municipio: s("municipio"),
+        uf: s("uf"),
+      },
+    };
+  } catch {
+    return null;
+  }
+}

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Button,
   Field,
-  Input,
   PageHeader,
   SectionTitle,
   Select,
@@ -24,6 +23,16 @@ import ProdutoPicker from "./ProdutoPicker";
 import TransportadoraPicker from "./TransportadoraPicker";
 import { listarProdutos } from "@/app/produtos/actions";
 import { listarTransportadoras } from "@/app/transportadoras/actions";
+import { obterCasasDecimaisQtd } from "@/app/configuracoes/actions";
+
+// Arredonda para N casas decimais (evita lixo de ponto flutuante).
+function arred(v: number, casas: number) {
+  return Number(v.toFixed(casas));
+}
+// Formata a quantidade conforme as casas decimais configuradas (vírgula BR).
+function fmtQtd(v: number, casas: number) {
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: casas });
+}
 
 export default function NovaNotaPage() {
   const [tipoNota, setTipoNota] = useState("55-saida");
@@ -39,6 +48,7 @@ export default function NovaNotaPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [transportadoras, setTransportadoras] = useState<Transportadora[]>([]);
+  const [casas, setCasas] = useState(2);
 
   const [emitindo, setEmitindo] = useState(false);
   const [resultado, setResultado] = useState<EmitirResultado | null>(null);
@@ -46,14 +56,16 @@ export default function NovaNotaPage() {
 
   useEffect(() => {
     (async () => {
-      const [c, p, t] = await Promise.all([
+      const [c, p, t, cd] = await Promise.all([
         listarClientes(),
         listarProdutos(),
         listarTransportadoras(),
+        obterCasasDecimaisQtd(),
       ]);
       setClientes(c);
       setProdutos(p);
       setTransportadoras(t);
+      setCasas(cd);
     })();
   }, []);
 
@@ -63,21 +75,36 @@ export default function NovaNotaPage() {
     [itens],
   );
   const cliente = clientes.find((c) => c.id === clienteId);
+  const transportadora = transportadoras.find((t) => t.id === transportadoraId);
+
+  // Menor quantidade permitida conforme as casas decimais (ex.: 2 → 0,01).
+  const menorQtd = casas > 0 ? Number(Math.pow(10, -casas).toFixed(casas)) : 1;
 
   function adicionarItem() {
     const prod = produtos.find((p) => p.id === produtoSel);
-    if (!prod || qtd <= 0) return;
+    const q = arred(qtd, casas);
+    if (!prod || q <= 0) return;
     setItens((lista) => {
       const existente = lista.find((i) => i.produtoId === prod.id);
       if (existente) {
         return lista.map((i) =>
-          i.produtoId === prod.id ? { ...i, quantidade: i.quantidade + qtd } : i,
+          i.produtoId === prod.id ? { ...i, quantidade: arred(i.quantidade + q, casas) } : i,
         );
       }
-      return [...lista, { produtoId: prod.id, nome: prod.nome, quantidade: qtd, precoUnitario: prod.preco }];
+      return [...lista, { produtoId: prod.id, nome: prod.nome, quantidade: q, precoUnitario: prod.preco }];
     });
     setProdutoSel("");
     setQtd(1);
+    // Feedback tátil leve ao adicionar (mobile).
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(12);
+  }
+
+  function definirQtd(produtoId: string, valor: number) {
+    setItens((lista) =>
+      lista.map((i) =>
+        i.produtoId === produtoId ? { ...i, quantidade: Math.max(menorQtd, arred(valor, casas)) } : i,
+      ),
+    );
   }
 
   function removerItem(produtoId: string) {
@@ -123,7 +150,7 @@ export default function NovaNotaPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-28 lg:pb-0">
       <PageHeader
         titulo="Emitir nova nota fiscal"
         subtitulo="Monte a nota em etapas: tipo, produtos, transporte e finalização."
@@ -135,6 +162,16 @@ export default function NovaNotaPage() {
         completeButtonText="Emitir nota"
         canProceed={canProceed}
         onFinalStepCompleted={emitir}
+        resumoMobile={
+          <>
+            <div className="leading-tight">
+              <span className="block text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                {itens.length} {itens.length === 1 ? "item" : "itens"}
+              </span>
+              <span className="block text-base font-semibold text-[var(--primary)]">{formatBRL(total)}</span>
+            </div>
+          </>
+        }
       >
         {/* Etapa 1 */}
         <Step>
@@ -165,7 +202,7 @@ export default function NovaNotaPage() {
         {/* Etapa 2 */}
         <Step>
           <SectionTitle>Produtos</SectionTitle>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_140px_auto] sm:items-end">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
             <Field label="Produto">
               <ProdutoPicker
                 produtos={produtos}
@@ -175,25 +212,63 @@ export default function NovaNotaPage() {
               />
             </Field>
             <Field label="Quantidade">
-              <Input type="number" min="1" value={qtd} onChange={(e) => setQtd(Number(e.target.value))} />
+              <QtyStepper valor={qtd} onChange={setQtd} casas={casas} />
             </Field>
             <button
               type="button"
               onClick={adicionarItem}
               disabled={!produtoSel}
-              className="flex h-[46px] cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[var(--success)] px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex min-h-[48px] cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[var(--success)] px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
               Adicionar
             </button>
           </div>
 
-          <div className="mt-5 overflow-hidden rounded-lg border border-[var(--border)]">
+          {/* Mobile: cards com quantidade ± */}
+          <div className="mt-5 space-y-2.5 sm:hidden">
+            {itens.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-[var(--border)] px-4 py-10 text-center text-sm text-[var(--muted)]">
+                Nenhum produto adicionado.
+              </p>
+            ) : (
+              <>
+                {itens.map((i) => (
+                  <div key={i.produtoId} className="rounded-xl border border-[var(--border)] bg-white p-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{i.nome}</p>
+                        <p className="text-xs text-[var(--muted)]">{formatBRL(i.precoUnitario)}/un</p>
+                      </div>
+                      <button
+                        onClick={() => removerItem(i.produtoId)}
+                        aria-label="Remover item"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--danger-soft)] text-[var(--danger)] transition hover:bg-red-100"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                      </button>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between">
+                      <QtyStepper valor={i.quantidade} onChange={(v) => definirQtd(i.produtoId, v)} casas={casas} />
+                      <span className="text-base font-semibold">{formatBRL(i.quantidade * i.precoUnitario)}</span>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between rounded-xl bg-[var(--primary-soft)] px-4 py-3">
+                  <span className="text-sm font-medium">Total da nota</span>
+                  <span className="text-lg font-bold text-[var(--primary)]">{formatBRL(total)}</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Desktop: tabela */}
+          <div className="mt-5 hidden overflow-x-auto rounded-lg border border-[var(--border)] sm:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-slate-50 text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                   <th className="px-4 py-2.5">Produto</th>
-                  <th className="px-4 py-2.5 text-right">Qtd.</th>
+                  <th className="px-4 py-2.5 text-center">Qtd.</th>
                   <th className="px-4 py-2.5 text-right">Preço un.</th>
                   <th className="px-4 py-2.5 text-right">Subtotal</th>
                   <th className="px-4 py-2.5"></th>
@@ -210,7 +285,11 @@ export default function NovaNotaPage() {
                   itens.map((i) => (
                     <tr key={i.produtoId} className="border-b border-[var(--border)] last:border-0">
                       <td className="px-4 py-3 font-medium">{i.nome}</td>
-                      <td className="px-4 py-3 text-right">{i.quantidade}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-center">
+                          <QtyStepper valor={i.quantidade} onChange={(v) => definirQtd(i.produtoId, v)} casas={casas} compacto />
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-right">{formatBRL(i.precoUnitario)}</td>
                       <td className="px-4 py-3 text-right font-medium">{formatBRL(i.quantidade * i.precoUnitario)}</td>
                       <td className="px-4 py-3 text-right">
@@ -273,15 +352,50 @@ export default function NovaNotaPage() {
 
         {/* Etapa 4 */}
         <Step>
-          <SectionTitle>Informações adicionais e resumo</SectionTitle>
-          <Field label="Informações complementares">
-            <Textarea value={info} onChange={(e) => setInfo(e.target.value)} placeholder="Dados adicionais de interesse do fisco ou do destinatário…" />
-          </Field>
-          <div className="mt-5 grid grid-cols-2 gap-3 rounded-lg border border-[var(--border)] bg-slate-50 p-4 text-sm sm:grid-cols-4">
-            <Resumo rotulo="Tipo" valor={rotulo(TIPOS_NOTA, tipoNota)} />
-            <Resumo rotulo="Cliente" valor={cliente?.nome ?? "—"} />
-            <Resumo rotulo="Itens" valor={String(itens.length)} />
-            <Resumo rotulo="Total" valor={formatBRL(total)} destaque />
+          <SectionTitle>Conferência e finalização</SectionTitle>
+          <p className="-mt-2 mb-4 text-sm text-[var(--muted)]">
+            Revise todos os dados abaixo antes de emitir. Confira produtos, quantidades, valores e transporte.
+          </p>
+
+          {/* Dados gerais */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-[var(--border)] bg-slate-50 p-4 text-sm sm:grid-cols-3">
+            <Resumo rotulo="Tipo de nota" valor={rotulo(TIPOS_NOTA, tipoNota)} />
+            <Resumo rotulo="Destinatário" valor={cliente?.nome ?? "—"} />
+            <Resumo rotulo="Documento" valor={cliente?.documento ?? "—"} />
+            <Resumo rotulo="Modalidade do frete" valor={rotulo(MODALIDADES_FRETE, modFrete)} />
+            <Resumo rotulo="Transportadora" valor={transportadora?.nome ?? "Sem transporte / retirada"} />
+          </div>
+
+          {/* Produtos da nota */}
+          <div className="mt-4 overflow-hidden rounded-xl border border-[var(--border)]">
+            <div className="border-b border-[var(--border)] bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
+              Produtos · {itens.length} {itens.length === 1 ? "item" : "itens"}
+            </div>
+            {itens.length === 0 ? (
+              <p className="px-4 py-6 text-center text-sm text-[var(--muted)]">Nenhum produto adicionado.</p>
+            ) : (
+              <ul className="divide-y divide-[var(--border)]">
+                {itens.map((i) => (
+                  <li key={i.produtoId} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{i.nome}</p>
+                      <p className="text-xs text-[var(--muted)]">{fmtQtd(i.quantidade, casas)} × {formatBRL(i.precoUnitario)}</p>
+                    </div>
+                    <span className="shrink-0 font-medium">{formatBRL(i.quantidade * i.precoUnitario)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex items-center justify-between border-t border-[var(--border)] bg-[var(--primary-soft)] px-4 py-3">
+              <span className="text-sm font-semibold">Total da nota</span>
+              <span className="text-lg font-bold text-[var(--primary)]">{formatBRL(total)}</span>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <Field label="Informações complementares">
+              <Textarea value={info} onChange={(e) => setInfo(e.target.value)} placeholder="Dados adicionais de interesse do fisco ou do destinatário…" />
+            </Field>
           </div>
         </Step>
       </Stepper>
@@ -372,6 +486,76 @@ export default function NovaNotaPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// Seletor de quantidade: botões ± grandes + campo central editável que aceita
+// decimais (vírgula). `casas` define quantas casas após a vírgula.
+function QtyStepper({
+  valor,
+  onChange,
+  casas,
+  compacto,
+}: {
+  valor: number;
+  onChange: (valor: number) => void;
+  casas: number;
+  compacto?: boolean;
+}) {
+  const [foco, setFoco] = useState(false);
+  const [txt, setTxt] = useState("");
+  const passo = 1;
+  const menor = casas > 0 ? Number(Math.pow(10, -casas).toFixed(casas)) : 1;
+  const arr = (v: number) => Number(v.toFixed(casas));
+
+  // Converte texto BR ("1,5" / "1.5") em número.
+  function parse(s: string) {
+    let c = s.replace(/[^\d.,]/g, "").replace(/\./g, ",");
+    const p = c.split(",");
+    c = p.shift()! + (p.length ? "," + p.join("") : "");
+    c = c.replace(",", ".");
+    return c === "" || c === "." ? 0 : Number(c);
+  }
+
+  const display = foco
+    ? txt
+    : valor.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: casas });
+
+  const btn = compacto ? "h-8 w-8" : "h-12 w-12 sm:h-[46px] sm:w-11";
+  const larguraNum = compacto ? "w-12" : "w-16";
+
+  return (
+    <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-white">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(menor, arr(valor - passo)))}
+        disabled={valor <= menor}
+        aria-label="Diminuir"
+        className={"flex items-center justify-center text-lg font-medium text-[var(--foreground)] transition hover:bg-slate-50 disabled:opacity-30 " + btn}
+      >
+        −
+      </button>
+      <input
+        type="text"
+        inputMode={casas > 0 ? "decimal" : "numeric"}
+        value={display}
+        onFocus={() => {
+          setFoco(true);
+          setTxt(valor.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: casas }));
+        }}
+        onChange={(e) => { setTxt(e.target.value); onChange(arr(parse(e.target.value))); }}
+        onBlur={() => { setFoco(false); onChange(Math.max(menor, arr(parse(txt)))); }}
+        className={"border-x border-[var(--border)] py-2 text-center text-sm font-semibold tabular-nums outline-none focus:bg-[var(--primary-soft)]/40 " + larguraNum}
+      />
+      <button
+        type="button"
+        onClick={() => onChange(arr(valor + passo))}
+        aria-label="Aumentar"
+        className={"flex items-center justify-center text-lg font-medium text-[var(--foreground)] transition hover:bg-slate-50 " + btn}
+      >
+        +
+      </button>
     </div>
   );
 }

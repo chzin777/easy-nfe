@@ -1,7 +1,7 @@
 import { prisma, comRetry } from "@/lib/prisma";
 import CadastroForm from "./CadastroForm";
 
-export const metadata = { title: "Criar conta · easy-nfe" };
+export const metadata = { title: "Criar conta · Easy-NFe" };
 
 export type PlanoOpcao = { id: string; nome: string; sobConsulta: boolean };
 

@@ -248,6 +248,9 @@ model Emitente {
   serie         Int      @default(1)
   proximoNumero Int      @default(1)
 
+  // casas decimais permitidas na quantidade dos itens (qCom). 0–4. Padrão 2.
+  casasDecimaisQtd Int   @default(2)
+
   // NFC-e (modelo 65) — série/numeração próprias + CSC (Código de Segurança do
   // Contribuinte) emitido pela SEFAZ, usado no hash do QR Code.
   serieNFCe         Int     @default(1)

@@ -20,6 +20,8 @@ interface StepperProps extends HTMLAttributes<HTMLDivElement> {
   completeButtonText?: string;
   disableStepIndicators?: boolean;
   canProceed?: (step: number) => boolean;
+  /** Conteúdo extra exibido na barra fixa inferior no mobile (ex.: total da nota). */
+  resumoMobile?: ReactNode;
 }
 
 export default function Stepper({
@@ -32,10 +34,12 @@ export default function Stepper({
   completeButtonText = "Concluir",
   disableStepIndicators = false,
   canProceed,
+  resumoMobile,
   ...rest
 }: StepperProps) {
   const [currentStep, setCurrentStep] = useState<number>(initialStep);
   const [direction, setDirection] = useState<number>(0);
+  const rootRef = useRef<HTMLDivElement>(null);
   const stepsArray = Children.toArray(children);
   const totalSteps = stepsArray.length;
   const isCompleted = currentStep > totalSteps;
@@ -46,6 +50,12 @@ export default function Stepper({
     setCurrentStep(newStep);
     if (newStep > totalSteps) onFinalStepCompleted();
     else onStepChange(newStep);
+    // Rola o topo do card pra vista ao trocar de passo (mobile).
+    if (newStep <= totalSteps && typeof window !== "undefined") {
+      requestAnimationFrame(() =>
+        rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    }
   };
 
   const handleBack = () => {
@@ -66,9 +76,9 @@ export default function Stepper({
   };
 
   return (
-    <div className="w-full" {...rest}>
+    <div className="w-full scroll-mt-20" ref={rootRef} {...rest}>
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_8px_30px_rgba(16,24,40,0.06)]">
-        <div className="flex w-full items-center gap-2 bg-gradient-to-r from-slate-50 to-white px-8 py-6">
+        <div className="flex w-full items-center gap-2 bg-gradient-to-r from-slate-50 to-white px-4 py-5 sm:px-8 sm:py-6">
           {stepsArray.map((_, index) => {
             const stepNumber = index + 1;
             const isNotLastStep = index < totalSteps - 1;
@@ -94,20 +104,30 @@ export default function Stepper({
           isCompleted={isCompleted}
           currentStep={currentStep}
           direction={direction}
-          className="px-8"
+          className="px-4 sm:px-8"
         >
           {stepsArray[currentStep - 1]}
         </StepContentWrapper>
 
         {!isCompleted && (
-          <div className="px-8 pb-8">
-            <div className={`mt-6 flex ${currentStep !== 1 ? "justify-between" : "justify-end"}`}>
+          <div
+            className={
+              "px-4 pb-6 sm:px-8 sm:pb-8 " +
+              // Mobile: barra fixa no rodapé, no alcance do polegar.
+              "max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-30 max-lg:border-t max-lg:border-[var(--border)] " +
+              "max-lg:bg-[var(--surface)]/95 max-lg:px-4 max-lg:pt-3 max-lg:shadow-[0_-4px_24px_rgba(16,24,40,0.10)] max-lg:backdrop-blur " +
+              "max-lg:pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+            }
+          >
+            {resumoMobile && (
+              <div className="mb-2.5 flex items-center justify-between lg:hidden">{resumoMobile}</div>
+            )}
+            <div className={`flex gap-3 sm:mt-6 ${currentStep !== 1 ? "justify-between" : "justify-end"}`}>
               {currentStep !== 1 && (
                 <motion.button
-                  whileHover={{ x: -2 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={handleBack}
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                  className="inline-flex min-h-[48px] items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 max-lg:border max-lg:border-[var(--border)]"
                 >
                   ← {backButtonText}
                 </motion.button>
@@ -117,7 +137,7 @@ export default function Stepper({
                 whileTap={{ scale: bloqueado ? 1 : 0.97 }}
                 onClick={isLastStep ? handleComplete : handleNext}
                 disabled={bloqueado}
-                className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-5 py-2 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(82,39,255,0.35)] transition disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+                className="inline-flex min-h-[48px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-5 py-2 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(82,39,255,0.35)] transition disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none sm:flex-none"
               >
                 {isLastStep ? completeButtonText : nextButtonText} →
               </motion.button>
@@ -183,16 +203,7 @@ function SlideTransition({ children, direction, onHeightReady }: SlideTransition
       animate="center"
       exit="exit"
       transition={{ duration: 0.4 }}
-      style={{
-        position: "absolute",
-        left: 0,
-        right: 0,
-        top: 0,
-        paddingLeft: "2rem",
-        paddingRight: "2rem",
-        paddingTop: "1.5rem",
-        paddingBottom: "0.5rem",
-      }}
+      className="absolute left-0 right-0 top-0 px-4 pb-2 pt-6 sm:px-8"
     >
       {children}
     </motion.div>

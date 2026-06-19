@@ -28,14 +28,14 @@ export function PageHeader({
   acao?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-5">
+    <div className="flex flex-col gap-3 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="animate-fade-up">
-        <h1 className="text-2xl font-semibold tracking-tight">{titulo}</h1>
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{titulo}</h1>
         {subtitulo && (
           <p className="mt-1.5 text-sm text-[var(--muted)]">{subtitulo}</p>
         )}
       </div>
-      {acao}
+      {acao && <div className="shrink-0">{acao}</div>}
     </div>
   );
 }
