@@ -45,15 +45,19 @@ export type ItemNFe = {
 
 export type DadosNFe = {
   tpAmb: "1" | "2"; // 1 produção | 2 homologação
+  mod?: "55" | "65"; // modelo do documento (default 55)
   cUF: string; // código IBGE da UF (GO = 52)
   serie: string;
   nNF: string; // número da nota
   natOp: string;
   emit: EmitenteNFe;
-  dest: DestinatarioNFe;
+  dest?: DestinatarioNFe | null; // opcional na NFC-e (consumidor não identificado)
   itens: ItemNFe[];
   infCpl?: string;
   modFrete: string; // 0-4, 9
+  // CSC + idCSC (cIdToken) — obrigatórios para gerar o QR Code da NFC-e.
+  csc?: string;
+  idCsc?: string;
 };
 
 export type ResultadoEmissao = {
@@ -64,6 +68,8 @@ export type ResultadoEmissao = {
   nProt: string | null;
   xmlAutorizado: string | null; // nfeProc completo, quando autorizada
   xmlEnviado: string; // NFe assinada que foi transmitida
+  qrCode?: string | null; // conteúdo do QR Code (NFC-e)
+  urlChave?: string | null; // URL de consulta por chave (NFC-e)
 };
 
 export type ResultadoEvento = {

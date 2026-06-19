@@ -1,4 +1,5 @@
 import { montarChave } from "./chave";
+import { montarQrCode } from "./qrcode";
 import type { DadosNFe, EnderecoNFe, ItemNFe } from "./types";
 
 // Escapa caracteres reservados de XML em conteúdo textual.
@@ -72,18 +73,28 @@ function detXml(item: ItemNFe, nItem: number, crt: string): string {
 
 // Monta a <NFe> não assinada e devolve também a chave de acesso.
 // dhEmi e os campos variáveis de chave (cNF) são passados de fora p/ ser determinístico.
+// Quando mod=65 (NFC-e) devolve também o <infNFeSupl> (QR Code), que o emissor
+// injeta após a assinatura (ordem do schema: infNFe → infNFeSupl → Signature).
 export function montarNFe(
   dados: DadosNFe,
   dhEmi: string,
   cNF: string,
-): { xml: string; chave: string } {
+): {
+  xml: string;
+  chave: string;
+  infNFeSupl: string | null;
+  qrCode: string | null;
+  urlChave: string | null;
+} {
+  const mod = dados.mod ?? "55";
+  const nfce = mod === "65";
   const cnpj = dados.emit.cnpj.replace(/\D/g, "");
   const aamm = dhEmi.slice(2, 4) + dhEmi.slice(5, 7);
   const chave = montarChave({
     cUF: dados.cUF,
     aamm,
     cnpj,
-    mod: "55",
+    mod,
     serie: dados.serie,
     nNF: dados.nNF,
     tpEmis: "1",
@@ -94,12 +105,16 @@ export function montarNFe(
   const cMunFG = dados.emit.ender.cMun ?? "";
   const dets = dados.itens.map((it, i) => detXml(it, i + 1, dados.emit.crt)).join("");
 
+  // NFC-e: DANFE em cupom (tpImp=4), operação presencial (indPres=1), sempre interna
+  // (idDest=1). NF-e 55: DANFE normal (tpImp=1), indPres=1 (mantido como já estava).
+  const tpImp = nfce ? "4" : "1";
+
   const ide =
     `<ide>` +
     `<cUF>${dados.cUF}</cUF><cNF>${cNF}</cNF><natOp>${esc(dados.natOp)}</natOp>` +
-    `<mod>55</mod><serie>${dados.serie}</serie><nNF>${dados.nNF}</nNF>` +
+    `<mod>${mod}</mod><serie>${dados.serie}</serie><nNF>${dados.nNF}</nNF>` +
     `<dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>1</idDest>` +
-    `<cMunFG>${cMunFG}</cMunFG><tpImp>1</tpImp><tpEmis>1</tpEmis>` +
+    `<cMunFG>${cMunFG}</cMunFG><tpImp>${tpImp}</tpImp><tpEmis>1</tpEmis>` +
     `<cDV>${chave.slice(-1)}</cDV><tpAmb>${dados.tpAmb}</tpAmb><finNFe>1</finNFe>` +
     `<indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi>` +
     `<verProc>easy-nfe-1.0</verProc>` +
@@ -113,17 +128,20 @@ export function montarNFe(
     `<IE>${dados.emit.ie.replace(/\D/g, "")}</IE><CRT>${dados.emit.crt}</CRT>` +
     `</emit>`;
 
+  // dest é opcional na NFC-e (consumidor não identificado). Quando ausente,
+  // omite todo o bloco. Quando presente, monta conforme o schema 4.00.
   const d = dados.dest;
-  const dest =
-    `<dest>` +
-    tagDoc(d.doc) +
-    `<xNome>${esc(d.xNome)}</xNome>` +
-    // enderDest é opcional no schema; só inclui se houver logradouro (evita tags vazias = rejeição 225).
-    (d.ender?.xLgr?.trim() ? enderXml("enderDest", d.ender) : "") +
-    // Schema NFe 4.00: indIEDest precede IE. Inverter gera rejeição 225 (falha de schema).
-    `<indIEDest>${d.indIEDest}</indIEDest>` +
-    (d.indIEDest === "1" && d.ie ? `<IE>${d.ie.replace(/\D/g, "")}</IE>` : "") +
-    `</dest>`;
+  const dest = d
+    ? `<dest>` +
+      tagDoc(d.doc) +
+      `<xNome>${esc(d.xNome)}</xNome>` +
+      // enderDest é opcional no schema; só inclui se houver logradouro (evita tags vazias = rejeição 225).
+      (d.ender?.xLgr?.trim() ? enderXml("enderDest", d.ender) : "") +
+      // Schema NFe 4.00: indIEDest precede IE. Inverter gera rejeição 225 (falha de schema).
+      `<indIEDest>${d.indIEDest}</indIEDest>` +
+      (d.indIEDest === "1" && d.ie ? `<IE>${d.ie.replace(/\D/g, "")}</IE>` : "") +
+      `</dest>`
+    : "";
 
   const total =
     `<total><ICMSTot>` +
@@ -153,5 +171,28 @@ export function montarNFe(
     infAdic +
     `</infNFe></NFe>`;
 
-  return { xml, chave };
+  // QR Code (NFC-e). Sem CSC/idCSC não há como gerar o hash → erro explícito.
+  let infNFeSupl: string | null = null;
+  let qrCode: string | null = null;
+  let urlChave: string | null = null;
+  if (nfce) {
+    if (!dados.csc || !dados.idCsc) {
+      throw new Error(
+        "NFC-e exige CSC e ID do CSC (cIdToken). Cadastre-os em Configurações antes de emitir.",
+      );
+    }
+    ({ qrCode, urlChave } = montarQrCode({
+      chave,
+      tpAmb: dados.tpAmb,
+      idCsc: dados.idCsc,
+      csc: dados.csc,
+    }));
+    infNFeSupl =
+      `<infNFeSupl>` +
+      `<qrCode>${esc(qrCode)}</qrCode>` +
+      `<urlChave>${urlChave}</urlChave>` +
+      `</infNFeSupl>`;
+  }
+
+  return { xml, chave, infNFeSupl, qrCode, urlChave };
 }

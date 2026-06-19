@@ -47,8 +47,13 @@ export async function emitirNFe(
 ): Promise<ResultadoEmissao> {
   const dhEmi = dataHoraBrasilia();
   const cNF = gerarCNF(dados.nNF);
-  const { xml, chave } = montarNFe(dados, dhEmi, cNF);
-  const nfeAssinada = assinar(xml, `NFe${chave}`, cert, "infNFe");
+  const { xml, chave, infNFeSupl, qrCode, urlChave } = montarNFe(dados, dhEmi, cNF);
+  const assinada0 = assinar(xml, `NFe${chave}`, cert, "infNFe");
+  // NFC-e: <infNFeSupl> entra entre </infNFe> e <Signature> (ordem do schema).
+  // A assinatura referencia só infNFe, então injetar depois não a invalida.
+  const nfeAssinada = infNFeSupl
+    ? assinada0.replace(/<Signature\b/, `${infNFeSupl}<Signature`)
+    : assinada0;
 
   const enviNFe =
     `<enviNFe versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">` +
@@ -67,7 +72,7 @@ export async function emitirNFe(
       ? `<nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">${nfeAssinada}${prot}</nfeProc>`
       : null;
 
-  return { ok, cStat, xMotivo, chave, nProt, xmlAutorizado, xmlEnviado: nfeAssinada };
+  return { ok, cStat, xMotivo, chave, nProt, xmlAutorizado, xmlEnviado: nfeAssinada, qrCode, urlChave };
 }
 
 // Cancela uma NF-e autorizada (evento 110111). Exige nProt e justificativa (15-255 chars).

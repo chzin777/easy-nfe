@@ -18,6 +18,7 @@ import {
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Danfe from "@/app/ui/Danfe";
+import DanfeNFCe from "@/app/ui/DanfeNFCe";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { STATUS_NOTA, TIPOS_NOTA, rotulo } from "@/lib/mock-data";
 import type { StatusNota } from "@/lib/types";
@@ -364,7 +365,11 @@ export default function NotasEmitidasPage() {
       >
         {visualizar && (
           <div id="danfe-print">
-            <Danfe nota={visualizar} />
+            {visualizar.modelo === "65" ? (
+              <DanfeNFCe nota={visualizar} />
+            ) : (
+              <Danfe nota={visualizar} />
+            )}
           </div>
         )}
       </Modal>

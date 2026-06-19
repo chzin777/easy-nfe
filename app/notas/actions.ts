@@ -79,22 +79,37 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     const cUF = UF_IBGE[empresa.uf];
     if (!cUF) return { ok: false, erro: `UF do emitente inválida: ${empresa.uf}` };
 
+    // Modelo do documento decidido pelo tipo de nota ("65-saida" → NFC-e).
+    const modelo = input.tipoNota.startsWith("65") ? "65" : "55";
+    const nfce = modelo === "65";
+
+    // NFC-e exige CSC + idCSC (cIdToken) da SEFAZ para o QR Code.
+    if (nfce && (!empresa.cscNFCe || !empresa.idCscNFCe)) {
+      return {
+        ok: false,
+        erro: "NFC-e exige CSC e ID do CSC. Cadastre-os em Configurações › Emissão antes de emitir.",
+      };
+    }
+
     const cliente = await prisma.cliente.findFirst({ where: { id: input.clienteId, empresaId } });
     if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
 
     // NF-e modelo 55 exige endereço completo do destinatário (SEFAZ rejeita 225 sem ele).
-    const camposEnd: [string, string | null][] = [
-      ["logradouro", cliente.logradouro], ["número", cliente.numero], ["bairro", cliente.bairro],
-      ["município", cliente.municipio], ["UF", cliente.uf], ["CEP", cliente.cep],
-    ];
-    const faltando = camposEnd.filter(([, v]) => !v || !String(v).trim()).map(([k]) => k);
-    if (faltando.length) {
-      return {
-        ok: false,
-        codigo: "endereco_dest",
-        clienteId: cliente.id,
-        erro: `Complete o endereço do cliente "${cliente.nome}" antes de emitir (faltando: ${faltando.join(", ")}). A NF-e modelo 55 exige o endereço do destinatário.`,
-      };
+    // NFC-e não exige: o consumidor é opcional e dispensa endereço.
+    if (!nfce) {
+      const camposEnd: [string, string | null][] = [
+        ["logradouro", cliente.logradouro], ["número", cliente.numero], ["bairro", cliente.bairro],
+        ["município", cliente.municipio], ["UF", cliente.uf], ["CEP", cliente.cep],
+      ];
+      const faltando = camposEnd.filter(([, v]) => !v || !String(v).trim()).map(([k]) => k);
+      if (faltando.length) {
+        return {
+          ok: false,
+          codigo: "endereco_dest",
+          clienteId: cliente.id,
+          erro: `Complete o endereço do cliente "${cliente.nome}" antes de emitir (faltando: ${faltando.join(", ")}). A NF-e modelo 55 exige o endereço do destinatário.`,
+        };
+      }
     }
 
     if (input.itens.length === 0) return { ok: false, erro: "A nota não tem itens." };
@@ -108,7 +123,9 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       : null;
 
     const tpAmb = empresa.ambiente === "PRODUCAO" ? "1" : "2";
-    let numero = empresa.proximoNumero;
+    // NFC-e tem numeração e série próprias, separadas da NF-e 55.
+    let numero = nfce ? empresa.proximoNumeroNFCe : empresa.proximoNumero;
+    const serieDoc = nfce ? empresa.serieNFCe : empresa.serie;
 
     const itensNFe = input.itens.map((i) => {
       const p = porId.get(i.produtoId);
@@ -136,14 +153,39 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     const destUf = cliente.uf ?? empresa.uf;
     const cMunDest = await resolverCodMunicipio(cliente.municipio ?? empresa.municipio, destUf);
 
+    // Destinatário: NF-e 55 sempre identificado e com endereço. NFC-e identifica o
+    // consumidor só pelo documento/nome (sem endereço, indIEDest=9 não-contribuinte).
+    const dest: DadosNFe["dest"] = nfce
+      ? {
+          doc: cliente.documento,
+          xNome: tpAmb === "2" ? HOMOLOG_XNOME : cliente.nome,
+          indIEDest: "9",
+          ender: { xLgr: "", nro: "", xBairro: "", municipio: "", uf: destUf, cep: "" },
+        }
+      : {
+          doc: cliente.documento,
+          xNome: tpAmb === "2" ? HOMOLOG_XNOME : cliente.nome,
+          ie: cliente.inscricaoEstadual ?? undefined,
+          indIEDest: cliente.tipoContribuinte || "9",
+          ender: {
+            xLgr: cliente.logradouro ?? "", nro: cliente.numero ?? "",
+            xCpl: cliente.complemento || undefined, xBairro: cliente.bairro ?? "",
+            municipio: cliente.municipio ?? empresa.municipio, uf: destUf,
+            cMun: cMunDest, cep: cliente.cep ?? "",
+          },
+        };
+
     const dados: DadosNFe = {
       tpAmb,
+      mod: modelo,
       cUF,
-      serie: String(empresa.serie),
+      serie: String(serieDoc),
       nNF: String(numero),
       natOp: "VENDA DE MERCADORIA",
       modFrete: input.modFrete || "9",
       infCpl: input.infCpl,
+      csc: empresa.cscNFCe ?? undefined,
+      idCsc: empresa.idCscNFCe ?? undefined,
       emit: {
         cnpj: empresa.cnpj,
         xNome: empresa.razaoSocial,
@@ -152,18 +194,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
         crt: empresa.crt,
         ender: { ...endEmpresa(empresa), cMun: cMunEmit },
       },
-      dest: {
-        doc: cliente.documento,
-        xNome: tpAmb === "2" ? HOMOLOG_XNOME : cliente.nome,
-        ie: cliente.inscricaoEstadual ?? undefined,
-        indIEDest: cliente.tipoContribuinte || "9",
-        ender: {
-          xLgr: cliente.logradouro ?? "", nro: cliente.numero ?? "",
-          xCpl: cliente.complemento || undefined, xBairro: cliente.bairro ?? "",
-          municipio: cliente.municipio ?? empresa.municipio, uf: destUf,
-          cMun: cMunDest, cep: cliente.cep ?? "",
-        },
-      },
+      dest,
       itens: itensNFe,
     };
 
@@ -190,8 +221,9 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
         prisma.nota.create({
           data: {
             numero,
-            serie: empresa.serie,
-            modelo: "55",
+            serie: serieDoc,
+            modelo,
+            qrCode: r.qrCode ?? null,
             naturezaOperacao: "VENDA DE MERCADORIA",
             tipoNota: input.tipoNota,
             emitenteId: empresa.id,
@@ -220,7 +252,10 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
         // por duplicidade esgotou (continua acima da faixa ocupada). Em outras
         // rejeições mantém o número para reemitir após corrigir a causa.
         ...(r.ok || r.cStat === "539"
-          ? [prisma.emitente.update({ where: { id: empresa.id }, data: { proximoNumero: numero + 1 } })]
+          ? [prisma.emitente.update({
+              where: { id: empresa.id },
+              data: nfce ? { proximoNumeroNFCe: numero + 1 } : { proximoNumero: numero + 1 },
+            })]
           : []),
       ]);
     } catch (e) {
@@ -279,6 +314,8 @@ export type NotaCompleta = {
   id: string;
   numero: number;
   serie: number;
+  modelo: string; // "55" | "65"
+  qrCode: string | null; // NFC-e
   tipoNota: string;
   naturezaOperacao: string;
   status: "autorizada" | "rascunho" | "cancelada" | "rejeitada" | "denegada";
@@ -325,6 +362,8 @@ export async function listarNotas(): Promise<NotaCompleta[]> {
     id: n.id,
     numero: n.numero,
     serie: n.serie,
+    modelo: n.modelo,
+    qrCode: n.qrCode,
     tipoNota: n.tipoNota,
     naturezaOperacao: n.naturezaOperacao,
     status: STATUS_UI[n.status] ?? "rascunho",
