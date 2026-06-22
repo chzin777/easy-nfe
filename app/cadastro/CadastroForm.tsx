@@ -102,7 +102,7 @@ export default function CadastroForm({
 
               <div className="mt-6 space-y-3">
                 {planos.map((p) => (
-                  <div key={p.id} className="rounded-xl border border-[var(--border)] p-4 transition hover:border-[var(--primary)]/40">
+                  <div key={p.id} className="rounded-xl border border-[var(--border)] p-4 transition hover:border-[var(--primary)]/40 hover:shadow-sm">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="font-semibold text-slate-900">{p.nome}</span>
                       {p.sobConsulta ? (
@@ -113,7 +113,17 @@ export default function CadastroForm({
                         </span>
                       )}
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    {p.beneficios.length > 0 && (
+                      <ul className="mt-3 space-y-1.5">
+                        {p.beneficios.map((b, j) => (
+                          <li key={j} className="flex gap-2 text-xs text-slate-600">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="mt-px shrink-0 text-[var(--success)]"><path d="M20 6 9 17l-5-5" /></svg>
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="mt-4 flex flex-wrap gap-2">
                       {p.sobConsulta ? (
                         <Button variante="secondary" onClick={() => escolherPlano(p, "assinatura")} className="!py-1.5 !text-xs">Falar com a equipe</Button>
                       ) : (
