@@ -473,17 +473,6 @@ export default function NovaNotaPage() {
                 })()}
               </div>
             )}
-            {resultado.debugXml && (
-              <details className="rounded-lg border border-[var(--border)] bg-slate-50 p-2 text-xs">
-                <summary className="cursor-pointer font-medium text-[var(--muted)]">Ver XML enviado (debug)</summary>
-                <textarea
-                  readOnly
-                  value={resultado.debugXml}
-                  onFocus={(e) => e.currentTarget.select()}
-                  className="mt-2 h-48 w-full resize-y rounded border border-[var(--border)] bg-white p-2 font-mono text-[10px] leading-tight"
-                />
-              </details>
-            )}
             {resultado.avisoPersistencia && (
               <p className="rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-xs text-[var(--warning)]">{resultado.avisoPersistencia}</p>
             )}

@@ -63,7 +63,6 @@ export type EmitirResultado =
       nProt: string | null;
       numero: number;
       avisoPersistencia?: string;
-      debugXml?: string; // XML enviado (exposto só em rejeição, p/ diagnóstico)
     }
   | { ok: false; erro: string; codigo?: string; clienteId?: string };
 
@@ -288,7 +287,6 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       nProt: r.nProt,
       numero,
       avisoPersistencia,
-      debugXml: r.ok ? undefined : r.xmlEnviado,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

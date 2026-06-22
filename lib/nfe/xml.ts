@@ -50,12 +50,16 @@ function icmsXml(crt: string, orig: string): string {
 
 function detXml(item: ItemNFe, nItem: number, crt: string): string {
   const vProd = item.qCom * item.vUnCom;
+  // CEST tem EXATAMENTE 7 dígitos no schema 4.00. Valor inválido (ex.: 8 dígitos)
+  // gera rejeição 225 — então só inclui quando bater os 7 dígitos.
+  const cestDig = (item.cest ?? "").replace(/\D/g, "");
+  const cestTag = cestDig.length === 7 ? `<CEST>${cestDig}</CEST>` : "";
   return (
     `<det nItem="${nItem}">` +
     `<prod>` +
     `<cProd>${esc(item.cProd)}</cProd><cEAN>${esc(item.cEAN)}</cEAN>` +
     `<xProd>${esc(item.xProd)}</xProd><NCM>${item.ncm}</NCM>` +
-    (item.cest ? `<CEST>${item.cest}</CEST>` : "") +
+    cestTag +
     `<CFOP>${item.cfop}</CFOP><uCom>${esc(item.uCom)}</uCom>` +
     `<qCom>${n4(item.qCom)}</qCom><vUnCom>${n10(item.vUnCom)}</vUnCom>` +
     `<vProd>${n2(vProd)}</vProd><cEANTrib>${esc(item.cEAN)}</cEANTrib>` +
