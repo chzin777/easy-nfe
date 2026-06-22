@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import AvisoLicenca from "./AvisoLicenca";
 import Onboarding from "./Onboarding";
+import TrialAviso from "./TrialAviso";
 import { obterEstadoLicenca } from "@/app/licenca-actions";
 import type { EstadoLicenca } from "@/lib/licenca";
 import { sair } from "@/app/auth/actions";
@@ -77,6 +78,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <span className="text-sm font-semibold">Easy-NFe</span>
             </div>
           </div>
+          <TrialAviso />
           {pathname !== "/admin" && !pathname.startsWith("/admin/") && (
             <div className="flex items-center justify-center gap-2 border-b border-[var(--border)] bg-slate-900 px-4 py-2 text-center text-[11px] font-medium text-slate-300 sm:text-xs">
               <span className="relative flex h-2 w-2 shrink-0">

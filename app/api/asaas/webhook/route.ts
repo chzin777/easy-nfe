@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     }
   }
 
-  let body: { event?: string; payment?: { id?: string; billingType?: string; paymentDate?: string } };
+  let body: { event?: string; payment?: { id?: string; billingType?: string; paymentDate?: string; value?: number; subscription?: string } };
   try {
     body = await req.json();
   } catch {
@@ -30,16 +30,48 @@ export async function POST(req: Request) {
   const paymentId = body.payment?.id;
   if (!event || !paymentId) return Response.json({ ok: true, ignored: true });
 
-  const fatura = await prisma.fatura.findUnique({ where: { asaasPaymentId: paymentId }, select: { id: true } });
-  if (!fatura) return Response.json({ ok: true, semFatura: true });
+  const metodo = metodoDoBillingType(body.payment?.billingType);
+  const pagaEm = body.payment?.paymentDate ? new Date(body.payment.paymentDate) : new Date();
 
-  if (PAGOS.has(event)) {
-    const metodo = metodoDoBillingType(body.payment?.billingType);
-    const pagaEm = body.payment?.paymentDate ? new Date(body.payment.paymentDate) : new Date();
-    await ativarPorPagamento(fatura.id, metodo, pagaEm);
-  } else if (VENCIDOS.has(event)) {
-    await prisma.fatura.update({ where: { id: fatura.id }, data: { status: "ATRASADA" } });
+  const fatura = await prisma.fatura.findUnique({ where: { asaasPaymentId: paymentId }, select: { id: true } });
+
+  if (fatura) {
+    if (PAGOS.has(event)) {
+      await ativarPorPagamento(fatura.id, metodo, pagaEm);
+    } else if (VENCIDOS.has(event)) {
+      await prisma.fatura.update({ where: { id: fatura.id }, data: { status: "ATRASADA" } });
+    }
+    return Response.json({ ok: true });
   }
 
-  return Response.json({ ok: true });
+  // Renovação recorrente (cartão): pagamento novo de uma assinatura conhecida.
+  // Cria a fatura do ciclo já PAGA e estende a licença.
+  if (PAGOS.has(event) && body.payment?.subscription) {
+    const lic = await prisma.licenca.findFirst({
+      where: { asaasSubscriptionId: body.payment.subscription },
+      include: { plano: true },
+    });
+    if (lic) {
+      const comp = `${pagaEm.getFullYear()}-${String(pagaEm.getMonth() + 1).padStart(2, "0")}`;
+      const nova = await prisma.fatura.upsert({
+        where: { userId_competencia: { userId: lic.userId, competencia: comp } },
+        update: { asaasPaymentId: paymentId, metodo },
+        create: {
+          userId: lic.userId,
+          planoNome: lic.plano?.nome ?? "Assinatura Easy-NFe",
+          competencia: comp,
+          valor: body.payment?.value ?? Number(lic.plano?.preco ?? 0),
+          vencimento: pagaEm,
+          status: "PENDENTE",
+          metodo,
+          asaasPaymentId: paymentId,
+        },
+        select: { id: true },
+      });
+      await ativarPorPagamento(nova.id, metodo, pagaEm);
+    }
+    return Response.json({ ok: true, recorrente: true });
+  }
+
+  return Response.json({ ok: true, semFatura: true });
 }

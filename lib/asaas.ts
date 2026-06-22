@@ -148,6 +148,50 @@ export async function consultarCobranca(paymentId: string): Promise<AsaasCobranc
   return asaas(`/payments/${paymentId}`);
 }
 
+// ----------------------------------------------------------------------------
+// Assinaturas recorrentes (cartão) — Asaas Subscriptions
+// ----------------------------------------------------------------------------
+export type AsaasAssinatura = { id: string; status: string };
+
+// Cria uma assinatura recorrente no cartão. O cartão é capturado no checkout
+// hospedado da 1ª cobrança (invoiceUrl); os ciclos seguintes cobram automático.
+export async function criarAssinaturaCartao(p: {
+  customer: string;
+  value: number;
+  nextDueDate: string; // YYYY-MM-DD (1º vencimento)
+  cycle: "MONTHLY" | "YEARLY";
+  description?: string;
+  externalReference?: string;
+}): Promise<AsaasAssinatura> {
+  return asaas<AsaasAssinatura>(`/subscriptions`, {
+    method: "POST",
+    body: {
+      customer: p.customer,
+      billingType: "CREDIT_CARD",
+      value: p.value,
+      nextDueDate: p.nextDueDate,
+      cycle: p.cycle,
+      description: p.description,
+      externalReference: p.externalReference,
+    },
+  });
+}
+
+// 1ª cobrança gerada pela assinatura (tem o invoiceUrl do checkout de cartão).
+export async function primeiraCobrancaAssinatura(subscriptionId: string): Promise<AsaasCobranca | null> {
+  const r = await asaas<{ data?: AsaasCobranca[] }>(`/subscriptions/${subscriptionId}/payments?limit=1`);
+  return r.data?.[0] ?? null;
+}
+
+// Cancela uma assinatura recorrente (best-effort).
+export async function cancelarAssinatura(subscriptionId: string): Promise<void> {
+  try {
+    await asaas(`/subscriptions/${subscriptionId}`, { method: "DELETE" });
+  } catch {
+    /* ignora */
+  }
+}
+
 // Valida a chave/ambiente fazendo uma chamada leve. Lança em caso de erro.
 export async function verificarConexao(): Promise<{ ok: true }> {
   await asaas(`/customers?limit=1`);

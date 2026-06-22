@@ -17,11 +17,12 @@ export type FaturaPublica = {
 export type DadosPagamento =
   | {
       ok: true;
-      metodo: "pix" | "boleto";
+      metodo: "pix" | "boleto" | "cartao";
       pixCopiaECola?: string | null;
       pixQrImage?: string | null;
       bankSlipUrl?: string | null;
       linhaDigitavel?: string | null;
+      checkoutUrl?: string | null; // cartão: checkout hospedado do Asaas
     }
   | { erro: string };
 
@@ -43,9 +44,12 @@ export async function obterFaturaPublica(token: string): Promise<FaturaPublica> 
 }
 
 // Gera (ou reaproveita) a cobrança no Asaas para o método escolhido.
-export async function gerarCobrancaFatura(token: string, metodo: "pix" | "boleto"): Promise<DadosPagamento> {
+export async function gerarCobrancaFatura(token: string, metodo: "pix" | "boleto" | "cartao"): Promise<DadosPagamento> {
   try {
-    const f = await prisma.fatura.findUnique({ where: { tokenPublico: token }, include: { user: true } });
+    const f = await prisma.fatura.findUnique({
+      where: { tokenPublico: token },
+      include: { user: { include: { licenca: { include: { plano: true } } } } },
+    });
     if (!f) return { erro: "Cobrança não encontrada." };
     if (f.status === "PAGA") return { erro: "Esta cobrança já foi paga." };
 
@@ -74,11 +78,35 @@ export async function gerarCobrancaFatura(token: string, metodo: "pix" | "boleto
     // Já existe cobrança do MESMO método? Reaproveita os dados salvos.
     if (f.asaasPaymentId && f.metodo === metodo) {
       if (metodo === "pix") return { ok: true, metodo, pixCopiaECola: f.pixCopiaECola, pixQrImage: f.pixQrImage };
-      return { ok: true, metodo, bankSlipUrl: f.bankSlipUrl, linhaDigitavel: f.linhaDigitavel };
+      if (metodo === "boleto") return { ok: true, metodo, bankSlipUrl: f.bankSlipUrl, linhaDigitavel: f.linhaDigitavel };
+      return { ok: true, metodo, checkoutUrl: f.invoiceUrl };
     }
     // Trocou de método: remove a cobrança anterior (best-effort).
     if (f.asaasPaymentId && f.metodo !== metodo) {
       await asaas.cancelarCobranca(f.asaasPaymentId);
+    }
+
+    // Cartão = assinatura recorrente (Subscriptions). Card capturado no checkout.
+    if (metodo === "cartao") {
+      const cycle = f.user.licenca?.plano?.periodicidade === "anual" ? "YEARLY" : "MONTHLY";
+      const assinatura = await asaas.criarAssinaturaCartao({
+        customer: customerId,
+        value: Number(f.valor),
+        nextDueDate: dueDate,
+        cycle,
+        description: descricao,
+        externalReference: f.user.id,
+      });
+      const cobranca = await asaas.primeiraCobrancaAssinatura(assinatura.id);
+      if (!cobranca) return { erro: "Não foi possível gerar a cobrança do cartão. Tente novamente." };
+      await prisma.$transaction([
+        prisma.licenca.update({ where: { userId: f.user.id }, data: { asaasSubscriptionId: assinatura.id } }),
+        prisma.fatura.update({
+          where: { id: f.id },
+          data: { asaasPaymentId: cobranca.id, metodo: "cartao", invoiceUrl: cobranca.invoiceUrl, bankSlipUrl: null, linhaDigitavel: null, pixCopiaECola: null, pixQrImage: null },
+        }),
+      ]);
+      return { ok: true, metodo, checkoutUrl: cobranca.invoiceUrl };
     }
 
     if (metodo === "pix") {

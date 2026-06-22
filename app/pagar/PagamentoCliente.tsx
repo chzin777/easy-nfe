@@ -11,7 +11,7 @@ type Fatura = { planoNome: string; valor: number; vencimento: string; status: st
 export default function PagamentoCliente({ token }: { token: string }) {
   const [fatura, setFatura] = useState<Fatura | null>(null);
   const [carregando, setCarregando] = useState(true);
-  const [metodo, setMetodo] = useState<"pix" | "boleto" | null>(null);
+  const [metodo, setMetodo] = useState<"pix" | "boleto" | "cartao" | null>(null);
   const [dados, setDados] = useState<Extract<DadosPagamento, { ok: true }> | null>(null);
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -28,7 +28,7 @@ export default function PagamentoCliente({ token }: { token: string }) {
       .finally(() => setCarregando(false));
   }, [token]);
 
-  async function escolher(m: "pix" | "boleto") {
+  async function escolher(m: "pix" | "boleto" | "cartao") {
     setMetodo(m);
     setDados(null);
     setErro(null);
@@ -87,22 +87,30 @@ export default function PagamentoCliente({ token }: { token: string }) {
 
       <div>
         <p className="mb-2 text-sm font-medium">Escolha como pagar</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           <button
             onClick={() => escolher("pix")}
-            className={"flex items-center justify-center gap-2 rounded-xl border-2 p-3 text-sm font-semibold transition " + (metodo === "pix" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-slate-300")}
+            className={"flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 text-xs font-semibold transition " + (metodo === "pix" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-slate-300")}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 2 3 3-3 3-3-3 3-3Z" /><path d="m12 16 3 3-3 3-3-3 3-3Z" /><path d="m2 12 3-3 3 3-3 3-3-3Z" /><path d="m16 12 3-3 3 3-3 3-3-3Z" /></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 2 3 3-3 3-3-3 3-3Z" /><path d="m12 16 3 3-3 3-3-3 3-3Z" /><path d="m2 12 3-3 3 3-3 3-3-3Z" /><path d="m16 12 3-3 3 3-3 3-3-3Z" /></svg>
             Pix
           </button>
           <button
             onClick={() => escolher("boleto")}
-            className={"flex items-center justify-center gap-2 rounded-xl border-2 p-3 text-sm font-semibold transition " + (metodo === "boleto" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-slate-300")}
+            className={"flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 text-xs font-semibold transition " + (metodo === "boleto" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-slate-300")}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5v14" /><path d="M7 5v14" /><path d="M11 5v14" /><path d="M15 5v14" /><path d="M19 5v14" /></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5v14" /><path d="M7 5v14" /><path d="M11 5v14" /><path d="M15 5v14" /><path d="M19 5v14" /></svg>
             Boleto
           </button>
+          <button
+            onClick={() => escolher("cartao")}
+            className={"flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 text-xs font-semibold transition " + (metodo === "cartao" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-slate-300")}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2" /><line x1="2" x2="22" y1="10" y2="10" /></svg>
+            Cartão
+          </button>
         </div>
+        {metodo === "cartao" && <p className="mt-2 text-[11px] text-[var(--muted)]">Cartão = assinatura recorrente: renova automaticamente todo período. Cancele quando quiser.</p>}
       </div>
 
       {gerando && (
@@ -128,6 +136,22 @@ export default function PagamentoCliente({ token }: { token: string }) {
               </div>
             )}
             <p className="text-xs text-[var(--muted)]">A confirmação é automática após o pagamento.</p>
+          </motion.div>
+        )}
+
+        {dados?.metodo === "cartao" && (
+          <motion.div key="cartao" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-3 text-center">
+            {dados.checkoutUrl ? (
+              <>
+                <p className="text-sm text-[var(--muted)]">Você será levado ao checkout seguro do Asaas para cadastrar o cartão. A cobrança renova automaticamente a cada período.</p>
+                <a href={dados.checkoutUrl} target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:-translate-y-0.5">
+                  Pagar com cartão (assinatura)
+                </a>
+                <p className="text-[11px] text-[var(--muted)]">Após concluir no checkout, sua assinatura é ativada automaticamente.</p>
+              </>
+            ) : (
+              <p className="text-sm text-[var(--muted)]">Gerando checkout…</p>
+            )}
           </motion.div>
         )}
 
