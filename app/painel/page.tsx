@@ -7,7 +7,6 @@ import type { ReactNode } from "react";
 import type { StatusNota } from "@/lib/types";
 import { resumoDashboard } from "../dashboard-actions";
 import Graficos from "./Graficos";
-import Onboarding from "./Onboarding";
 
 const tomStatus: Record<StatusNota, "success" | "danger" | "warning" | "neutral" | "primary"> = {
   autorizada: "success",
@@ -44,8 +43,6 @@ export default async function Dashboard() {
           + Emitir nova nota
         </Link>
       </div>
-
-      <Onboarding produtos={resumo.produtos} clientes={resumo.clientes} transportadoras={resumo.transportadoras} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {cards.map((c, i) => (

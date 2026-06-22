@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import AvisoLicenca from "./AvisoLicenca";
+import Onboarding from "./Onboarding";
 import { obterEstadoLicenca } from "@/app/licenca-actions";
 import type { EstadoLicenca } from "@/lib/licenca";
 import { sair } from "@/app/auth/actions";
@@ -84,7 +85,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <span className="sm:hidden">SEFAZ-GO ativa · homologação e produção</span>
             </div>
           )}
-          <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</div>
+          <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            <Onboarding />
+            {children}
+          </div>
         </main>
       </div>
     </div>

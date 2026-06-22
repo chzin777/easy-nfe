@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { Card } from "../ui/primitives";
+import { Card } from "./primitives";
+import { estadoOnboarding } from "@/app/onboarding-actions";
 
 const CHAVE = "easy-nfe:onboarding-pulado";
 
@@ -19,36 +20,42 @@ type Passo = {
 };
 
 /**
- * "Primeiros passos" exibido no Dashboard no primeiro acesso. Mostra os 3
- * cadastros essenciais (produto, cliente, transportadora), marca os já feitos
- * conforme os dados da empresa e some sozinho quando tudo estiver pronto.
- * O usuário pode pular — a escolha fica no localStorage.
+ * "Primeiros passos" global (renderizado no AppShell). Aparece em qualquer página
+ * logada do usuário comum no primeiro acesso: configurar empresa e cadastrar
+ * produto, cliente e transportadora. Marca os passos já feitos e some sozinho
+ * quando tudo estiver pronto. Pulável (localStorage).
  */
-export default function Onboarding({
-  produtos,
-  clientes,
-  transportadoras,
-}: {
-  produtos: number;
-  clientes: number;
-  transportadoras: number;
-}) {
+export default function Onboarding() {
   const [montado, setMontado] = useState(false);
   const [pulado, setPulado] = useState(false);
+  const [estado, setEstado] = useState<{ role: string; temEmpresa: boolean; produtos: number; clientes: number; transportadoras: number } | null>(null);
 
   useEffect(() => {
     setPulado(localStorage.getItem(CHAVE) === "1");
     setMontado(true);
+    estadoOnboarding().then(setEstado).catch(() => setEstado(null));
   }, []);
 
+  if (!montado || pulado || !estado || estado.role !== "USER") return null;
+
   const passos: Passo[] = [
+    {
+      key: "empresa",
+      label: "Configure sua empresa",
+      desc: "Dados da empresa e certificado digital para emitir.",
+      href: "/configuracoes",
+      cta: "Configurar empresa",
+      done: estado.temEmpresa,
+      cor: "from-rose-500 to-pink-600",
+      icon: <IBuilding />,
+    },
     {
       key: "produto",
       label: "Cadastre seu primeiro produto",
       desc: "Os produtos compõem os itens da nota fiscal.",
       href: "/produtos",
       cta: "Cadastrar produto",
-      done: produtos > 0,
+      done: estado.produtos > 0,
       cor: "from-violet-500 to-purple-600",
       icon: <IBox />,
     },
@@ -58,7 +65,7 @@ export default function Onboarding({
       desc: "O cliente é o destinatário da nota.",
       href: "/clientes",
       cta: "Cadastrar cliente",
-      done: clientes > 0,
+      done: estado.clientes > 0,
       cor: "from-blue-500 to-indigo-600",
       icon: <IUser />,
     },
@@ -68,7 +75,7 @@ export default function Onboarding({
       desc: "Necessária quando há transporte de terceiros no frete.",
       href: "/transportadoras",
       cta: "Cadastrar transportadora",
-      done: transportadoras > 0,
+      done: estado.transportadoras > 0,
       cor: "from-emerald-500 to-teal-600",
       icon: <ITruck />,
     },
@@ -76,16 +83,13 @@ export default function Onboarding({
 
   const feitos = passos.filter((p) => p.done).length;
   const completo = feitos === passos.length;
-
-  // Não renderiza no SSR (evita mismatch), depois de pular ou quando tudo pronto.
-  if (!montado || pulado || completo) return null;
+  if (completo) return null;
 
   function pular() {
     localStorage.setItem(CHAVE, "1");
     setPulado(true);
   }
 
-  // Primeiro passo ainda pendente — fica em destaque.
   const proximo = passos.find((p) => !p.done);
 
   return (
@@ -95,6 +99,7 @@ export default function Onboarding({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, height: 0 }}
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        className="mb-6"
       >
         <Card className="relative overflow-hidden border-[var(--primary)]/20 p-5 sm:p-6">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-[var(--primary)]/10 to-[var(--primary-2)]/10 blur-2xl" />
@@ -116,7 +121,6 @@ export default function Onboarding({
             </button>
           </div>
 
-          {/* Progresso */}
           <div className="relative mt-4 flex items-center gap-3">
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
               <motion.div
@@ -131,8 +135,7 @@ export default function Onboarding({
             </span>
           </div>
 
-          {/* Passos */}
-          <div className="relative mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="relative mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {passos.map((p, i) => (
               <motion.div
                 key={p.key}
@@ -181,6 +184,9 @@ export default function Onboarding({
   );
 }
 
+function IBuilding() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="16" height="20" x="4" y="2" rx="2" /><path d="M9 22v-4h6v4" /><path d="M8 6h.01" /><path d="M16 6h.01" /><path d="M12 6h.01" /><path d="M12 10h.01" /><path d="M12 14h.01" /><path d="M16 10h.01" /><path d="M16 14h.01" /><path d="M8 10h.01" /><path d="M8 14h.01" /></svg>;
+}
 function IBox() {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22V12" /></svg>;
 }
