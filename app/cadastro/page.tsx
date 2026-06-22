@@ -44,5 +44,5 @@ export default async function CadastroPage({
   // Trial só vale quando o plano libera teste grátis (?trial=1 vindo da landing).
   const querTrial = trial === "1" && !!selecionado?.permiteTrial;
 
-  return <CadastroForm selecionado={selecionado} querTrial={querTrial} />;
+  return <CadastroForm planos={planos} selecionado={selecionado} querTrial={querTrial} />;
 }

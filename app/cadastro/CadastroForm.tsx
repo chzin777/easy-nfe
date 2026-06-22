@@ -20,26 +20,36 @@ import type { PlanoOpcao } from "./page";
 type Modo = "trial" | "assinatura" | "contato";
 
 export default function CadastroForm({
-  selecionado,
+  planos = [],
+  selecionado: selProp,
   querTrial = false,
 }: {
+  planos?: PlanoOpcao[];
   selecionado: PlanoOpcao | null;
   querTrial?: boolean;
 }) {
+  // Plano selecionado: vem da URL ("Começar agora") ou é escolhido nesta tela.
+  const [sel, setSel] = useState<PlanoOpcao | null>(selProp);
   // Decide o modo inicial:
   // - plano sob consulta → contato
   // - veio do botão "Testar grátis" (e o plano permite) → trial
   // - plano pago escolhido → assinatura (gera link de pagamento)
-  // - sem plano na URL → trial (entrada padrão)
-  const modoInicial: Modo = selecionado?.sobConsulta
+  // - sem plano → trial (só usado depois de escolher)
+  const modoInicial: Modo = selProp?.sobConsulta
     ? "contato"
     : querTrial
       ? "trial"
-      : selecionado
+      : selProp
         ? "assinatura"
         : "trial";
   const [modo, setModo] = useState<Modo>(modoInicial);
   const [aceite, setAceite] = useState(false);
+
+  // Escolha de plano nesta tela (acesso direto a /cadastro, sem vir da landing).
+  function escolherPlano(p: PlanoOpcao, intencao: "trial" | "assinatura") {
+    setSel(p);
+    setModo(p.sobConsulta ? "contato" : intencao === "trial" && p.permiteTrial ? "trial" : "assinatura");
+  }
 
   const [trialState, trialAction, trialPend] = useActionState<CadastroResultado | null, FormData>(cadastrarTrial, null);
   const [assinState, assinAction, assinPend] = useActionState<AssinaturaResultado | null, FormData>(cadastrarAssinatura, null);
@@ -55,9 +65,12 @@ export default function CadastroForm({
     if (trialState && "ok" in trialState) window.location.href = trialState.destino;
   }, [trialState]);
 
+  const selecionado = sel;
   const planoNomeSel = selecionado?.nome ?? "";
   const podeTrial = !!selecionado?.permiteTrial;
   const temPreco = (selecionado?.preco ?? 0) > 0;
+  // Sem plano escolhido e há planos p/ exibir → mostra o seletor primeiro.
+  const precisaEscolher = !selecionado && planos.length > 0;
 
   return (
     <div className="relative grid min-h-screen lg:grid-cols-2">
@@ -82,9 +95,48 @@ export default function CadastroForm({
               </div>
               <a href={assinOk.destino} className="mt-5 inline-block text-sm font-medium text-[var(--primary)] hover:underline">Pular e ir para o sistema →</a>
             </div>
+          ) : precisaEscolher ? (
+            <>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Escolha seu plano</h1>
+              <p className="mt-1.5 text-sm text-[var(--muted)]">Selecione o plano para criar sua conta.</p>
+
+              <div className="mt-6 space-y-3">
+                {planos.map((p) => (
+                  <div key={p.id} className="rounded-xl border border-[var(--border)] p-4 transition hover:border-[var(--primary)]/40">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-semibold text-slate-900">{p.nome}</span>
+                      {p.sobConsulta ? (
+                        <span className="text-sm font-medium text-[var(--muted)]">Sob consulta</span>
+                      ) : (
+                        <span className="font-bold text-[var(--primary)]">
+                          {formatBRL(p.preco)}<span className="text-xs font-medium text-[var(--muted)]">/{p.periodicidade === "anual" ? "ano" : "mês"}</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {p.sobConsulta ? (
+                        <Button variante="secondary" onClick={() => escolherPlano(p, "assinatura")} className="!py-1.5 !text-xs">Falar com a equipe</Button>
+                      ) : (
+                        <>
+                          <Button onClick={() => escolherPlano(p, "assinatura")} className="!py-1.5 !text-xs">Assinar</Button>
+                          {p.permiteTrial && (
+                            <Button variante="secondary" onClick={() => escolherPlano(p, "trial")} className="!py-1.5 !text-xs">Testar grátis 7 dias</Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           ) : modo === "assinatura" ? (
             <>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Criar conta e assinar</h1>
+              <div className="flex items-center justify-between">
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Criar conta e assinar</h1>
+                {planos.length > 1 && (
+                  <button type="button" onClick={() => setSel(null)} className="text-xs font-medium text-[var(--primary)] hover:underline">Trocar plano</button>
+                )}
+              </div>
               <p className="mt-1.5 text-sm text-[var(--muted)]">Confira o plano e crie sua conta. Depois você escolhe pagar com Pix ou boleto.</p>
 
               {/* Resumo do que está sendo contratado */}
