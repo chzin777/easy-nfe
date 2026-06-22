@@ -71,6 +71,9 @@ model User {
   telefone        String?
   asaasCustomerId String? // id do cliente no Asaas (reaproveitado entre faturas)
 
+  // Aceite de Termos de Uso + Política de Privacidade (LGPD)
+  aceiteTermosEm DateTime?
+
   empresas   Emitente[] // empresas criadas por este usuário (dono original)
   acessos    AcessoEmpresa[]
   licenca    Licenca?

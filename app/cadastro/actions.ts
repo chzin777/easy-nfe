@@ -82,12 +82,14 @@ export async function cadastrarAssinatura(
   const telefone = String(formData.get("telefone") ?? "").trim();
   const cpfCnpj = String(formData.get("cpfCnpj") ?? "").replace(/\D/g, "");
   const planoId = String(formData.get("planoId") ?? "").trim();
+  const aceite = String(formData.get("aceite") ?? "") === "on";
 
   try {
     if (!nome) return { erro: "Informe seu nome." };
     if (!emailValido(email)) return { erro: "E-mail inválido." };
     if (senha.length < 8) return { erro: "A senha deve ter ao menos 8 caracteres." };
     if (cpfCnpj.length !== 11 && cpfCnpj.length !== 14) return { erro: "Informe um CPF ou CNPJ válido." };
+    if (!aceite) return { erro: "É preciso aceitar os Termos de Uso e a Política de Privacidade." };
 
     const plano = await prisma.plano.findFirst({
       where: { id: planoId, ativo: true, sobConsulta: false },
@@ -118,6 +120,7 @@ export async function cadastrarAssinatura(
         cpfCnpj,
         senhaHash: await hashSenha(senha),
         role: "USER",
+        aceiteTermosEm: new Date(),
         licenca: { create: { planoId: plano.id, status: "ATIVA", validadeEm: validade } },
         // Fatura pendente já com token público; a cobrança (Pix/boleto) é gerada
         // quando o usuário escolhe o método na tela de pagamento.

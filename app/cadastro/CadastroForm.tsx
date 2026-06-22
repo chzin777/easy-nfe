@@ -39,6 +39,7 @@ export default function CadastroForm({
         ? "assinatura"
         : "trial";
   const [modo, setModo] = useState<Modo>(modoInicial);
+  const [aceite, setAceite] = useState(false);
 
   const [trialState, trialAction, trialPend] = useActionState<CadastroResultado | null, FormData>(cadastrarTrial, null);
   const [assinState, assinAction, assinPend] = useActionState<AssinaturaResultado | null, FormData>(cadastrarAssinatura, null);
@@ -84,11 +85,24 @@ export default function CadastroForm({
           ) : modo === "assinatura" ? (
             <>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">Criar conta e assinar</h1>
-              <p className="mt-1.5 text-sm text-[var(--muted)]">
-                {planoNomeSel ? <>Plano <span className="font-semibold text-slate-900">{planoNomeSel}</span>{temPreco && <> · {formatBRL(selecionado!.preco)}/{selecionado!.periodicidade === "anual" ? "ano" : "mês"}</>}.</> : "Crie sua conta para assinar."} Geramos um link de pagamento (Pix, boleto ou cartão).
-              </p>
+              <p className="mt-1.5 text-sm text-[var(--muted)]">Confira o plano e crie sua conta. Depois você escolhe pagar com Pix ou boleto.</p>
 
-              <form action={assinAction} className="mt-8 space-y-4">
+              {/* Resumo do que está sendo contratado */}
+              <div className="mt-5 rounded-xl border border-[var(--primary)]/20 bg-[var(--primary-soft)]/40 p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Você está contratando</p>
+                <div className="mt-1 flex items-baseline justify-between gap-2">
+                  <span className="text-lg font-bold text-slate-900">{planoNomeSel || "Plano"}</span>
+                  {temPreco && (
+                    <span className="text-lg font-bold text-[var(--primary)]">
+                      {formatBRL(selecionado!.preco)}
+                      <span className="text-xs font-medium text-[var(--muted)]">/{selecionado!.periodicidade === "anual" ? "ano" : "mês"}</span>
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1.5 text-xs text-[var(--muted)]">Cobrança recorrente {selecionado?.periodicidade === "anual" ? "anual" : "mensal"}. Cancele quando quiser.</p>
+              </div>
+
+              <form action={assinAction} className="mt-6 space-y-4">
                 <Field label="Nome" required>
                   <Input name="nome" placeholder="Seu nome" autoComplete="name" required />
                 </Field>
@@ -106,15 +120,26 @@ export default function CadastroForm({
                 </Field>
                 <input type="hidden" name="planoId" value={selecionado?.id ?? ""} />
 
+                <label className="flex items-start gap-2.5 text-xs text-[var(--muted)]">
+                  <input type="checkbox" name="aceite" checked={aceite} onChange={(e) => setAceite(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--primary)]" />
+                  <span>
+                    Li e aceito os{" "}
+                    <a href="/termos" target="_blank" rel="noopener noreferrer" className="font-medium text-[var(--primary)] hover:underline">Termos de Uso</a>{" "}
+                    e a{" "}
+                    <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="font-medium text-[var(--primary)] hover:underline">Política de Privacidade</a>.
+                  </span>
+                </label>
+
                 {assinErro && <ErroBox>{assinErro}</ErroBox>}
 
                 <Button
                   type="submit"
-                  disabled={assinPend}
+                  disabled={assinPend || !aceite}
                   className="w-full justify-center bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] py-2.5 text-white shadow-lg shadow-violet-500/25"
                 >
-                  {assinPend ? "Criando conta…" : "Criar conta e gerar pagamento"}
+                  {assinPend ? "Criando conta…" : temPreco ? `Continuar para pagamento · ${formatBRL(selecionado!.preco)}` : "Criar conta e continuar"}
                 </Button>
+                <p className="text-center text-[11px] text-[var(--muted)]">Nenhuma cobrança é feita automaticamente — você escolhe Pix ou boleto na próxima etapa.</p>
               </form>
 
               <div className="mt-6 space-y-1.5 text-center text-xs text-[var(--muted)]">

@@ -12,7 +12,9 @@ import { sair } from "@/app/auth/actions";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const publica = pathname === "/" || pathname === "/login" || pathname === "/cadastro" || pathname.startsWith("/pagar");
+  const publica =
+    pathname === "/" || pathname === "/login" || pathname === "/cadastro" ||
+    pathname === "/termos" || pathname === "/privacidade" || pathname.startsWith("/pagar");
   const [estado, setEstado] = useState<EstadoLicenca | null>(null);
   const [menuAberto, setMenuAberto] = useState(false);
 
