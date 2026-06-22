@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     }
   }
 
-  let body: { event?: string; payment?: { id?: string } };
+  let body: { event?: string; payment?: { id?: string; billingType?: string; paymentDate?: string } };
   try {
     body = await req.json();
   } catch {
@@ -34,9 +34,13 @@ export async function POST(req: Request) {
   if (!fatura) return Response.json({ ok: true, semFatura: true });
 
   if (PAGOS.has(event)) {
+    // Tipo real do pagamento do link (PIX/BOLETO/CREDIT_CARD → pix/boleto/cartao).
+    const bt = (body.payment?.billingType ?? "").toUpperCase();
+    const metodo = bt === "PIX" ? "pix" : bt === "CREDIT_CARD" ? "cartao" : bt === "BOLETO" ? "boleto" : "asaas";
+    const pagaEm = body.payment?.paymentDate ? new Date(body.payment.paymentDate) : new Date();
     await prisma.fatura.update({
       where: { id: fatura.id },
-      data: { status: "PAGA", pagaEm: new Date(), metodo: "boleto" },
+      data: { status: "PAGA", pagaEm, metodo },
     });
 
     // Renova a licença: ATIVA + estende a validade conforme a periodicidade do plano.

@@ -382,7 +382,7 @@ export default async function Landing() {
                           </Link>
                         ) : p.permiteTrial ? (
                           <div className="mt-7 flex flex-col gap-2">
-                            <Link href={`/cadastro?plano=${p.id}`} className="animate-pulse-trial rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-5 py-2.5 text-center text-sm font-semibold text-white transition hover:-translate-y-0.5">
+                            <Link href={`/cadastro?plano=${p.id}&trial=1`} className="animate-pulse-trial rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-5 py-2.5 text-center text-sm font-semibold text-white transition hover:-translate-y-0.5">
                               Testar grátis por 7 dias
                             </Link>
                             <Link href={`/cadastro?plano=${p.id}`} className="rounded-xl bg-slate-100 px-5 py-2.5 text-center text-sm font-semibold text-slate-900 transition hover:bg-slate-200">

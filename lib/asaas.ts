@@ -87,6 +87,28 @@ export async function criarCobrancaBoleto(p: {
   });
 }
 
+// Cria cobrança como LINK de pagamento (cliente escolhe Pix, boleto ou cartão).
+// billingType UNDEFINED → Asaas devolve invoiceUrl (checkout) com todas as opções.
+export async function criarCobrancaLink(p: {
+  customer: string;
+  value: number;
+  dueDate: string;
+  description?: string;
+  externalReference?: string;
+}): Promise<AsaasCobranca> {
+  return asaas<AsaasCobranca>(`/payments`, {
+    method: "POST",
+    body: {
+      customer: p.customer,
+      billingType: "UNDEFINED",
+      value: p.value,
+      dueDate: p.dueDate,
+      description: p.description,
+      externalReference: p.externalReference,
+    },
+  });
+}
+
 // Linha digitável + código de barras do boleto.
 export async function obterLinhaDigitavel(paymentId: string): Promise<{ identificationField: string | null; barCode: string | null; nossoNumero: string | null }> {
   return asaas(`/payments/${paymentId}/identificationField`);
