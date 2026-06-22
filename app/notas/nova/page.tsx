@@ -54,6 +54,21 @@ export default function NovaNotaPage() {
   const [emitindo, setEmitindo] = useState(false);
   const [resultado, setResultado] = useState<EmitirResultado | null>(null);
   const [corrigirCliente, setCorrigirCliente] = useState<Cliente | null>(null);
+  // Muda a key do Stepper p/ remontá-lo no passo 1 ao recomeçar.
+  const [formKey, setFormKey] = useState(0);
+
+  // Limpa todos os campos e volta ao passo 1 (mantém listas já carregadas).
+  function resetarFormulario() {
+    setTipoNota("55-saida");
+    setClienteId("");
+    setTransportadoraId("");
+    setModFrete("9");
+    setInfo("");
+    setItens([]);
+    setProdutoSel("");
+    setQtd(1);
+    setFormKey((k) => k + 1);
+  }
 
   useEffect(() => {
     (async () => {
@@ -159,6 +174,7 @@ export default function NovaNotaPage() {
       />
 
       <Stepper
+        key={formKey}
         nextButtonText="Continuar"
         backButtonText="Voltar"
         completeButtonText="Emitir nota"
@@ -415,14 +431,19 @@ export default function NovaNotaPage() {
 
       <Modal
         aberto={emitindo || resultado !== null}
-        onFechar={() => { if (!emitindo) setResultado(null); }}
+        onFechar={() => {
+          if (emitindo) return;
+          // Nota autorizada: ao fechar, recomeça do passo 1 com tudo limpo.
+          if (resultado?.ok && resultado.autorizada) resetarFormulario();
+          setResultado(null);
+        }}
         titulo={emitindo ? "Transmitindo à SEFAZ…" : resultado?.ok && resultado.autorizada ? "Nota autorizada" : "Resultado da emissão"}
         largura="max-w-lg"
         rodape={
           emitindo ? undefined : resultado?.ok && resultado.autorizada ? (
-            <Button onClick={() => window.location.reload()}>Emitir outra</Button>
+            <Button onClick={() => { resetarFormulario(); setResultado(null); }}>Emitir outra</Button>
           ) : (
-            <Button variante="secondary" onClick={() => window.location.reload()}>Voltar e corrigir</Button>
+            <Button variante="secondary" onClick={() => setResultado(null)}>Voltar e corrigir</Button>
           )
         }
       >
