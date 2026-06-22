@@ -508,3 +508,15 @@ model NotaRecebida {
   @@index([empresaId, chaveAcesso])
   @@map("notas_recebidas")
 }
+
+// ----------------------------------------------------------------------------
+// Configuração global do sistema (key-value). Valores sensíveis são guardados
+// criptografados (AES-256-GCM via lib/crypto). Ex.: integração Asaas.
+// ----------------------------------------------------------------------------
+model ConfigSistema {
+  chave     String   @id
+  valor     String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@map("config_sistema")
+}

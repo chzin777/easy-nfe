@@ -1,27 +1,21 @@
 import "server-only";
+import { configAsaasEfetiva } from "./asaas-config";
 
 // Cliente da API Asaas (cobrança da assinatura SaaS). Conta única do easy-nfe.
-// Chave em ASAAS_API_KEY; ambiente em ASAAS_AMBIENTE ("producao" | "sandbox").
-
-function baseUrl(): string {
-  const amb = (process.env.ASAAS_AMBIENTE || "sandbox").toLowerCase();
-  return amb === "producao" || amb === "production"
-    ? "https://api.asaas.com/v3"
-    : "https://api-sandbox.asaas.com/v3";
-}
-
-function apiKey(): string {
-  const k = process.env.ASAAS_API_KEY;
-  if (!k) throw new Error("ASAAS_API_KEY não configurada no ambiente.");
-  return k;
-}
+// Config vem do painel admin (criptografada no banco) com fallback p/ env
+// (ASAAS_API_KEY / ASAAS_AMBIENTE).
 
 async function asaas<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
-  const res = await fetch(`${baseUrl()}${path}`, {
+  const cfg = await configAsaasEfetiva();
+  if (!cfg) throw new Error("Asaas não configurado. Configure a chave de API no painel administrativo.");
+  const base =
+    cfg.ambiente === "producao" ? "https://api.asaas.com/v3" : "https://api-sandbox.asaas.com/v3";
+
+  const res = await fetch(`${base}${path}`, {
     method: init?.method ?? "GET",
     headers: {
       "Content-Type": "application/json",
-      access_token: apiKey(),
+      access_token: cfg.apiKey,
       "User-Agent": "easy-nfe",
     },
     body: init?.body ? JSON.stringify(init.body) : undefined,
@@ -117,4 +111,10 @@ export async function obterLinhaDigitavel(paymentId: string): Promise<{ identifi
 // Consulta uma cobrança (status atual).
 export async function consultarCobranca(paymentId: string): Promise<AsaasCobranca & { customer: string }> {
   return asaas(`/payments/${paymentId}`);
+}
+
+// Valida a chave/ambiente fazendo uma chamada leve. Lança em caso de erro.
+export async function verificarConexao(): Promise<{ ok: true }> {
+  await asaas(`/customers?limit=1`);
+  return { ok: true };
 }

@@ -4,6 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { exigirAdmin, exigirAdminMaster } from "@/lib/admin";
 import { hashSenha } from "@/lib/auth";
 import { codigoMunicipio } from "@/lib/nfe/municipios";
+import {
+  statusConfigAsaas,
+  salvarConfigAsaas as salvarConfigAsaasStore,
+  type AsaasConfigStatus,
+  type AsaasAmbiente,
+} from "@/lib/asaas-config";
 
 const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
@@ -202,6 +208,42 @@ export async function redefinirSenha(userId: string, senha: string): Promise<Res
     await exigirAdmin();
     if (senha.length < 8) return { ok: false, erro: "Senha deve ter ao menos 8 caracteres." };
     await prisma.user.update({ where: { id: userId }, data: { senhaHash: await hashSenha(senha) } });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Integração Asaas (config criptografada no banco) — admin master
+// ----------------------------------------------------------------------------
+export async function obterConfigAsaas(): Promise<AsaasConfigStatus> {
+  await exigirAdminMaster();
+  return statusConfigAsaas();
+}
+
+export async function salvarConfigAsaas(input: {
+  apiKey?: string;
+  ambiente: AsaasAmbiente;
+  webhookToken?: string;
+}): Promise<Resultado> {
+  try {
+    await exigirAdminMaster();
+    if (input.ambiente !== "sandbox" && input.ambiente !== "producao") {
+      return { ok: false, erro: "Ambiente inválido." };
+    }
+    await salvarConfigAsaasStore(input);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function testarConexaoAsaas(): Promise<Resultado> {
+  try {
+    await exigirAdminMaster();
+    const { verificarConexao } = await import("@/lib/asaas");
+    await verificarConexao();
     return { ok: true };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };

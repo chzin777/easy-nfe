@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { configAsaasEfetiva } from "@/lib/asaas-config";
 
 // Webhook do Asaas: confirma pagamento da assinatura e renova a licença.
 // Configure no painel Asaas a URL deste endpoint + um token; o mesmo token deve
@@ -8,7 +9,8 @@ const PAGOS = new Set(["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED", "PAYMENT_RECEIVE
 const VENCIDOS = new Set(["PAYMENT_OVERDUE"]);
 
 export async function POST(req: Request) {
-  const token = process.env.ASAAS_WEBHOOK_TOKEN;
+  // Token configurado no painel admin (ou env). Se definido, valida o header.
+  const token = (await configAsaasEfetiva())?.webhookToken;
   if (token) {
     const recebido = req.headers.get("asaas-access-token");
     if (recebido !== token) {
