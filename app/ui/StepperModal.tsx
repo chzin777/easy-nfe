@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Overlay para modais baseados em <Stepper>: o próprio card do Stepper é o
@@ -16,6 +17,9 @@ export default function StepperModal({
   children: ReactNode;
   largura?: string;
 }) {
+  const [montado, setMontado] = useState(false);
+  useEffect(() => { setMontado(true); }, []);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onFechar(); };
     window.addEventListener("keydown", handler);
@@ -23,7 +27,11 @@ export default function StepperModal({
     return () => { window.removeEventListener("keydown", handler); document.body.style.overflow = ""; };
   }, [onFechar]);
 
-  return (
+  if (!montado) return null;
+
+  // Portal no body: escapa de ancestrais com transform/overflow (ex.: abas
+  // animadas), que quebrariam o position:fixed do overlay.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-sm sm:p-8"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onFechar(); }}
@@ -38,6 +46,7 @@ export default function StepperModal({
         </button>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

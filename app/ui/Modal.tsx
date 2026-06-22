@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 
 export default function Modal({
@@ -32,7 +33,13 @@ export default function Modal({
     };
   }, [aberto, onFechar]);
 
-  return (
+  const [montado, setMontado] = useState(false);
+  useEffect(() => { setMontado(true); }, []);
+  if (!montado) return null;
+
+  // Portal no body: evita que ancestrais com transform/overflow (ex.: abas
+  // animadas no admin) quebrem o position:fixed e escondam o modal.
+  return createPortal(
     <AnimatePresence>
       {aberto && (
         <motion.div
@@ -78,6 +85,7 @@ export default function Modal({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
