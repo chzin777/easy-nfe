@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
 import { exigirFeature } from "@/lib/permissoes";
 import type { Produto } from "@/lib/types";
+import type { ProdutoImport } from "@/lib/produtos-modelo";
 
 type ProdutoRow = {
   id: string;
@@ -94,6 +95,47 @@ export async function atualizarProduto(id: string, input: ProdutoInput): Promise
   });
   const p = await prisma.produto.findFirstOrThrow({ where: { id, empresaId } });
   return paraUI(p);
+}
+
+// Importação em massa (CSV/XLSX). Recebe linhas já mapeadas por chave; revalida
+// no servidor e cria em lote. Ignora linhas com erro (nome/NCM faltando).
+export async function importarProdutos(
+  itens: ProdutoImport[],
+): Promise<{ criados: number; ignorados: number; erros: string[] }> {
+  await exigirFeature("produtos");
+  const empresaId = await exigirEmpresa();
+
+  // Guard final: exige nome e NCM (já validados no cliente, revalidados aqui).
+  const erros: string[] = [];
+  const validos: ProdutoImport[] = [];
+  itens.forEach((it, idx) => {
+    const nome = (it.nome ?? "").trim();
+    const ncm = (it.ncm ?? "").replace(/\D/g, "");
+    if (!nome) erros.push(`Linha ${idx + 1}: nome obrigatório.`);
+    else if (!ncm) erros.push(`Linha ${idx + 1}: NCM obrigatório.`);
+    else validos.push({ ...it, nome, ncm, preco: Number(it.preco) || 0 });
+  });
+
+  if (validos.length) {
+    await prisma.produto.createMany({
+      data: validos.map((i) => ({
+        empresaId,
+        codigoBarras: i.codigoBarras || null,
+        nome: i.nome,
+        unidade: i.unidade,
+        ncm: i.ncm,
+        origem: i.origem,
+        preco: i.preco,
+        descricao: i.descricao || null,
+        cest: i.cest || null,
+        codigoBeneficio: i.codigoBeneficio || null,
+        creditoPresumidoIcms: i.creditoPresumidoIcms || null,
+        reguladoAnp: i.reguladoAnp,
+      })),
+    });
+  }
+
+  return { criados: validos.length, ignorados: itens.length - validos.length, erros };
 }
 
 export async function excluirProduto(id: string): Promise<void> {

@@ -26,6 +26,7 @@ import {
   excluirProduto,
 } from "./actions";
 import NovoProdutoModal from "./NovoProdutoModal";
+import ImportarProdutosModal from "./ImportarProdutosModal";
 import NcmPicker from "./NcmPicker";
 import MoneyInput from "@/app/ui/MoneyInput";
 
@@ -49,6 +50,7 @@ export default function ProdutosPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [busca, setBusca] = useState("");
   const [modo, setModo] = useState<"novo" | "editar" | null>(null);
+  const [importar, setImportar] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Form>(formVazio);
   const [salvando, setSalvando] = useState(false);
@@ -207,7 +209,12 @@ export default function ProdutosPage() {
       <PageHeader
         titulo="Produtos"
         subtitulo="Clique em um produto para ver detalhes e editar."
-        acao={<Button onClick={abrirNovo}>+ Novo produto</Button>}
+        acao={
+          <div className="flex gap-2">
+            <Button variante="secondary" onClick={() => setImportar(true)}>⬆ Importar</Button>
+            <Button onClick={abrirNovo}>+ Novo produto</Button>
+          </div>
+        }
       />
 
       <Card>
@@ -234,6 +241,11 @@ export default function ProdutosPage() {
       {/* Criação em etapas (modal compartilhado) */}
       {modo === "novo" && (
         <NovoProdutoModal onFechar={fechar} onCriado={() => { recarregar(); fechar(); }} />
+      )}
+
+      {/* Importação em massa (CSV/XLSX) */}
+      {importar && (
+        <ImportarProdutosModal onFechar={() => setImportar(false)} onImportado={recarregar} />
       )}
 
       {/* Edição completa */}
