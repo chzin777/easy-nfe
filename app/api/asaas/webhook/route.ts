@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { configAsaasEfetiva } from "@/lib/asaas-config";
+import { ativarPorPagamento, metodoDoBillingType } from "@/lib/assinatura";
 
 // Webhook do Asaas: confirma pagamento da assinatura e renova a licença.
 // Configure no painel Asaas a URL deste endpoint + um token; o mesmo token deve
@@ -29,34 +30,13 @@ export async function POST(req: Request) {
   const paymentId = body.payment?.id;
   if (!event || !paymentId) return Response.json({ ok: true, ignored: true });
 
-  const fatura = await prisma.fatura.findUnique({
-    where: { asaasPaymentId: paymentId },
-    include: { user: { include: { licenca: { include: { plano: true } } } } },
-  });
+  const fatura = await prisma.fatura.findUnique({ where: { asaasPaymentId: paymentId }, select: { id: true } });
   if (!fatura) return Response.json({ ok: true, semFatura: true });
 
   if (PAGOS.has(event)) {
-    // Tipo real do pagamento do link (PIX/BOLETO/CREDIT_CARD → pix/boleto/cartao).
-    const bt = (body.payment?.billingType ?? "").toUpperCase();
-    const metodo = bt === "PIX" ? "pix" : bt === "CREDIT_CARD" ? "cartao" : bt === "BOLETO" ? "boleto" : "asaas";
+    const metodo = metodoDoBillingType(body.payment?.billingType);
     const pagaEm = body.payment?.paymentDate ? new Date(body.payment.paymentDate) : new Date();
-    await prisma.fatura.update({
-      where: { id: fatura.id },
-      data: { status: "PAGA", pagaEm, metodo },
-    });
-
-    // Renova a licença: ATIVA + estende a validade conforme a periodicidade do plano.
-    const lic = fatura.user.licenca;
-    if (lic) {
-      const anual = lic.plano?.periodicidade === "anual";
-      const base = lic.validadeEm && lic.validadeEm > new Date() ? new Date(lic.validadeEm) : new Date();
-      if (anual) base.setFullYear(base.getFullYear() + 1);
-      else base.setMonth(base.getMonth() + 1);
-      await prisma.licenca.update({
-        where: { userId: fatura.userId },
-        data: { status: "ATIVA", validadeEm: base },
-      });
-    }
+    await ativarPorPagamento(fatura.id, metodo, pagaEm);
   } else if (VENCIDOS.has(event)) {
     await prisma.fatura.update({ where: { id: fatura.id }, data: { status: "ATRASADA" } });
   }

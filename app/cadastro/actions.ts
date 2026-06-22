@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { hashSenha, criarSessao } from "@/lib/auth";
 
@@ -9,7 +10,7 @@ export type CadastroResultado = { erro: string } | { ok: true; destino: string }
 export type LeadResultado = { erro: string } | { ok: true };
 export type AssinaturaResultado =
   | { erro: string }
-  | { ok: true; destino: string; invoiceUrl: string | null };
+  | { ok: true; destino: string; token: string };
 
 // Self-serve: cria conta + licença TRIAL de 7 dias no plano escolhido (sem cartão)
 // e já abre sessão. Cai no /configuracoes para cadastrar a primeira empresa.
@@ -106,6 +107,9 @@ export async function cadastrarAssinatura(
     const validade = new Date(vencimento);
     validade.setDate(validade.getDate() + 7); // validade da licença = vencimento + tolerância
 
+    const competencia = `${vencimento.getFullYear()}-${String(vencimento.getMonth() + 1).padStart(2, "0")}`;
+    const token = randomUUID().replace(/-/g, "");
+
     const user = await prisma.user.create({
       data: {
         nome,
@@ -115,52 +119,32 @@ export async function cadastrarAssinatura(
         senhaHash: await hashSenha(senha),
         role: "USER",
         licenca: { create: { planoId: plano.id, status: "ATIVA", validadeEm: validade } },
-      },
-    });
-    await criarSessao(user.id, user.role);
-
-    // Gera o link de pagamento no Asaas. Se o Asaas falhar (ex.: chave ausente
-    // em dev), a conta já existe — o admin pode gerar a cobrança depois.
-    const competencia = `${vencimento.getFullYear()}-${String(vencimento.getMonth() + 1).padStart(2, "0")}`;
-    const dueDate = vencimento.toISOString().slice(0, 10);
-    try {
-      const { criarOuAtualizarCliente, criarCobrancaLink } = await import("@/lib/asaas");
-      const cliente = await criarOuAtualizarCliente({
-        nome,
-        cpfCnpj,
-        email,
-        telefone,
-        externalReference: user.id,
-      });
-      const cobranca = await criarCobrancaLink({
-        customer: cliente.id,
-        value: valor,
-        dueDate,
-        description: `${plano.nome} — assinatura Easy-NFe (${competencia})`,
-        externalReference: `${user.id}:${competencia}`,
-      });
-      await prisma.$transaction([
-        prisma.user.update({ where: { id: user.id }, data: { asaasCustomerId: cliente.id } }),
-        prisma.fatura.create({
-          data: {
-            userId: user.id,
+        // Fatura pendente já com token público; a cobrança (Pix/boleto) é gerada
+        // quando o usuário escolhe o método na tela de pagamento.
+        faturas: {
+          create: {
             planoNome: plano.nome,
             competencia,
             valor,
             vencimento,
             status: "PENDENTE",
-            asaasPaymentId: cobranca.id,
-            bankSlipUrl: cobranca.bankSlipUrl,
-            invoiceUrl: cobranca.invoiceUrl,
+            tokenPublico: token,
           },
-        }),
-      ]);
-      return { ok: true, destino: "/configuracoes", invoiceUrl: cobranca.invoiceUrl };
+        },
+      },
+    });
+    await criarSessao(user.id, user.role);
+
+    // Garante o cliente no Asaas (não falha o cadastro se o Asaas estiver fora).
+    try {
+      const { criarOuAtualizarCliente } = await import("@/lib/asaas");
+      const cliente = await criarOuAtualizarCliente({ nome, cpfCnpj, email, telefone, externalReference: user.id });
+      await prisma.user.update({ where: { id: user.id }, data: { asaasCustomerId: cliente.id } });
     } catch (e) {
-      console.error("cadastrarAssinatura: falha no Asaas", e);
-      // Conta criada; segue sem link (cobrança pode ser gerada depois).
-      return { ok: true, destino: "/configuracoes", invoiceUrl: null };
+      console.error("cadastrarAssinatura: cliente Asaas falhou (segue)", e);
     }
+
+    return { ok: true, destino: "/configuracoes", token };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/Unique constraint/i.test(msg)) return { erro: "Já existe uma conta com este e-mail. Faça login." };

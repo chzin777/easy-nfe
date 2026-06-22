@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button, Field, Input } from "@/app/ui/primitives";
 import { formatBRL } from "@/lib/format";
+import PagamentoCliente from "@/app/pagar/PagamentoCliente";
 import {
   cadastrarTrial,
   cadastrarAssinatura,
@@ -72,7 +73,14 @@ export default function CadastroForm({
       <div className="flex items-center justify-center bg-white px-6 py-12">
         <div className="w-full max-w-sm">
           {assinOk ? (
-            <SucessoAssinatura invoiceUrl={assinOk.invoiceUrl} destino={assinOk.destino} />
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Conta criada! Pague para ativar</h1>
+              <p className="mt-1.5 text-sm text-[var(--muted)]">Escolha Pix ou boleto abaixo. Seu acesso já está liberado — você pode pagar agora ou pelo link a qualquer momento.</p>
+              <div className="mt-6">
+                <PagamentoCliente token={assinOk.token} />
+              </div>
+              <a href={assinOk.destino} className="mt-5 inline-block text-sm font-medium text-[var(--primary)] hover:underline">Pular e ir para o sistema →</a>
+            </div>
           ) : modo === "assinatura" ? (
             <>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">Criar conta e assinar</h1>
@@ -288,35 +296,6 @@ export default function CadastroForm({
           </ul>
         </div>
       </div>
-    </div>
-  );
-}
-
-function SucessoAssinatura({ invoiceUrl, destino }: { invoiceUrl: string | null; destino: string }) {
-  return (
-    <div className="rounded-2xl border border-[var(--border)] bg-slate-50 p-8 text-center">
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[var(--success-soft)] text-[var(--success)]">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-      </div>
-      <h1 className="mt-4 text-xl font-bold text-slate-900">Conta criada!</h1>
-      {invoiceUrl ? (
-        <>
-          <p className="mt-2 text-sm text-[var(--muted)]">Finalize o pagamento para liberar tudo. Você pode pagar com Pix, boleto ou cartão.</p>
-          <a
-            href={invoiceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:-translate-y-0.5"
-          >
-            Pagar agora
-          </a>
-        </>
-      ) : (
-        <p className="mt-2 text-sm text-[var(--muted)]">Seu acesso já está liberado. A cobrança será enviada em seguida.</p>
-      )}
-      <a href={destino} className="mt-3 inline-block text-sm font-medium text-[var(--primary)] hover:underline">
-        Ir para o sistema →
-      </a>
     </div>
   );
 }

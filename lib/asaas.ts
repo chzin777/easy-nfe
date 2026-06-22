@@ -103,6 +103,41 @@ export async function criarCobrancaLink(p: {
   });
 }
 
+// Cria uma cobrança via Pix. dueDate no formato YYYY-MM-DD.
+export async function criarCobrancaPix(p: {
+  customer: string;
+  value: number;
+  dueDate: string;
+  description?: string;
+  externalReference?: string;
+}): Promise<AsaasCobranca> {
+  return asaas<AsaasCobranca>(`/payments`, {
+    method: "POST",
+    body: {
+      customer: p.customer,
+      billingType: "PIX",
+      value: p.value,
+      dueDate: p.dueDate,
+      description: p.description,
+      externalReference: p.externalReference,
+    },
+  });
+}
+
+// QR Code Pix de uma cobrança: imagem (base64) + payload copia-e-cola.
+export async function obterPixQrCode(paymentId: string): Promise<{ encodedImage: string | null; payload: string | null; expirationDate: string | null }> {
+  return asaas(`/payments/${paymentId}/pixQrCode`);
+}
+
+// Cancela (remove) uma cobrança. Best-effort ao trocar de método.
+export async function cancelarCobranca(paymentId: string): Promise<void> {
+  try {
+    await asaas(`/payments/${paymentId}`, { method: "DELETE" });
+  } catch {
+    /* ignora — cobrança pode já ter sido paga/removida */
+  }
+}
+
 // Linha digitável + código de barras do boleto.
 export async function obterLinhaDigitavel(paymentId: string): Promise<{ identificationField: string | null; barCode: string | null; nossoNumero: string | null }> {
   return asaas(`/payments/${paymentId}/identificationField`);

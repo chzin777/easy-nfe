@@ -166,11 +166,16 @@ model Fatura {
   pagaEm      DateTime?
   metodo      String? // pix | cartao | boleto | transferencia (ao marcar paga)
 
-  // Boleto Asaas
+  // Cobrança Asaas
   asaasPaymentId String?  @unique
   bankSlipUrl    String? // PDF do boleto
   invoiceUrl     String? // fatura/checkout Asaas
   linhaDigitavel String? // identificationField (linha digitável)
+  pixCopiaECola  String? @db.Text // payload Pix copia-e-cola
+  pixQrImage     String? @db.Text // QR code Pix (imagem base64)
+
+  // Pagamento público (sem login): /pagar/[token]
+  tokenPublico String? @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
