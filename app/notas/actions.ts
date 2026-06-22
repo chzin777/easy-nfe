@@ -144,6 +144,15 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       };
     });
 
+    // NCM precisa ter 8 dígitos — senão a SEFAZ rejeita por schema (225).
+    const ncmInvalido = itensNFe.find((it) => !/^\d{8}$/.test((it.ncm ?? "").replace(/\D/g, "")));
+    if (ncmInvalido) {
+      return {
+        ok: false,
+        erro: `Produto "${ncmInvalido.xProd}" está com NCM inválido (${ncmInvalido.ncm || "vazio"}). O NCM precisa ter 8 dígitos — corrija no cadastro do produto.`,
+      };
+    }
+
     const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
     const cert = carregarCertificado(pfxBase64, senha);
 
@@ -155,6 +164,12 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
 
     // Destinatário: NF-e 55 sempre identificado e com endereço. NFC-e identifica o
     // consumidor só pelo documento/nome (sem endereço, indIEDest=9 não-contribuinte).
+    // indIEDest: contribuinte (1) EXIGE IE no schema. Sem IE cadastrada, trata como
+    // não contribuinte (9) para não estourar rejeição 225 (falha de schema).
+    const ieDest = (cliente.inscricaoEstadual ?? "").replace(/\D/g, "");
+    let indIEDest = cliente.tipoContribuinte || "9";
+    if (indIEDest === "1" && !ieDest) indIEDest = "9";
+
     const dest: DadosNFe["dest"] = nfce
       ? {
           doc: cliente.documento,
@@ -165,8 +180,8 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       : {
           doc: cliente.documento,
           xNome: tpAmb === "2" ? HOMOLOG_XNOME : cliente.nome,
-          ie: cliente.inscricaoEstadual ?? undefined,
-          indIEDest: cliente.tipoContribuinte || "9",
+          ie: indIEDest === "1" ? ieDest : undefined,
+          indIEDest,
           ender: {
             xLgr: cliente.logradouro ?? "", nro: cliente.numero ?? "",
             xCpl: cliente.complemento || undefined, xBairro: cliente.bairro ?? "",
