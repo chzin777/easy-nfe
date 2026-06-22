@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import Image from "next/image";
+import Link from "next/link";
 import { Button, Field, Input } from "@/app/ui/primitives";
 import { entrar, type AuthResultado } from "../auth/actions";
 
@@ -23,15 +24,17 @@ export default function LoginPage() {
 
   return (
     <div className="relative grid min-h-screen lg:grid-cols-2">
-      {/* Logo no canto superior esquerdo da página (fora do form) */}
-      <Image
-        src="/images/logo/logo-completa.png"
-        alt="Easy-NFe"
-        width={863}
-        height={309}
-        priority
-        className="absolute left-6 top-6 z-20 h-20 w-auto sm:left-8 sm:top-8"
-      />
+      {/* Logo no canto superior esquerdo da página (fora do form) — volta à landing */}
+      <Link href="/" aria-label="Voltar à página inicial" className="absolute left-6 top-6 z-20 sm:left-8 sm:top-8">
+        <Image
+          src="/images/logo/logo-completa.png"
+          alt="Easy-NFe"
+          width={863}
+          height={309}
+          priority
+          className="h-20 w-auto transition hover:opacity-80"
+        />
+      </Link>
 
       {/* Lado esquerdo — formulário */}
       <div className="flex items-center justify-center bg-white px-6 py-12">
