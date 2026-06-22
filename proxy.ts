@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 
 const COOKIE_SESSAO = "easy-nfe-sessao";
-// Rotas públicas (sem sessão): landing e login.
-const PUBLICAS = ["/", "/login", "/cadastro"];
+// Públicas que redirecionam pro painel quando já logado (landing/login/cadastro).
+const REDIR_SE_LOGADO = ["/", "/login", "/cadastro"];
+// Públicas acessíveis por qualquer um (logado ou não), sem redirect: pagamento e legais.
+const PUBLICAS_ABERTAS = ["/pagar", "/termos", "/privacidade"];
 
 async function lerSessao(req: NextRequest): Promise<{ role: string } | null> {
   const token = req.cookies.get(COOKIE_SESSAO)?.value;
@@ -19,12 +21,22 @@ async function lerSessao(req: NextRequest): Promise<{ role: string } | null> {
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Server Actions são POST (header Next-Action). NÃO redirecionar — redirecionar
+  // um POST de action quebra com "An unexpected response was received from the
+  // server". A própria action faz o controle de acesso (exigir*).
+  if (req.method !== "GET" || req.headers.has("next-action")) {
+    return NextResponse.next();
+  }
+
   const sessao = await lerSessao(req);
   const autenticado = sessao !== null;
-  const publica = PUBLICAS.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  const casa = (p: string) => pathname === p || pathname.startsWith(p + "/");
+  const redirSeLogado = REDIR_SE_LOGADO.some(casa);
+  const publica = redirSeLogado || PUBLICAS_ABERTAS.some(casa);
 
-  // Logado vendo landing/login → manda pro painel.
-  if (publica && autenticado) {
+  // Logado vendo landing/login/cadastro → manda pro painel.
+  if (redirSeLogado && autenticado) {
     return NextResponse.redirect(new URL("/painel", req.url));
   }
   // Não logado em rota protegida → manda pra landing.
