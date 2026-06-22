@@ -242,6 +242,7 @@ export async function salvarConfigAsaas(input: {
   apiKey?: string;
   ambiente: AsaasAmbiente;
   webhookToken?: string;
+  limparWebhookToken?: boolean;
 }): Promise<Resultado> {
   try {
     await exigirAdminMaster();

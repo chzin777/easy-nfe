@@ -50,12 +50,17 @@ export async function salvarConfigAsaas(input: {
   apiKey?: string;
   ambiente: AsaasAmbiente;
   webhookToken?: string;
+  limparWebhookToken?: boolean;
 }): Promise<void> {
   const atual = await lerConfigAsaasSalva();
   const cfg: AsaasConfig = {
     apiKey: input.apiKey?.trim() ? input.apiKey.trim() : atual?.apiKey ?? "",
     ambiente: input.ambiente,
-    webhookToken: input.webhookToken?.trim() ? input.webhookToken.trim() : atual?.webhookToken ?? "",
+    webhookToken: input.limparWebhookToken
+      ? ""
+      : input.webhookToken?.trim()
+        ? input.webhookToken.trim()
+        : atual?.webhookToken ?? "",
   };
   const valor = encriptar(JSON.stringify(cfg));
   await prisma.configSistema.upsert({

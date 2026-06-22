@@ -42,6 +42,17 @@ export default function Integracoes() {
     void recarregar();
   }
 
+  async function removerToken() {
+    setSalvando(true);
+    setMsg(null);
+    const r = await salvarConfigAsaas({ ambiente, limparWebhookToken: true });
+    setSalvando(false);
+    if (!r.ok) { setMsg({ tom: "erro", texto: r.erro }); return; }
+    setWebhookToken("");
+    setMsg({ tom: "ok", texto: "Token do webhook removido. As notificações não exigem mais autenticação." });
+    void recarregar();
+  }
+
   async function testar() {
     setTestando(true);
     setMsg(null);
@@ -92,6 +103,11 @@ export default function Integracoes() {
         <Field label="Token do webhook" hint="Opcional. Valida o header asaas-access-token nas notificações. Deixe em branco para manter.">
           <Input type="password" value={webhookToken} onChange={(e) => setWebhookToken(e.target.value)} placeholder={status.temWebhookToken ? "•••••••• (mantém o atual)" : "defina um token forte"} autoComplete="off" />
         </Field>
+        {status.temWebhookToken && (
+          <button type="button" onClick={removerToken} disabled={salvando} className="-mt-2 text-xs font-medium text-[var(--danger)] hover:underline">
+            Remover token (webhook sem autenticação)
+          </button>
+        )}
 
         <div className="rounded-lg border border-dashed border-[var(--border)] p-3">
           <p className="text-xs font-medium text-[var(--muted)]">URL do webhook (cadastre no painel Asaas)</p>
