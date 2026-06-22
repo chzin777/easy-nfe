@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { exigirAdmin, exigirAdminMaster } from "@/lib/admin";
-import { hashSenha } from "@/lib/auth";
+import { hashSenha, lerSessaoCompleta } from "@/lib/auth";
 import { codigoMunicipio } from "@/lib/nfe/municipios";
 import {
   statusConfigAsaas,
@@ -197,6 +197,22 @@ export async function atualizarUsuario(
       where: { id: userId },
       data: { nome: input.nome || null, email, role: input.role, ativo: input.ativo },
     });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Exclui o usuário e tudo que cascateia (empresas, licença, faturas, acessos).
+// Irreversível — exige admin master e bloqueia excluir a própria conta.
+export async function excluirUsuario(userId: string): Promise<Resultado> {
+  try {
+    await exigirAdminMaster();
+    const sess = await lerSessaoCompleta();
+    if (sess?.uid === userId) return { ok: false, erro: "Você não pode excluir a própria conta." };
+    const alvo = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!alvo) return { ok: false, erro: "Usuário não encontrado." };
+    await prisma.user.delete({ where: { id: userId } });
     return { ok: true };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };

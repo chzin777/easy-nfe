@@ -8,7 +8,7 @@ import LightningLoader from "@/app/ui/LightningLoader";
 import { formatBRL, formatData } from "@/lib/format";
 import {
   detalheUsuario, type UsuarioDetalhe as Detalhe,
-  atualizarUsuario, redefinirSenha,
+  atualizarUsuario, redefinirSenha, excluirUsuario,
   definirLicenca, listarPlanos, type PlanoDados,
   listarEmpresasAdmin, type EmpresaAdmin,
   criarEmpresaParaUsuario, vincularUsuarioEmpresa, desvincularUsuarioEmpresa,
@@ -34,6 +34,9 @@ export default function UsuarioDetalhe({
   const [msg, setMsg] = useState<string | null>(null);
   const [aba, setAba] = useState("conta");
   const [salvando, setSalvando] = useState(false);
+  const [confirmarExcluir, setConfirmarExcluir] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+  const [erroExcluir, setErroExcluir] = useState<string | null>(null);
   // aba ativa registra aqui seu save; o botão único do rodapé o aciona.
   const salvarRef = useRef<(() => void | Promise<void>) | null>(null);
 
@@ -42,6 +45,16 @@ export default function UsuarioDetalhe({
     try { await salvarRef.current?.(); } finally { setSalvando(false); }
   }
   const temSalvar = aba === "conta" || aba === "licenca";
+
+  async function excluir() {
+    setExcluindo(true);
+    setErroExcluir(null);
+    const r = await excluirUsuario(userId);
+    setExcluindo(false);
+    if (!r.ok) { setErroExcluir(r.erro); setConfirmarExcluir(false); return; }
+    onMudou();
+    onFechar();
+  }
 
   async function recarregar() {
     const det = await detalheUsuario(userId);
@@ -66,12 +79,30 @@ export default function UsuarioDetalhe({
       onFechar={onFechar}
       titulo={`${d.nome || d.email}`}
       largura="max-w-4xl"
-      rodape={temSalvar ? (
-        <Button onClick={salvarAtual} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</Button>
-      ) : undefined}
+      rodape={
+        <div className="flex w-full items-center justify-between gap-3">
+          {confirmarExcluir ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-[var(--danger)]">Excluir definitivamente?</span>
+              <Button variante="danger" onClick={excluir} disabled={excluindo}>{excluindo ? "Excluindo…" : "Sim, excluir"}</Button>
+              <Button variante="secondary" onClick={() => setConfirmarExcluir(false)} disabled={excluindo}>Cancelar</Button>
+            </div>
+          ) : (
+            <Button variante="ghost" className="text-[var(--danger)]" onClick={() => { setErroExcluir(null); setConfirmarExcluir(true); }}>
+              Excluir usuário
+            </Button>
+          )}
+          {temSalvar && !confirmarExcluir ? (
+            <Button onClick={salvarAtual} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</Button>
+          ) : (
+            <span />
+          )}
+        </div>
+      }
     >
       <div className="space-y-4">
         {msg && <p className="rounded-lg bg-[var(--success-soft)] px-3 py-2 text-sm font-medium text-[var(--success)]">{msg}</p>}
+        {erroExcluir && <p className="rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-sm font-medium text-[var(--danger)]">{erroExcluir}</p>}
         <Tabs
           alturaConteudo="460px"
           onMudarAba={setAba}

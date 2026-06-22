@@ -57,7 +57,7 @@ export default function Integracoes() {
   if (!status) return <LightningLoader texto="Carregando integração…" />;
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="mx-auto max-w-2xl space-y-4">
       <Card className="space-y-5 p-5">
         <div className="flex items-center justify-between">
           <div>
