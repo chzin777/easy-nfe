@@ -24,8 +24,11 @@ import {
   listarClientes,
   atualizarCliente,
   excluirCliente,
+  importarClientes,
 } from "./actions";
 import NovoClienteModal from "./NovoClienteModal";
+import ImportarPlanilhaModal from "@/app/ui/ImportarPlanilhaModal";
+import { COLUNAS_CLIENTE, validarLinhaCliente } from "@/lib/clientes-modelo";
 
 type Form = Omit<Cliente, "id" | "codigoInterno">;
 
@@ -42,6 +45,7 @@ export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [busca, setBusca] = useState("");
   const [modo, setModo] = useState<"novo" | "editar" | null>(null);
+  const [importar, setImportar] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Form>(formVazio);
   const [salvando, setSalvando] = useState(false);
@@ -156,7 +160,15 @@ export default function ClientesPage() {
       <PageHeader
         titulo="Clientes"
         subtitulo="Clique em um cliente para ver detalhes e editar."
-        acao={<Button onClick={abrirNovo}>+ Novo cliente</Button>}
+        acao={
+          <div className="flex gap-2">
+            <Button variante="secondary" onClick={() => setImportar(true)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="-ml-0.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" x2="12" y1="3" y2="15" /></svg>
+              Importar
+            </Button>
+            <Button onClick={abrirNovo}>+ Novo cliente</Button>
+          </div>
+        }
       />
 
       <Card>
@@ -183,6 +195,27 @@ export default function ClientesPage() {
       {/* Criação em etapas (modal compartilhado) */}
       {modo === "novo" && (
         <NovoClienteModal onFechar={fechar} onCriado={() => { recarregar(); fechar(); }} />
+      )}
+
+      {/* Importação em massa (CSV/XLSX) */}
+      {importar && (
+        <ImportarPlanilhaModal
+          titulo="Importar clientes"
+          nomeModelo="modelo-clientes"
+          nomePlanilha="Clientes"
+          colunas={COLUNAS_CLIENTE}
+          headerObrigatorio="nome"
+          validar={validarLinhaCliente}
+          obrigatoriasLabel={<><b>Nome</b> e <b>CPF/CNPJ</b></>}
+          preview={[
+            { label: "Nome", render: (c) => <span className="font-medium">{c.nome || "(vazio)"}</span> },
+            { label: "CPF/CNPJ", render: (c) => <span className="font-mono text-xs">{c.documento || "—"}</span> },
+            { label: "Município", render: (c) => c.municipio ? `${c.municipio}/${c.uf}` : "—" },
+          ]}
+          onImportar={importarClientes}
+          onFechar={() => setImportar(false)}
+          onImportado={recarregar}
+        />
       )}
 
       {/* Edição completa */}

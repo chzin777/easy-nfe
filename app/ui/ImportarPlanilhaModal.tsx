@@ -1,63 +1,108 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import Modal from "@/app/ui/Modal";
 import { Button } from "@/app/ui/primitives";
-import { formatBRL } from "@/lib/format";
-import {
-  COLUNAS_MODELO,
-  mapaColunas,
-  norm,
-  validarLinha,
-  type LinhaValidada,
-  type ProdutoImport,
-} from "@/lib/produtos-modelo";
-import { importarProdutos } from "./actions";
+
+export type ColunaModelo = {
+  key: string;
+  header: string;
+  obrigatorio: boolean;
+  exemplo: string;
+  aliases?: string[];
+};
+
+export type LinhaValidada<T> = {
+  linha: number;
+  item: T;
+  erros: string[];
+  avisos: string[];
+};
+
+export type ColunaPreview<T> = {
+  label: string;
+  alinhar?: "right";
+  render: (item: T) => ReactNode;
+};
+
+type Props<T> = {
+  titulo: string;
+  nomeModelo: string; // ex.: "modelo-produtos"
+  nomePlanilha: string; // aba do xlsx, ex.: "Produtos"
+  colunas: ColunaModelo[];
+  // chave que precisa existir no cabeçalho p/ aceitar o arquivo (ex.: "nome").
+  headerObrigatorio: string;
+  validar: (bruto: Record<string, string>, linha: number) => LinhaValidada<T>;
+  preview: ColunaPreview<T>[];
+  obrigatoriasLabel: ReactNode; // descrição das colunas obrigatórias
+  onImportar: (itens: T[]) => Promise<{ criados: number; ignorados: number; erros: string[] }>;
+  onImportado: () => void;
+  onFechar: () => void;
+};
 
 type Fase = "inicio" | "lendo" | "preview" | "importando" | "fim";
 
-export default function ImportarProdutosModal({
-  onFechar,
+// Normaliza cabeçalho/valor p/ comparação (sem acento, minúsculo).
+function norm(s: string): string {
+  return String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+export default function ImportarPlanilhaModal<T>({
+  titulo,
+  nomeModelo,
+  nomePlanilha,
+  colunas,
+  headerObrigatorio,
+  validar,
+  preview,
+  obrigatoriasLabel,
+  onImportar,
   onImportado,
-}: {
-  onFechar: () => void;
-  onImportado: () => void;
-}) {
+  onFechar,
+}: Props<T>) {
   const [fase, setFase] = useState<Fase>("inicio");
-  const [linhas, setLinhas] = useState<LinhaValidada[]>([]);
+  const [linhas, setLinhas] = useState<LinhaValidada<T>[]>([]);
   const [erroArquivo, setErroArquivo] = useState<string | null>(null);
   const [nomeArquivo, setNomeArquivo] = useState("");
   const [resultado, setResultado] = useState<{ criados: number; ignorados: number; erros: string[] } | null>(null);
+  const [colsAberto, setColsAberto] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const validas = linhas.filter((l) => l.erros.length === 0);
   const comErro = linhas.length - validas.length;
 
+  // Mapa headerNormalizado -> key (header, key e aliases).
+  function mapaColunas(): Map<string, string> {
+    const m = new Map<string, string>();
+    for (const c of colunas) {
+      m.set(norm(c.header), c.key);
+      m.set(norm(c.key), c.key);
+      for (const a of c.aliases ?? []) m.set(norm(a), c.key);
+    }
+    return m;
+  }
+
   // ---- Modelo (download) ------------------------------------------------
   async function baixarModelo(tipo: "xlsx" | "csv") {
     const XLSX = await import("xlsx");
-    const headers = COLUNAS_MODELO.map((c) => c.header);
-    const exemplo = COLUNAS_MODELO.map((c) => c.exemplo);
+    const headers = colunas.map((c) => c.header);
+    const exemplo = colunas.map((c) => c.exemplo);
     const ws = XLSX.utils.aoa_to_sheet([headers, exemplo]);
     if (tipo === "xlsx") {
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Produtos");
-      XLSX.writeFile(wb, "modelo-produtos.xlsx");
+      XLSX.utils.book_append_sheet(wb, ws, nomePlanilha);
+      XLSX.writeFile(wb, `${nomeModelo}.xlsx`);
     } else {
-      // CSV com ; (padrão BR) e BOM para o Excel respeitar acentos.
       const csv = XLSX.utils.sheet_to_csv(ws, { FS: ";" });
       const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
-      baixarBlob(blob, "modelo-produtos.csv");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${nomeModelo}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
     }
-  }
-
-  function baixarBlob(blob: Blob, nome: string) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = nome;
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   // ---- Leitura do arquivo ----------------------------------------------
@@ -79,25 +124,25 @@ export default function ImportarProdutosModal({
       const ws = wb.Sheets[wb.SheetNames[0]];
       if (!ws) throw new Error("Planilha vazia.");
       const matriz = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "", raw: false, blankrows: false });
-      if (matriz.length < 2) throw new Error("Arquivo sem linhas de dados (precisa do cabeçalho + ao menos 1 produto).");
+      if (matriz.length < 2) throw new Error("Arquivo sem linhas de dados (precisa do cabeçalho + ao menos 1 linha).");
 
       const mapa = mapaColunas();
       const cabecalho = matriz[0].map((h) => mapa.get(norm(String(h))) ?? null);
-      if (!cabecalho.some((k) => k === "nome")) {
-        throw new Error('Cabeçalho não reconhecido. Use o modelo padrão (precisa ter ao menos a coluna "Nome").');
+      if (!cabecalho.some((k) => k === headerObrigatorio)) {
+        throw new Error('Cabeçalho não reconhecido. Use o modelo padrão (precisa ao menos a coluna "Nome").');
       }
 
-      const validadas: LinhaValidada[] = [];
+      const validadas: LinhaValidada<T>[] = [];
       for (let r = 1; r < matriz.length; r++) {
         const linha = matriz[r];
-        if (!linha || linha.every((c) => String(c).trim() === "")) continue; // pula vazias
-        const bruto: Partial<Record<keyof ProdutoImport, string>> = {};
+        if (!linha || linha.every((c) => String(c).trim() === "")) continue;
+        const bruto: Record<string, string> = {};
         cabecalho.forEach((key, col) => {
           if (key) bruto[key] = String(linha[col] ?? "");
         });
-        validadas.push(validarLinha(bruto, validadas.length + 1));
+        validadas.push(validar(bruto, validadas.length + 1));
       }
-      if (!validadas.length) throw new Error("Nenhuma linha de produto encontrada.");
+      if (!validadas.length) throw new Error("Nenhuma linha encontrada.");
       setLinhas(validadas);
       setFase("preview");
     } catch (e) {
@@ -111,18 +156,17 @@ export default function ImportarProdutosModal({
   // ---- Importar ---------------------------------------------------------
   async function importar() {
     setFase("importando");
-    const r = await importarProdutos(validas.map((l) => l.produto));
+    const r = await onImportar(validas.map((l) => l.item));
     setResultado(r);
     setFase("fim");
   }
 
-  // ---- UI ---------------------------------------------------------------
   const rodape =
     fase === "preview" ? (
       <div className="flex w-full items-center justify-between">
         <Button variante="secondary" onClick={() => { setFase("inicio"); setLinhas([]); }}>Trocar arquivo</Button>
         <Button onClick={importar} disabled={validas.length === 0}>
-          Importar {validas.length} produto{validas.length === 1 ? "" : "s"}
+          Importar {validas.length} registro{validas.length === 1 ? "" : "s"}
         </Button>
       </div>
     ) : fase === "fim" ? (
@@ -130,18 +174,12 @@ export default function ImportarProdutosModal({
     ) : undefined;
 
   return (
-    <Modal
-      aberto
-      onFechar={fase === "importando" ? () => {} : onFechar}
-      titulo="Importar produtos"
-      largura="max-w-3xl"
-      rodape={rodape}
-    >
+    <Modal aberto onFechar={fase === "importando" ? () => {} : onFechar} titulo={titulo} largura="max-w-3xl" rodape={rodape}>
       {fase === "inicio" && (
         <div className="space-y-5">
           <div className="rounded-xl border border-[var(--border)] bg-slate-50 p-4 text-sm">
             <p className="font-semibold">1. Baixe o modelo padrão</p>
-            <p className="mt-1 text-[var(--muted)]">Preencha uma linha por produto. Colunas obrigatórias: <b>Nome</b>, <b>Unidade</b>, <b>NCM</b>, <b>Origem</b> e <b>Preço</b>.</p>
+            <p className="mt-1 text-[var(--muted)]">Preencha uma linha por registro. Colunas obrigatórias: {obrigatoriasLabel}.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button variante="secondary" onClick={() => baixarModelo("xlsx")}>⬇ Modelo .xlsx</Button>
               <Button variante="secondary" onClick={() => baixarModelo("csv")}>⬇ Modelo .csv</Button>
@@ -151,27 +189,30 @@ export default function ImportarProdutosModal({
           <div className="rounded-xl border-2 border-dashed border-[var(--border)] p-6 text-center">
             <p className="text-sm font-semibold">2. Envie o arquivo preenchido</p>
             <p className="mt-1 text-xs text-[var(--muted)]">Aceita .xlsx, .xls ou .csv</p>
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) aoEscolher(f); }}
-            />
+            <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) aoEscolher(f); }} />
             <Button className="mt-3" onClick={() => inputRef.current?.click()}>Escolher arquivo</Button>
             {erroArquivo && <p className="mt-3 text-sm font-medium text-[var(--danger)]">{erroArquivo}</p>}
           </div>
 
-          <details className="text-xs text-[var(--muted)]">
-            <summary className="cursor-pointer font-medium">Colunas do modelo</summary>
-            <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
-              {COLUNAS_MODELO.map((c) => (
-                <li key={c.key}>
-                  <b>{c.header}</b>{c.obrigatorio ? " *" : ""}{c.exemplo ? ` — ex.: ${c.exemplo}` : ""}
-                </li>
-              ))}
-            </ul>
-          </details>
+          <div className="text-xs text-[var(--muted)]">
+            <button type="button" onClick={() => setColsAberto((v) => !v)} aria-expanded={colsAberto} className="flex items-center gap-1.5 font-medium transition hover:text-[var(--foreground)]">
+              <motion.svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" animate={{ rotate: colsAberto ? 90 : 0 }} transition={{ duration: 0.2 }}>
+                <path d="m9 18 6-6-6-6" />
+              </motion.svg>
+              Colunas do modelo
+            </button>
+            <AnimatePresence initial={false}>
+              {colsAberto && (
+                <motion.div key="cols" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
+                  <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+                    {colunas.map((c) => (
+                      <li key={c.key}><b>{c.header}</b>{c.obrigatorio ? " *" : ""}{c.exemplo ? ` — ex.: ${c.exemplo}` : ""}</li>
+                    ))}
+                  </ul>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       )}
 
@@ -195,10 +236,9 @@ export default function ImportarProdutosModal({
               <thead className="sticky top-0 bg-slate-50">
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                   <th className="px-3 py-2">#</th>
-                  <th className="px-3 py-2">Nome</th>
-                  <th className="px-3 py-2">Un.</th>
-                  <th className="px-3 py-2">NCM</th>
-                  <th className="px-3 py-2 text-right">Preço</th>
+                  {preview.map((c) => (
+                    <th key={c.label} className={"px-3 py-2 " + (c.alinhar === "right" ? "text-right" : "")}>{c.label}</th>
+                  ))}
                   <th className="px-3 py-2">Situação</th>
                 </tr>
               </thead>
@@ -208,10 +248,9 @@ export default function ImportarProdutosModal({
                   return (
                     <tr key={l.linha} className={"border-b border-[var(--border)] last:border-0 " + (ok ? "" : "bg-[var(--danger-soft)]/40")}>
                       <td className="px-3 py-2 text-xs text-[var(--muted)]">{l.linha}</td>
-                      <td className="px-3 py-2 font-medium">{l.produto.nome || <span className="text-[var(--danger)]">(vazio)</span>}</td>
-                      <td className="px-3 py-2">{l.produto.unidade}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{l.produto.ncm || "—"}</td>
-                      <td className="px-3 py-2 text-right">{formatBRL(l.produto.preco)}</td>
+                      {preview.map((c) => (
+                        <td key={c.label} className={"px-3 py-2 " + (c.alinhar === "right" ? "text-right" : "")}>{c.render(l.item)}</td>
+                      ))}
                       <td className="px-3 py-2 text-xs">
                         {ok ? (
                           l.avisos.length ? (
@@ -236,7 +275,7 @@ export default function ImportarProdutosModal({
       {fase === "importando" && (
         <div className="flex items-center gap-3 py-10 text-sm text-[var(--muted)]">
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--primary)] border-t-transparent" />
-          Importando produtos…
+          Importando…
         </div>
       )}
 
@@ -244,11 +283,9 @@ export default function ImportarProdutosModal({
         <div className="space-y-3 py-2 text-sm">
           <div className="flex items-center gap-2 rounded-lg bg-[var(--success-soft)] px-3 py-2.5 font-medium text-[var(--success)]">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-            {resultado.criados} produto(s) importado(s).
+            {resultado.criados} registro(s) importado(s).
           </div>
-          {resultado.ignorados > 0 && (
-            <p className="text-[var(--muted)]">{resultado.ignorados} linha(s) ignorada(s) por erro.</p>
-          )}
+          {resultado.ignorados > 0 && <p className="text-[var(--muted)]">{resultado.ignorados} linha(s) ignorada(s) por erro.</p>}
           {resultado.erros.length > 0 && (
             <ul className="max-h-40 space-y-1 overflow-auto rounded-lg border border-[var(--border)] p-3 text-xs text-[var(--danger)]">
               {resultado.erros.map((e, i) => <li key={i}>{e}</li>)}

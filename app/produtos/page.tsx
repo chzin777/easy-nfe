@@ -24,9 +24,11 @@ import {
   listarProdutos,
   atualizarProduto,
   excluirProduto,
+  importarProdutos,
 } from "./actions";
 import NovoProdutoModal from "./NovoProdutoModal";
-import ImportarProdutosModal from "./ImportarProdutosModal";
+import ImportarPlanilhaModal from "@/app/ui/ImportarPlanilhaModal";
+import { COLUNAS_PRODUTO, validarLinhaProduto } from "@/lib/produtos-modelo";
 import NcmPicker from "./NcmPicker";
 import MoneyInput from "@/app/ui/MoneyInput";
 
@@ -211,7 +213,10 @@ export default function ProdutosPage() {
         subtitulo="Clique em um produto para ver detalhes e editar."
         acao={
           <div className="flex gap-2">
-            <Button variante="secondary" onClick={() => setImportar(true)}>⬆ Importar</Button>
+            <Button variante="secondary" onClick={() => setImportar(true)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="-ml-0.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" x2="12" y1="3" y2="15" /></svg>
+              Importar
+            </Button>
             <Button onClick={abrirNovo}>+ Novo produto</Button>
           </div>
         }
@@ -245,7 +250,24 @@ export default function ProdutosPage() {
 
       {/* Importação em massa (CSV/XLSX) */}
       {importar && (
-        <ImportarProdutosModal onFechar={() => setImportar(false)} onImportado={recarregar} />
+        <ImportarPlanilhaModal
+          titulo="Importar produtos"
+          nomeModelo="modelo-produtos"
+          nomePlanilha="Produtos"
+          colunas={COLUNAS_PRODUTO}
+          headerObrigatorio="nome"
+          validar={validarLinhaProduto}
+          obrigatoriasLabel={<><b>Nome</b>, <b>Unidade</b>, <b>NCM</b>, <b>Origem</b> e <b>Preço</b></>}
+          preview={[
+            { label: "Nome", render: (p) => <span className="font-medium">{p.nome || "(vazio)"}</span> },
+            { label: "Un.", render: (p) => p.unidade },
+            { label: "NCM", render: (p) => <span className="font-mono text-xs">{p.ncm || "—"}</span> },
+            { label: "Preço", alinhar: "right", render: (p) => formatBRL(p.preco) },
+          ]}
+          onImportar={importarProdutos}
+          onFechar={() => setImportar(false)}
+          onImportado={recarregar}
+        />
       )}
 
       {/* Edição completa */}

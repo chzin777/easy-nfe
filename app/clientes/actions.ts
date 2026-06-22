@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
 import { exigirFeature } from "@/lib/permissoes";
 import type { Cliente } from "@/lib/types";
+import type { ClienteImport } from "@/lib/clientes-modelo";
 
 type Row = {
   id: string;
@@ -84,6 +85,47 @@ export async function atualizarCliente(id: string, input: ClienteInput): Promise
   await exigirFeature("clientes");
   const empresaId = await exigirEmpresa();
   await prisma.cliente.updateMany({ where: { id, empresaId }, data: paraDados(input) });
+}
+
+// Importação em massa (CSV/XLSX). Revalida no servidor e cria em lote.
+export async function importarClientes(
+  itens: ClienteImport[],
+): Promise<{ criados: number; ignorados: number; erros: string[] }> {
+  await exigirFeature("clientes");
+  const empresaId = await exigirEmpresa();
+
+  const erros: string[] = [];
+  const validos: ClienteImport[] = [];
+  itens.forEach((it, idx) => {
+    const nome = (it.nome ?? "").trim();
+    const documento = (it.documento ?? "").replace(/\D/g, "");
+    if (!nome) erros.push(`Linha ${idx + 1}: nome obrigatório.`);
+    else if (!documento) erros.push(`Linha ${idx + 1}: CPF/CNPJ obrigatório.`);
+    else validos.push({ ...it, nome, documento });
+  });
+
+  if (validos.length) {
+    await prisma.cliente.createMany({
+      data: validos.map((i) => ({
+        empresaId,
+        tipoContribuinte: i.tipoContribuinte || (i.documento.length === 14 ? "1" : "9"),
+        documento: i.documento,
+        nome: i.nome,
+        inscricaoEstadual: i.inscricaoEstadual || null,
+        telefone: i.telefone || null,
+        email: i.email || null,
+        cep: i.cep || null,
+        logradouro: i.logradouro || null,
+        numero: i.numero || null,
+        complemento: i.complemento || null,
+        bairro: i.bairro || null,
+        municipio: i.municipio || null,
+        uf: i.uf || null,
+      })),
+    });
+  }
+
+  return { criados: validos.length, ignorados: itens.length - validos.length, erros };
 }
 
 export async function excluirCliente(id: string): Promise<void> {

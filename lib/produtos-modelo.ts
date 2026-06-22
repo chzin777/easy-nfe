@@ -1,5 +1,5 @@
 // Modelo padrão de importação de produtos (CSV/XLSX).
-// Usado tanto no cliente (gerar modelo + preview) quanto no servidor (guard final).
+import type { ColunaModelo, LinhaValidada } from "@/app/ui/ImportarPlanilhaModal";
 import { ORIGENS, UNIDADES } from "./mock-data";
 
 export type ProdutoImport = {
@@ -16,16 +16,7 @@ export type ProdutoImport = {
   reguladoAnp: boolean;
 };
 
-export type ColunaModelo = {
-  key: keyof ProdutoImport;
-  header: string;
-  obrigatorio: boolean;
-  exemplo: string;
-  aliases?: string[];
-};
-
-// Ordem das colunas no modelo. Header é o que aparece na 1ª linha do arquivo.
-export const COLUNAS_MODELO: ColunaModelo[] = [
+export const COLUNAS_PRODUTO: ColunaModelo[] = [
   { key: "nome", header: "Nome", obrigatorio: true, exemplo: "Camiseta branca P" },
   { key: "unidade", header: "Unidade", obrigatorio: true, exemplo: "UN", aliases: ["un", "unid", "unidade de medida"] },
   { key: "ncm", header: "NCM", obrigatorio: true, exemplo: "61091000" },
@@ -39,27 +30,6 @@ export const COLUNAS_MODELO: ColunaModelo[] = [
   { key: "reguladoAnp", header: "Regulado ANP", obrigatorio: false, exemplo: "nao", aliases: ["anp", "regulado anp"] },
 ];
 
-// Normaliza um cabeçalho/valor para comparação (sem acento, minúsculo, sem espaço extra).
-export function norm(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// Mapa headerNormalizado -> key, considerando header e aliases.
-export function mapaColunas(): Map<string, keyof ProdutoImport> {
-  const m = new Map<string, keyof ProdutoImport>();
-  for (const c of COLUNAS_MODELO) {
-    m.set(norm(c.header), c.key);
-    m.set(norm(c.key), c.key);
-    for (const a of c.aliases ?? []) m.set(norm(a), c.key);
-  }
-  return m;
-}
-
 // Converte texto de preço (BR ou US) em número. "1.234,56" -> 1234.56; "29.90" -> 29.9
 export function parsePreco(v: string): number {
   const s = String(v).trim().replace(/[^\d.,-]/g, "");
@@ -67,33 +37,24 @@ export function parsePreco(v: string): number {
   const temVirgula = s.includes(",");
   const temPonto = s.includes(".");
   let limpo = s;
-  if (temVirgula && temPonto) {
-    // '.' é separador de milhar, ',' decimal.
-    limpo = s.replace(/\./g, "").replace(",", ".");
-  } else if (temVirgula) {
-    limpo = s.replace(",", ".");
-  }
+  if (temVirgula && temPonto) limpo = s.replace(/\./g, "").replace(",", ".");
+  else if (temVirgula) limpo = s.replace(",", ".");
   const n = Number(limpo);
   return Number.isFinite(n) ? n : 0;
 }
 
-export function parseBool(v: string): boolean {
-  const s = norm(String(v));
+function parseBool(v: string): boolean {
+  const s = String(v).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
   return ["sim", "s", "true", "1", "x", "verdadeiro"].includes(s);
 }
 
 const UNIDADES_VALIDAS = new Set(UNIDADES.map((u) => u.value));
 const ORIGENS_VALIDAS = new Set(ORIGENS.map((o) => o.value));
 
-export type LinhaValidada = {
-  linha: number; // nº da linha no arquivo (1 = primeira de dados)
-  produto: ProdutoImport;
-  erros: string[];
-  avisos: string[];
-};
-
-// Valida e normaliza uma linha já mapeada por chave.
-export function validarLinha(bruto: Partial<Record<keyof ProdutoImport, string>>, linha: number): LinhaValidada {
+export function validarLinhaProduto(
+  bruto: Record<string, string>,
+  linha: number,
+): LinhaValidada<ProdutoImport> {
   const erros: string[] = [];
   const avisos: string[] = [];
 
@@ -120,7 +81,7 @@ export function validarLinha(bruto: Partial<Record<keyof ProdutoImport, string>>
   const preco = parsePreco(bruto.preco ?? "");
   if (preco <= 0) avisos.push("Preço vazio ou zero.");
 
-  const produto: ProdutoImport = {
+  const item: ProdutoImport = {
     nome,
     unidade,
     ncm,
@@ -134,5 +95,5 @@ export function validarLinha(bruto: Partial<Record<keyof ProdutoImport, string>>
     reguladoAnp: parseBool(bruto.reguladoAnp ?? ""),
   };
 
-  return { linha, produto, erros, avisos };
+  return { linha, item, erros, avisos };
 }
