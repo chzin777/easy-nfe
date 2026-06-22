@@ -160,38 +160,149 @@ function AbaUsuarios() {
   );
 }
 
+const STATUS_LIC = ["TRIAL", "ATIVA", "EXPIRADA", "SUSPENSA", "CANCELADA"].map((v) => ({ value: v, label: v }));
+
+// Data ISO (yyyy-mm-dd) daqui a N dias — usada no trial.
+function isoEmDias(dias: number): string {
+  const dt = new Date();
+  dt.setDate(dt.getDate() + dias);
+  return dt.toISOString().slice(0, 10);
+}
+
 function NovoUsuarioModal({ aberto, onFechar, onCriado }: { aberto: boolean; onFechar: () => void; onCriado: () => void }) {
+  // Passo 1 — Conta (mesmos campos da aba "Conta" do editar).
+  const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [nome, setNome] = useState("");
-  const [role, setRole] = useState("USER");
+  const [role, setRole] = useState<"USER" | "SUPORTE" | "ADMIN" | "CONTADOR">("USER");
+  const [ativo, setAtivo] = useState(true);
+  // Passo 2 — Licença (mesmos campos da aba "Licença" do editar).
+  const [planos, setPlanos] = useState<Required<PlanoDados>[]>([]);
+  const [planoId, setPlanoId] = useState("");
+  const [status, setStatus] = useState("TRIAL");
+  const [diasTrial, setDiasTrial] = useState(7);
+  const [validade, setValidade] = useState(isoEmDias(7));
+
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+
+  // Carrega planos ao abrir e reseta o formulário.
+  useEffect(() => {
+    if (!aberto) return;
+    setNome(""); setEmail(""); setSenha(""); setRole("USER"); setAtivo(true);
+    setPlanoId(""); setStatus("TRIAL"); setDiasTrial(7); setValidade(isoEmDias(7));
+    setErro(null);
+    (async () => {
+      const pl = await listarPlanos();
+      setPlanos(pl);
+      setPlanoId((atual) => atual || pl[0]?.id || "");
+    })();
+  }, [aberto]);
+
+  function aplicarTrial(dias: number) {
+    const d = Math.max(1, dias || 0);
+    setDiasTrial(d);
+    setValidade(isoEmDias(d));
+  }
 
   async function salvar() {
     setSalvando(true);
     setErro(null);
-    const r = await criarUsuario({ email, senha, nome, role: role as "USER" | "SUPORTE" | "ADMIN" | "CONTADOR" });
+    const r = await criarUsuario({
+      email, senha, nome, role, ativo,
+      licenca: planoId
+        ? { planoId, status: status as "TRIAL" | "ATIVA" | "EXPIRADA" | "SUSPENSA" | "CANCELADA", validadeEm: validade || null }
+        : null,
+    });
     setSalvando(false);
     if (!r.ok) { setErro(r.erro); return; }
-    setEmail(""); setSenha(""); setNome(""); setRole("USER");
     onCriado();
   }
 
-  return (
-    <Modal aberto={aberto} onFechar={onFechar} titulo="Novo usuário" largura="max-w-md"
-      rodape={<><Button variante="secondary" onClick={onFechar} disabled={salvando}>Cancelar</Button><Button onClick={salvar} disabled={salvando}>{salvando ? "Criando…" : "Criar"}</Button></>}
-    >
-      <div className="space-y-4">
+  if (!aberto) return null;
+
+  const contaUI = (
+    <div className="space-y-4">
+      <p className="text-sm font-semibold">Dados da conta</p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Nome"><Input value={nome} onChange={(e) => setNome(e.target.value)} /></Field>
         <Field label="E-mail" required><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
         <Field label="Senha" required hint="Mínimo 8 caracteres."><Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} /></Field>
-        <Field label="Papel" required><Select opcoes={ROLES} value={role} onChange={(e) => setRole(e.target.value)} /></Field>
-        {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
+        <Field label="Papel" required><Select opcoes={ROLES} value={role} onChange={(e) => setRole(e.target.value as typeof role)} /></Field>
+        <Field label="Status"><Select opcoes={[{ value: "true", label: "Ativo" }, { value: "false", label: "Bloqueado" }]} value={String(ativo)} onChange={(e) => setAtivo(e.target.value === "true")} /></Field>
       </div>
-    </Modal>
+      {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
+    </div>
+  );
+
+  const licencaUI = (
+    <div className="space-y-4">
+      <p className="text-sm font-semibold">Licença / Plano <span className="font-normal text-[var(--muted)]">— TRIAL não gera fatura</span></p>
+      <div>
+        <p className="mb-2 text-xs font-medium text-[var(--muted)]">Plano</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {planos.map((p) => {
+            const sel = planoId === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPlanoId(sel ? "" : p.id)}
+                className={
+                  "flex flex-col items-start rounded-xl border-2 p-3 text-left transition " +
+                  (sel ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-slate-300")
+                }
+              >
+                <span className="text-sm font-semibold">{p.nome}</span>
+                {p.sobConsulta ? (
+                  <span className="mt-1 text-xs text-[var(--muted)]">Sob consulta</span>
+                ) : (
+                  <>
+                    <span className="mt-1 text-lg font-bold text-[var(--primary)]">{formatBRL(p.preco)}</span>
+                    <span className="text-[10px] text-[var(--muted)]">/{p.periodicidade === "anual" ? "ano" : "mês"} · {p.limiteEmpresas < 0 ? "∞" : p.limiteEmpresas} empresa(s)</span>
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-xs text-[var(--muted)]">Sem plano selecionado, o usuário é criado sem licença (ou trial padrão de 7 dias se for Usuário).</p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Status"><Select opcoes={STATUS_LIC} value={status} onChange={(e) => setStatus(e.target.value)} /></Field>
+        {status === "TRIAL" ? (
+          <Field label="Período de trial (dias)" hint={`Expira em ${formatData(validade)}`}>
+            <Input type="number" min="1" value={diasTrial} onChange={(e) => aplicarTrial(Number(e.target.value))} />
+          </Field>
+        ) : (
+          <Field label="Validade"><Input type="date" value={validade} onChange={(e) => setValidade(e.target.value)} /></Field>
+        )}
+      </div>
+      {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
+    </div>
+  );
+
+  return (
+    <StepperModal onFechar={salvando ? () => {} : onFechar} largura="max-w-3xl">
+      {salvando ? (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-16 shadow-2xl">
+          <LightningLoader texto="Criando usuário…" />
+        </div>
+      ) : (
+        <Stepper
+          completeButtonText="Criar usuário"
+          onFinalStepCompleted={salvar}
+          canProceed={(s) => (s === 1 ? emailRegex.test(email.trim()) && senha.length >= 8 : true)}
+        >
+          <Step>{contaUI}</Step>
+          <Step>{licencaUI}</Step>
+        </Stepper>
+      )}
+    </StepperModal>
   );
 }
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Nome do plano de nível imediatamente anterior (menor ordem) ao informado.
 function nomePlanoAnterior(planos: Required<PlanoDados>[], ordem: number, selfId?: string): string | undefined {

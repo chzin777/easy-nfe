@@ -21,6 +21,7 @@ import NovoClienteModal from "@/app/clientes/NovoClienteModal";
 import ClientePicker from "./ClientePicker";
 import ProdutoPicker from "./ProdutoPicker";
 import TransportadoraPicker from "./TransportadoraPicker";
+import TourEmissao from "./TourEmissao";
 import { listarProdutos } from "@/app/produtos/actions";
 import { listarTransportadoras } from "@/app/transportadoras/actions";
 import { obterCasasDecimaisQtd } from "@/app/configuracoes/actions";
@@ -151,6 +152,7 @@ export default function NovaNotaPage() {
 
   return (
     <div className="space-y-6 pb-28 lg:pb-0">
+      <TourEmissao />
       <PageHeader
         titulo="Emitir nova nota fiscal"
         subtitulo="Monte a nota em etapas: tipo, produtos, transporte e finalização."

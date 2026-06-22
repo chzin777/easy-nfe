@@ -114,6 +114,13 @@ export async function criarUsuario(input: {
   senha: string;
   nome: string;
   role: "USER" | "SUPORTE" | "ADMIN" | "CONTADOR";
+  ativo?: boolean;
+  // Licença opcional definida já na criação (espelha a aba "Licença" do editar).
+  licenca?: {
+    planoId: string | null;
+    status: "TRIAL" | "ATIVA" | "EXPIRADA" | "SUSPENSA" | "CANCELADA";
+    validadeEm: string | null; // ISO date (yyyy-mm-dd) ou null
+  } | null;
 }): Promise<Resultado> {
   try {
     // Criar ADMIN/SUPORTE exige ser admin master.
@@ -127,11 +134,29 @@ export async function criarUsuario(input: {
       return { ok: false, erro: "Já existe usuário com este e-mail." };
     }
     const u = await prisma.user.create({
-      data: { email, senhaHash: await hashSenha(input.senha), nome: input.nome || null, role: input.role },
+      data: {
+        email,
+        senhaHash: await hashSenha(input.senha),
+        nome: input.nome || null,
+        role: input.role,
+        ativo: input.ativo ?? true,
+      },
     });
 
-    // Usuários comuns ganham trial de 7 dias no plano mais básico (menor ordem).
-    if (input.role === "USER") {
+    // Licença informada no stepper de criação tem prioridade.
+    if (input.licenca && input.licenca.planoId) {
+      await prisma.licenca.create({
+        data: {
+          userId: u.id,
+          planoId: input.licenca.planoId,
+          status: input.licenca.status,
+          validadeEm: input.licenca.validadeEm ? new Date(input.licenca.validadeEm) : null,
+        },
+      });
+      // Gera faturas dos períodos cobertos (gerarFaturasInterno pula TRIAL).
+      await gerarFaturasInterno(u.id);
+    } else if (input.role === "USER") {
+      // Fallback: usuário comum ganha trial de 7 dias no plano mais básico.
       const planoBasico = await prisma.plano.findFirst({
         where: { ativo: true },
         orderBy: { ordem: "asc" },
@@ -563,6 +588,8 @@ export async function definirLicenca(input: {
 async function gerarFaturasInterno(userId: string): Promise<void> {
   const lic = await prisma.licenca.findUnique({ where: { userId }, include: { plano: true } });
   if (!lic?.plano) return;
+  // TRIAL é gratuito — período de avaliação não gera cobrança.
+  if (lic.status === "TRIAL") return;
 
   const preco = Number(lic.plano.preco);
   const fim = lic.validadeEm;
