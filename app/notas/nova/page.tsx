@@ -220,12 +220,23 @@ export default function NovaNotaPage() {
               type="button"
               onClick={adicionarItem}
               disabled={!produtoSel}
+              title={!produtoSel ? "Selecione um produto primeiro" : "Adicionar à nota"}
               className="flex min-h-[48px] cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[var(--success)] px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
               Adicionar
             </button>
           </div>
+
+          {/* Dica: porque o botão pode estar desabilitado */}
+          {produtos.length === 0 ? (
+            <p className="mt-2 text-sm text-[var(--warning)]">
+              Nenhum produto cadastrado nesta empresa.{" "}
+              <a href="/produtos" className="font-medium underline">Cadastre ou importe um produto</a> para adicioná-lo à nota.
+            </p>
+          ) : !produtoSel ? (
+            <p className="mt-2 text-xs text-[var(--muted)]">Selecione um produto no campo acima para habilitar “Adicionar”.</p>
+          ) : null}
 
           {/* Mobile: cards com quantidade ± */}
           <div className="mt-5 space-y-2.5 sm:hidden">
