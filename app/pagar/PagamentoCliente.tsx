@@ -19,11 +19,13 @@ export default function PagamentoCliente({ token }: { token: string }) {
   const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
-    obterFaturaPublica(token).then((r) => {
-      if ("erro" in r) setErro(r.erro);
-      else { setFatura(r); if (r.status === "PAGA") setPago(true); }
-      setCarregando(false);
-    });
+    obterFaturaPublica(token)
+      .then((r) => {
+        if ("erro" in r) setErro(r.erro);
+        else { setFatura(r); if (r.status === "PAGA") setPago(true); }
+      })
+      .catch((e) => setErro(e instanceof Error ? e.message : "Falha ao carregar a cobrança."))
+      .finally(() => setCarregando(false));
   }, [token]);
 
   async function escolher(m: "pix" | "boleto") {

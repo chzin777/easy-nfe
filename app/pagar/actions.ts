@@ -26,16 +26,20 @@ export type DadosPagamento =
   | { erro: string };
 
 export async function obterFaturaPublica(token: string): Promise<FaturaPublica> {
-  const f = await prisma.fatura.findUnique({ where: { tokenPublico: token } });
-  if (!f) return { erro: "Cobrança não encontrada." };
-  return {
-    ok: true,
-    planoNome: f.planoNome,
-    valor: Number(f.valor),
-    vencimento: f.vencimento.toISOString(),
-    status: f.status,
-    metodo: f.metodo,
-  };
+  try {
+    const f = await prisma.fatura.findUnique({ where: { tokenPublico: token } });
+    if (!f) return { erro: "Cobrança não encontrada." };
+    return {
+      ok: true,
+      planoNome: f.planoNome,
+      valor: Number(f.valor),
+      vencimento: f.vencimento.toISOString(),
+      status: f.status,
+      metodo: f.metodo,
+    };
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 // Gera (ou reaproveita) a cobrança no Asaas para o método escolhido.
