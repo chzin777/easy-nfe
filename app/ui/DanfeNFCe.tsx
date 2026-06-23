@@ -16,8 +16,31 @@ export default function DanfeNFCe({ nota }: { nota: NotaCompleta }) {
 
   const autorizada = nota.status === "autorizada";
 
+  // Marca d'água: CANCELADA (vermelho) ou SEM VALOR FISCAL em homologação.
+  const watermark =
+    nota.status === "cancelada"
+      ? "CANCELADA"
+      : nota.ambiente === "homologacao"
+        ? "SEM VALOR FISCAL"
+        : "";
+
   return (
-    <div className="mx-auto w-[302px] bg-white px-2 py-3 font-mono text-[10px] leading-tight text-black">
+    <div className="relative mx-auto w-[302px] overflow-hidden bg-white px-2 py-3 font-mono text-[10px] leading-tight text-black">
+      {/* Marca d'água */}
+      {watermark && (
+        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
+          <span
+            className={
+              "rotate-[-30deg] whitespace-nowrap text-[34px] font-bold uppercase tracking-wide " +
+              (nota.status === "cancelada" ? "text-red-500/20" : "text-slate-400/20")
+            }
+          >
+            {watermark}
+          </span>
+        </div>
+      )}
+
+      <div className="relative z-10">
       {/* Cabeçalho emitente */}
       <div className="text-center">
         <p className="text-[11px] font-bold uppercase">{emit.nomeFantasia || emit.razaoSocial}</p>
@@ -113,6 +136,7 @@ export default function DanfeNFCe({ nota }: { nota: NotaCompleta }) {
           Emitida em homologação - sem valor fiscal
         </p>
       )}
+      </div>
     </div>
   );
 }

@@ -77,7 +77,11 @@ export type EmitirResultado =
 // o cliente só envia ids + o certificado (que vive apenas na sessão do navegador).
 export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
   try {
-    await exigirFeature("emitir_nfe");
+    // Modelo do documento decidido pelo tipo de nota ("65-saida" → NFC-e).
+    const modelo = input.tipoNota.startsWith("65") ? "65" : "55";
+    const nfce = modelo === "65";
+    // Cada modelo é um benefício próprio — NFC-e (mod 65) pode ficar só em planos específicos.
+    await exigirFeature(nfce ? "emitir_nfce" : "emitir_nfe");
     const lic = await estadoLicencaUsuario();
     if (lic.bloqueado) return { ok: false, erro: lic.mensagem ?? "Licença expirada — emissão bloqueada." };
 
@@ -85,10 +89,6 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
     const cUF = UF_IBGE[empresa.uf];
     if (!cUF) return { ok: false, erro: `UF do emitente inválida: ${empresa.uf}` };
-
-    // Modelo do documento decidido pelo tipo de nota ("65-saida" → NFC-e).
-    const modelo = input.tipoNota.startsWith("65") ? "65" : "55";
-    const nfce = modelo === "65";
 
     // NFC-e exige CSC + idCSC (cIdToken) da SEFAZ para o QR Code.
     if (nfce && (!empresa.cscNFCe || !empresa.idCscNFCe)) {
