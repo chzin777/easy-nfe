@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Button } from "@/app/ui/primitives";
+import { Button, Field, Input } from "@/app/ui/primitives";
 import { formatBRL, formatData } from "@/lib/format";
 import { obterFaturaPublica, gerarCobrancaFatura, conferirPagamento, type DadosPagamento } from "./actions";
 
-type Fatura = { planoNome: string; valor: number; vencimento: string; status: string; metodo: string | null };
+type Fatura = { planoNome: string; valor: number; vencimento: string; status: string; metodo: string | null; precisaCpfCnpj: boolean };
 
 export default function PagamentoCliente({ token }: { token: string }) {
   const [fatura, setFatura] = useState<Fatura | null>(null);
@@ -17,6 +17,7 @@ export default function PagamentoCliente({ token }: { token: string }) {
   const [erro, setErro] = useState<string | null>(null);
   const [pago, setPago] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [cpfCnpj, setCpfCnpj] = useState("");
 
   useEffect(() => {
     obterFaturaPublica(token)
@@ -28,14 +29,21 @@ export default function PagamentoCliente({ token }: { token: string }) {
       .finally(() => setCarregando(false));
   }, [token]);
 
+  const cpfLimpo = cpfCnpj.replace(/\D/g, "");
+  const cpfValido = cpfLimpo.length === 11 || cpfLimpo.length === 14;
+  const precisaCpf = !!fatura?.precisaCpfCnpj;
+
   async function escolher(m: "pix" | "boleto" | "cartao") {
+    if (precisaCpf && !cpfValido) { setErro("Informe um CPF ou CNPJ válido para continuar."); return; }
     setMetodo(m);
     setDados(null);
     setErro(null);
     setGerando(true);
-    const r = await gerarCobrancaFatura(token, m);
+    const r = await gerarCobrancaFatura(token, m, precisaCpf ? cpfLimpo : undefined);
     setGerando(false);
     if ("erro" in r) { setErro(r.erro); return; }
+    // CPF agora salvo no servidor; não precisa pedir de novo nesta sessão.
+    if (precisaCpf) setFatura((s) => (s ? { ...s, precisaCpfCnpj: false } : s));
     setDados(r);
   }
 
@@ -89,6 +97,17 @@ export default function PagamentoCliente({ token }: { token: string }) {
         </p>
       </div>
 
+      {precisaCpf && (
+        <Field label="CPF/CNPJ do pagador" required hint="Usado na cobrança">
+          <Input
+            value={cpfCnpj}
+            onChange={(e) => setCpfCnpj(e.target.value)}
+            placeholder="Somente números"
+            inputMode="numeric"
+          />
+        </Field>
+      )}
+
       <div>
         <p className="mb-2 flex items-center gap-1.5 text-sm font-medium">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--muted)]"><rect width="18" height="11" x="3" y="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
@@ -97,21 +116,24 @@ export default function PagamentoCliente({ token }: { token: string }) {
         <div className="grid grid-cols-3 gap-2">
           <button
             onClick={() => escolher("pix")}
-            className={"flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 text-xs font-semibold transition " + (metodo === "pix" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-slate-300")}
+            disabled={precisaCpf && !cpfValido}
+            className={"flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 " + (metodo === "pix" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-slate-300")}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 2 3 3-3 3-3-3 3-3Z" /><path d="m12 16 3 3-3 3-3-3 3-3Z" /><path d="m2 12 3-3 3 3-3 3-3-3Z" /><path d="m16 12 3-3 3 3-3 3-3-3Z" /></svg>
             Pix
           </button>
           <button
             onClick={() => escolher("boleto")}
-            className={"flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 text-xs font-semibold transition " + (metodo === "boleto" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-slate-300")}
+            disabled={precisaCpf && !cpfValido}
+            className={"flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 " + (metodo === "boleto" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-slate-300")}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5v14" /><path d="M7 5v14" /><path d="M11 5v14" /><path d="M15 5v14" /><path d="M19 5v14" /></svg>
             Boleto
           </button>
           <button
             onClick={() => escolher("cartao")}
-            className={"flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 text-xs font-semibold transition " + (metodo === "cartao" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-slate-300")}
+            disabled={precisaCpf && !cpfValido}
+            className={"flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 " + (metodo === "cartao" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-slate-300")}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2" /><line x1="2" x2="22" y1="10" y2="10" /></svg>
             Cartão

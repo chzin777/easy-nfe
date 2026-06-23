@@ -87,6 +87,35 @@ export async function inspecionarCertificado(
 }
 
 // ----------------------------------------------------------------------------
+// Dados de cobrança da conta (User) — CPF/CNPJ e telefone usados no Asaas.
+// ----------------------------------------------------------------------------
+
+export type DadosCobranca = { cpfCnpj: string; telefone: string };
+
+export async function obterDadosCobranca(): Promise<DadosCobranca> {
+  const userId = await exigirUsuario();
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { cpfCnpj: true, telefone: true } });
+  return { cpfCnpj: u?.cpfCnpj ?? "", telefone: u?.telefone ?? "" };
+}
+
+export async function salvarDadosCobranca(
+  dados: DadosCobranca,
+): Promise<{ ok: true } | { ok: false; erro: string }> {
+  try {
+    const userId = await exigirUsuario();
+    const cpf = dados.cpfCnpj.replace(/\D/g, "");
+    if (cpf.length !== 11 && cpf.length !== 14) return { ok: false, erro: "Informe um CPF ou CNPJ válido." };
+    await prisma.user.update({
+      where: { id: userId },
+      data: { cpfCnpj: cpf, telefone: dados.telefone.trim() || null },
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ----------------------------------------------------------------------------
 // Empresas (emitentes) — CRUD escopado ao usuário logado + empresa ativa.
 // ----------------------------------------------------------------------------
 

@@ -12,6 +12,7 @@ export type FaturaPublica = {
   vencimento: string;
   status: string;
   metodo: string | null;
+  precisaCpfCnpj: boolean; // assinante ainda sem CPF/CNPJ — precisa informar p/ pagar
 } | { erro: string };
 
 export type DadosPagamento =
@@ -28,8 +29,12 @@ export type DadosPagamento =
 
 export async function obterFaturaPublica(token: string): Promise<FaturaPublica> {
   try {
-    const f = await prisma.fatura.findUnique({ where: { tokenPublico: token } });
+    const f = await prisma.fatura.findUnique({
+      where: { tokenPublico: token },
+      include: { user: { select: { cpfCnpj: true } } },
+    });
     if (!f) return { erro: "Cobrança não encontrada." };
+    const cpf = (f.user.cpfCnpj ?? "").replace(/\D/g, "");
     return {
       ok: true,
       planoNome: f.planoNome,
@@ -37,6 +42,7 @@ export async function obterFaturaPublica(token: string): Promise<FaturaPublica> 
       vencimento: f.vencimento.toISOString(),
       status: f.status,
       metodo: f.metodo,
+      precisaCpfCnpj: cpf.length !== 11 && cpf.length !== 14,
     };
   } catch (e) {
     return { erro: e instanceof Error ? e.message : String(e) };
@@ -44,7 +50,11 @@ export async function obterFaturaPublica(token: string): Promise<FaturaPublica> 
 }
 
 // Gera (ou reaproveita) a cobrança no Asaas para o método escolhido.
-export async function gerarCobrancaFatura(token: string, metodo: "pix" | "boleto" | "cartao"): Promise<DadosPagamento> {
+export async function gerarCobrancaFatura(
+  token: string,
+  metodo: "pix" | "boleto" | "cartao",
+  cpfCnpjInput?: string,
+): Promise<DadosPagamento> {
   try {
     const f = await prisma.fatura.findUnique({
       where: { tokenPublico: token },
@@ -55,11 +65,20 @@ export async function gerarCobrancaFatura(token: string, metodo: "pix" | "boleto
 
     const asaas = await import("@/lib/asaas");
 
+    // CPF/CNPJ: usa o do cadastro; se ausente, aceita o informado nesta tela e salva.
+    let cpf = (f.user.cpfCnpj ?? "").replace(/\D/g, "");
+    if (cpf.length !== 11 && cpf.length !== 14) {
+      const informado = (cpfCnpjInput ?? "").replace(/\D/g, "");
+      if (informado.length !== 11 && informado.length !== 14) {
+        return { erro: "Informe um CPF ou CNPJ válido para gerar a cobrança." };
+      }
+      cpf = informado;
+      await prisma.user.update({ where: { id: f.user.id }, data: { cpfCnpj: cpf } });
+    }
+
     // Garante o cliente Asaas (pode não ter sido criado no cadastro).
     let customerId = f.user.asaasCustomerId;
     if (!customerId) {
-      const cpf = (f.user.cpfCnpj ?? "").replace(/\D/g, "");
-      if (cpf.length !== 11 && cpf.length !== 14) return { erro: "CPF/CNPJ do assinante ausente ou inválido." };
       const cli = await asaas.criarOuAtualizarCliente({
         nome: f.user.nome || f.user.email,
         cpfCnpj: cpf,

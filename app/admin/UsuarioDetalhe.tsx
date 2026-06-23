@@ -130,12 +130,13 @@ function Conta({ d, onMudou, flash, registrar }: Sub & ComSalvar) {
   const [email, setEmail] = useState(d.email);
   const [role, setRole] = useState(d.role);
   const [ativo, setAtivo] = useState(d.ativo);
+  const [cpfCnpj, setCpfCnpj] = useState(d.cpfCnpj ?? "");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
 
   async function salvar() {
     setErro(null);
-    const r = await atualizarUsuario(d.id, { nome, email, role: role as "USER" | "SUPORTE" | "ADMIN" | "CONTADOR", ativo });
+    const r = await atualizarUsuario(d.id, { nome, email, role: role as "USER" | "SUPORTE" | "ADMIN" | "CONTADOR", ativo, cpfCnpj });
     if (!r.ok) { setErro(r.erro); return; }
     if (senha) {
       const rs = await redefinirSenha(d.id, senha);
@@ -155,6 +156,7 @@ function Conta({ d, onMudou, flash, registrar }: Sub & ComSalvar) {
           <Field label="E-mail"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
           <Field label="Papel"><Select opcoes={ROLES} value={role} onChange={(e) => setRole(e.target.value as typeof role)} /></Field>
           <Field label="Status"><Select opcoes={[{ value: "true", label: "Ativo" }, { value: "false", label: "Bloqueado" }]} value={String(ativo)} onChange={(e) => setAtivo(e.target.value === "true")} /></Field>
+          <Field label="CPF/CNPJ" hint="Usado na cobrança (Asaas)"><Input value={cpfCnpj} onChange={(e) => setCpfCnpj(e.target.value)} placeholder="só números" /></Field>
         </div>
         <Field label="Redefinir senha" hint="Deixe em branco p/ manter. Mín. 8 caracteres."><Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="nova senha" /></Field>
         {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}

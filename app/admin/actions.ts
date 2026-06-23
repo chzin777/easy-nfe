@@ -182,7 +182,7 @@ export async function criarUsuario(input: {
 
 export async function atualizarUsuario(
   userId: string,
-  input: { nome: string; email: string; role: "USER" | "SUPORTE" | "ADMIN" | "CONTADOR"; ativo: boolean },
+  input: { nome: string; email: string; role: "USER" | "SUPORTE" | "ADMIN" | "CONTADOR"; ativo: boolean; cpfCnpj?: string },
 ): Promise<Resultado> {
   try {
     if (input.role === "ADMIN" || input.role === "SUPORTE") await exigirAdminMaster();
@@ -193,9 +193,19 @@ export async function atualizarUsuario(
     const dono = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (dono && dono.id !== userId) return { ok: false, erro: "E-mail já usado por outro usuário." };
 
+    // CPF/CNPJ opcional; quando vier, valida o tamanho (11 ou 14 dígitos).
+    let cpfCnpj: string | null | undefined;
+    if (input.cpfCnpj !== undefined) {
+      const limpo = input.cpfCnpj.replace(/\D/g, "");
+      if (limpo && limpo.length !== 11 && limpo.length !== 14) {
+        return { ok: false, erro: "CPF/CNPJ inválido (use 11 ou 14 dígitos)." };
+      }
+      cpfCnpj = limpo || null;
+    }
+
     await prisma.user.update({
       where: { id: userId },
-      data: { nome: input.nome || null, email, role: input.role, ativo: input.ativo },
+      data: { nome: input.nome || null, email, role: input.role, ativo: input.ativo, ...(cpfCnpj !== undefined ? { cpfCnpj } : {}) },
     });
     return { ok: true };
   } catch (e) {

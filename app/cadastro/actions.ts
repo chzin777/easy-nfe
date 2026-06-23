@@ -22,11 +22,13 @@ export async function cadastrarTrial(
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const senha = String(formData.get("senha") ?? "");
   const telefone = String(formData.get("telefone") ?? "").trim();
+  const cpfCnpj = String(formData.get("cpfCnpj") ?? "").replace(/\D/g, "");
 
   try {
     if (!nome) return { erro: "Informe seu nome." };
     if (!emailValido(email)) return { erro: "E-mail inválido." };
     if (senha.length < 8) return { erro: "A senha deve ter ao menos 8 caracteres." };
+    if (cpfCnpj.length !== 11 && cpfCnpj.length !== 14) return { erro: "Informe um CPF ou CNPJ válido." };
 
     const existe = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (existe) return { erro: "Já existe uma conta com este e-mail. Faça login." };
@@ -46,6 +48,7 @@ export async function cadastrarTrial(
         nome,
         email,
         telefone: telefone || null,
+        cpfCnpj,
         senhaHash: await hashSenha(senha),
         role: "USER",
         licenca: {

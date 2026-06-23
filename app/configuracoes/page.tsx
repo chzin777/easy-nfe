@@ -27,6 +27,8 @@ import {
   adicionarMembro,
   removerMembro,
   alterarPapelMembro,
+  obterDadosCobranca,
+  salvarDadosCobranca,
   type CertStatus,
   type EmpresaDados,
   type EmpresaResumo,
@@ -145,11 +147,60 @@ export default function ConfiguracoesPage() {
           abas={[
             { id: "emit", label: "Empresa emitente", content: <AbaEmitente form={form} setE={setE} setForm={setForm} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
             { id: "cert", label: "Certificado A1", content: <AbaCertificado /> },
+            { id: "cobranca", label: "Cobrança", content: <AbaCobranca /> },
             { id: "equipe", label: "Equipe", content: <AbaEquipe /> },
             { id: "amb", label: "Ambiente & numeração", content: <AbaAmbiente form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
           ]}
         />
       </Card>
+    </div>
+  );
+}
+
+function AbaCobranca() {
+  const [cpfCnpj, setCpfCnpj] = useState("");
+  const [telefone, setTelefone] = useState("");
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [salvo, setSalvo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    obterDadosCobranca()
+      .then((d) => { setCpfCnpj(d.cpfCnpj); setTelefone(d.telefone); })
+      .finally(() => setCarregando(false));
+  }, []);
+
+  async function salvar() {
+    setSalvando(true);
+    setErro(null);
+    const r = await salvarDadosCobranca({ cpfCnpj, telefone });
+    setSalvando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    setSalvo(true);
+    setTimeout(() => setSalvo(false), 2500);
+  }
+
+  if (carregando) return <LightningLoader texto="Carregando dados…" />;
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <SectionTitle>Dados de cobrança</SectionTitle>
+        <p className="mb-3 text-sm text-[var(--muted)]">
+          Usados para gerar Pix, boleto ou cartão da sua assinatura. O CPF/CNPJ é obrigatório para emitir a cobrança.
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="CPF/CNPJ" required hint="Somente números">
+            <Input value={cpfCnpj} onChange={(e) => setCpfCnpj(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" />
+          </Field>
+          <Field label="Telefone (WhatsApp)">
+            <Input value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="(00) 00000-0000" />
+          </Field>
+        </div>
+        {erro && <p className="mt-3 text-sm font-medium text-[var(--danger)]">{erro}</p>}
+      </section>
+      <BarraSalvar onSalvar={salvar} salvando={salvando} salvo={salvo} rotuloNovo="Salvar dados" />
     </div>
   );
 }

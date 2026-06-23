@@ -232,6 +232,9 @@ export default function CadastroForm({
                 <Field label="Nome" required>
                   <Input name="nome" placeholder="Seu nome" autoComplete="name" required />
                 </Field>
+                <Field label="CPF/CNPJ" required hint="Usado na cobrança ao assinar">
+                  <Input name="cpfCnpj" placeholder="Somente números" inputMode="numeric" required />
+                </Field>
                 <Field label="E-mail" required>
                   <Input name="email" type="email" placeholder="voce@empresa.com" autoComplete="email" required />
                 </Field>
