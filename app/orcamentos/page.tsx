@@ -14,7 +14,7 @@ import OrcamentoModal from "./OrcamentoModal";
 import Kanban from "./Kanban";
 import {
   listarOrcamentos, moverStatus, cancelarOrcamento, marcarPerdido, excluirOrcamento, converterEmNota,
-  type OrcamentoCompleto, type StatusOrcamentoUI,
+  permissoesOrcamento, type OrcamentoCompleto, type StatusOrcamentoUI,
 } from "./actions";
 
 const STATUS_LABEL: Record<StatusOrcamentoUI, string> = {
@@ -41,14 +41,15 @@ export default function OrcamentosPage() {
   const [criando, setCriando] = useState(false);
   const [detalhe, setDetalhe] = useState<OrcamentoCompleto | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [podeCriar, setPodeCriar] = useState(false);
 
   async function recarregar() {
     setOrcamentos(await listarOrcamentos());
   }
   useEffect(() => {
     (async () => {
-      const [o, c, p, t, cd] = await Promise.all([listarOrcamentos(), listarClientes(), listarProdutos(), listarTransportadoras(), obterCasasDecimaisQtd()]);
-      setOrcamentos(o); setClientes(c); setProdutos(p); setTransportadoras(t); setCasas(cd);
+      const [o, c, p, t, cd, perm] = await Promise.all([listarOrcamentos(), listarClientes(), listarProdutos(), listarTransportadoras(), obterCasasDecimaisQtd(), permissoesOrcamento()]);
+      setOrcamentos(o); setClientes(c); setProdutos(p); setTransportadoras(t); setCasas(cd); setPodeCriar(perm.criar);
     })();
   }, []);
 
@@ -126,7 +127,7 @@ export default function OrcamentosPage() {
             <button onClick={() => setView("lista")} className={"rounded-md px-3 py-1.5 text-sm font-medium " + (view === "lista" ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "text-[var(--muted)]")}>Lista</button>
             <button onClick={() => setView("kanban")} className={"rounded-md px-3 py-1.5 text-sm font-medium " + (view === "kanban" ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "text-[var(--muted)]")}>Kanban</button>
           </div>
-          <Button onClick={() => setCriando(true)}>+ Novo orçamento</Button>
+          {podeCriar && <Button onClick={() => setCriando(true)}>+ Novo orçamento</Button>}
         </div>
       </div>
 
@@ -158,6 +159,7 @@ export default function OrcamentosPage() {
       {detalhe && (
         <DetalheOrcamento
           orc={detalhe}
+          podeCriar={podeCriar}
           onFechar={() => setDetalhe(null)}
           onEditar={() => { setEditar(detalhe); setDetalhe(null); }}
           onMudou={() => { recarregar(); setDetalhe(null); }}
@@ -179,9 +181,10 @@ function Kpi({ titulo, valor }: { titulo: string; valor: string }) {
 // ---- Detalhe + ações -------------------------------------------------------
 
 function DetalheOrcamento({
-  orc, onFechar, onEditar, onMudou,
+  orc, podeCriar, onFechar, onEditar, onMudou,
 }: {
   orc: OrcamentoCompleto;
+  podeCriar: boolean;
   onFechar: () => void;
   onEditar: () => void;
   onMudou: () => void;
@@ -209,7 +212,7 @@ function DetalheOrcamento({
   const rodape = (
     <div className="flex w-full flex-wrap items-center justify-between gap-2">
       <div className="flex flex-wrap gap-2">
-        {!terminal && (
+        {!terminal && podeCriar && (
           <Button variante="secondary" onClick={onEditar} disabled={proc}>
             <IconLapis /> Editar
           </Button>

@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
-import { exigirFeature } from "@/lib/permissoes";
+import { exigirFeature, temFeature } from "@/lib/permissoes";
 import { emitirNota, type DescontoTipo, type EmitirResultado } from "@/app/notas/actions";
 
 // ---- Tipos -----------------------------------------------------------------
@@ -139,6 +139,11 @@ async function montarItens(empresaId: string, itens: ItemOrcamentoInput[]) {
 
 // ---- Actions ---------------------------------------------------------------
 
+// Permissões do usuário p/ a UI (esconder botões sem acesso).
+export async function permissoesOrcamento(): Promise<{ criar: boolean }> {
+  return { criar: await temFeature("orcamentos_criar") };
+}
+
 export async function listarOrcamentos(): Promise<OrcamentoCompleto[]> {
   await exigirFeature("orcamentos");
   const empresaId = await exigirEmpresa();
@@ -158,7 +163,7 @@ export async function obterOrcamento(id: string): Promise<OrcamentoCompleto | nu
 }
 
 export async function criarOrcamento(input: OrcamentoInput): Promise<OrcamentoCompleto> {
-  await exigirFeature("orcamentos");
+  await exigirFeature("orcamentos_criar");
   const empresaId = await exigirEmpresa();
   const linhas = await montarItens(empresaId, input.itens);
   if (!linhas.length) throw new Error("Adicione ao menos um produto ao orçamento.");
@@ -182,7 +187,7 @@ export async function criarOrcamento(input: OrcamentoInput): Promise<OrcamentoCo
 }
 
 export async function atualizarOrcamento(id: string, input: OrcamentoInput): Promise<OrcamentoCompleto> {
-  await exigirFeature("orcamentos");
+  await exigirFeature("orcamentos_criar");
   const empresaId = await exigirEmpresa();
   const atual = await prisma.orcamento.findFirst({ where: { id, emitenteId: empresaId }, select: { status: true } });
   if (!atual) throw new Error("Orçamento não encontrado.");
