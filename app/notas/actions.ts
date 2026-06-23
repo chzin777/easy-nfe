@@ -349,6 +349,9 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
+    if (/SEFAZ_INDISPONIVEL|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|socket hang up|network|timed? ?out/i.test(msg)) {
+      return { ok: false, erro: "Serviço da SEFAZ-GO indisponível no momento (instabilidade do webservice). Aguarde alguns instantes e tente emitir de novo." };
+    }
     return { ok: false, erro: msg };
   }
 }

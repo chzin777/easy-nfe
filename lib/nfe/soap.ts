@@ -57,6 +57,7 @@ export function soap(
         key: cert.keyPem,
         cert: cert.chainPem, // envia folha + cadeia no handshake mTLS
         rejectUnauthorized: false, // cadeias da SEFAZ homologação são problemáticas
+        timeout: 30_000, // SEFAZ-GO costuma ficar instável; não trava a request
         headers: {
           "Content-Type": "application/soap+xml; charset=utf-8",
           "Content-Length": Buffer.byteLength(envelope),
@@ -68,6 +69,10 @@ export function soap(
         res.on("end", () => resolve({ status: res.statusCode ?? 0, body: data }));
       },
     );
+    // Timeout de conexão/resposta: aborta e devolve erro claro de indisponibilidade.
+    req.on("timeout", () => {
+      req.destroy(new Error("SEFAZ_INDISPONIVEL: o serviço da SEFAZ não respondeu a tempo."));
+    });
     req.on("error", reject);
     req.write(envelope);
     req.end();
