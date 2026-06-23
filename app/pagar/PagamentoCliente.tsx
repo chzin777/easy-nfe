@@ -83,10 +83,17 @@ export default function PagamentoCliente({ token }: { token: string }) {
         <p className="text-sm text-[var(--muted)]">Plano <span className="font-semibold text-slate-900">{fatura.planoNome}</span></p>
         <p className="mt-1 text-2xl font-bold text-[var(--primary)]">{formatBRL(fatura.valor)}</p>
         <p className="text-xs text-[var(--muted)]">Vence em {formatData(fatura.vencimento)}</p>
+        <p className="mt-2 flex items-center gap-1.5 border-t border-[var(--border)] pt-2 text-[11px] font-medium text-emerald-600">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+          Acesso liberado automaticamente após a confirmação
+        </p>
       </div>
 
       <div>
-        <p className="mb-2 text-sm font-medium">Escolha como pagar</p>
+        <p className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--muted)]"><rect width="18" height="11" x="3" y="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+          Escolha como pagar
+        </p>
         <div className="grid grid-cols-3 gap-2">
           <button
             onClick={() => escolher("pix")}
