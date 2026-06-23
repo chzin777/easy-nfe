@@ -74,6 +74,10 @@ model User {
   // Aceite de Termos de Uso + Política de Privacidade (LGPD)
   aceiteTermosEm DateTime?
 
+  // Tutoriais/onboarding já vistos por este usuário (chaves livres). Persiste
+  // por usuário (não por navegador) — não reaparece em outro dispositivo.
+  toursVistos String[] @default([])
+
   empresas   Emitente[] // empresas criadas por este usuário (dono original)
   acessos    AcessoEmpresa[]
   licenca    Licenca?
@@ -284,6 +288,7 @@ model Emitente {
   produtos      Produto[]
   clientes      Cliente[]
   transportadoras Transportadora[]
+  categorias    Categoria[]
   acessos       AcessoEmpresa[]
 
   createdAt     DateTime @default(now())
@@ -291,6 +296,32 @@ model Emitente {
 
   @@unique([userId, cnpj])
   @@map("emitentes")
+}
+
+// ----------------------------------------------------------------------------
+// Categorias (de produto OU de cliente) — escopadas à empresa. O campo `tipo`
+// separa os dois conjuntos ("produto" | "cliente"). Gerenciadas pelas próprias
+// páginas de produtos/clientes.
+// ----------------------------------------------------------------------------
+model Categoria {
+  id        String   @id @default(uuid())
+
+  empresaId String
+  empresa   Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  tipo      String // "produto" | "cliente"
+  nome      String
+  cor       String? // cor opcional do rótulo (hex)
+
+  produtos  Produto[] @relation("CategoriaProduto")
+  clientes  Cliente[] @relation("CategoriaCliente")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([empresaId, tipo, nome])
+  @@index([empresaId, tipo])
+  @@map("categorias")
 }
 
 // ----------------------------------------------------------------------------
@@ -305,11 +336,16 @@ model Produto {
   codigoInterno       Int      @unique @default(autoincrement())
   codigoBarras        String? // cEAN / GTIN
   nome                String
+  marca               String?
+  peso                Decimal? @db.Decimal(15, 3) // peso líquido em kg
   unidade             String
   ncm                 String
   origem              String // 0-8
   preco               Decimal  @db.Decimal(15, 2)
   descricao           String?
+
+  categoriaId         String?
+  categoria           Categoria? @relation("CategoriaProduto", fields: [categoriaId], references: [id], onDelete: SetNull)
 
   // fiscais
   cfopPadrao          String?
@@ -343,6 +379,9 @@ model Cliente {
   documento        String // CPF ou CNPJ
   nome             String
   inscricaoEstadual String?
+
+  categoriaId      String?
+  categoria        Categoria? @relation("CategoriaCliente", fields: [categoriaId], references: [id], onDelete: SetNull)
 
   telefone         String?
   email            String?

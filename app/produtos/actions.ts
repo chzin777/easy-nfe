@@ -11,11 +11,15 @@ type ProdutoRow = {
   codigoInterno: number;
   codigoBarras: string | null;
   nome: string;
+  marca: string | null;
+  peso: unknown;
   unidade: string;
   ncm: string;
   origem: string;
   preco: unknown;
   descricao: string | null;
+  categoriaId: string | null;
+  categoria?: { nome: string } | null;
   cest: string | null;
   codigoBeneficio: string | null;
   creditoPresumidoIcms: string | null;
@@ -28,11 +32,15 @@ function paraUI(p: ProdutoRow): Produto {
     codigoInterno: p.codigoInterno,
     codigoBarras: p.codigoBarras ?? "",
     nome: p.nome,
+    marca: p.marca ?? "",
+    peso: p.peso == null ? 0 : Number(p.peso),
     unidade: p.unidade,
     ncm: p.ncm,
     origem: p.origem,
     preco: Number(p.preco),
     descricao: p.descricao ?? "",
+    categoriaId: p.categoriaId ?? "",
+    categoriaNome: p.categoria?.nome ?? "",
     cest: p.cest ?? "",
     codigoBeneficio: p.codigoBeneficio ?? "",
     creditoPresumidoIcms: p.creditoPresumidoIcms ?? "",
@@ -40,13 +48,34 @@ function paraUI(p: ProdutoRow): Produto {
   };
 }
 
-export type ProdutoInput = Omit<Produto, "id" | "codigoInterno">;
+export type ProdutoInput = Omit<Produto, "id" | "codigoInterno" | "categoriaNome">;
+
+// Campos persistidos (sem os derivados). peso 0 / categoria "" viram null.
+function paraDados(input: ProdutoInput) {
+  return {
+    codigoBarras: input.codigoBarras || null,
+    nome: input.nome,
+    marca: input.marca || null,
+    peso: input.peso > 0 ? input.peso : null,
+    unidade: input.unidade,
+    ncm: input.ncm,
+    origem: input.origem,
+    preco: input.preco,
+    descricao: input.descricao || null,
+    categoriaId: input.categoriaId || null,
+    cest: input.cest || null,
+    codigoBeneficio: input.codigoBeneficio || null,
+    creditoPresumidoIcms: input.creditoPresumidoIcms || null,
+    reguladoAnp: input.reguladoAnp,
+  };
+}
 
 export async function listarProdutos(): Promise<Produto[]> {
   const empresaId = await exigirEmpresa();
   const rows = await prisma.produto.findMany({
     where: { empresaId },
     orderBy: { codigoInterno: "asc" },
+    include: { categoria: { select: { nome: true } } },
   });
   return rows.map(paraUI);
 }
@@ -55,20 +84,8 @@ export async function criarProduto(input: ProdutoInput): Promise<Produto> {
   await exigirFeature("produtos");
   const empresaId = await exigirEmpresa();
   const p = await prisma.produto.create({
-    data: {
-      empresaId,
-      codigoBarras: input.codigoBarras || null,
-      nome: input.nome,
-      unidade: input.unidade,
-      ncm: input.ncm,
-      origem: input.origem,
-      preco: input.preco,
-      descricao: input.descricao || null,
-      cest: input.cest || null,
-      codigoBeneficio: input.codigoBeneficio || null,
-      creditoPresumidoIcms: input.creditoPresumidoIcms || null,
-      reguladoAnp: input.reguladoAnp,
-    },
+    data: { empresaId, ...paraDados(input) },
+    include: { categoria: { select: { nome: true } } },
   });
   return paraUI(p);
 }
@@ -79,21 +96,12 @@ export async function atualizarProduto(id: string, input: ProdutoInput): Promise
   // updateMany garante escopo por empresa (não atualiza produto de outra empresa).
   await prisma.produto.updateMany({
     where: { id, empresaId },
-    data: {
-      codigoBarras: input.codigoBarras || null,
-      nome: input.nome,
-      unidade: input.unidade,
-      ncm: input.ncm,
-      origem: input.origem,
-      preco: input.preco,
-      descricao: input.descricao || null,
-      cest: input.cest || null,
-      codigoBeneficio: input.codigoBeneficio || null,
-      creditoPresumidoIcms: input.creditoPresumidoIcms || null,
-      reguladoAnp: input.reguladoAnp,
-    },
+    data: paraDados(input),
   });
-  const p = await prisma.produto.findFirstOrThrow({ where: { id, empresaId } });
+  const p = await prisma.produto.findFirstOrThrow({
+    where: { id, empresaId },
+    include: { categoria: { select: { nome: true } } },
+  });
   return paraUI(p);
 }
 

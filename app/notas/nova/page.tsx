@@ -14,7 +14,8 @@ import Modal from "@/app/ui/Modal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import { TIPOS_NOTA, MODALIDADES_FRETE, rotulo } from "@/lib/mock-data";
 import type { ItemNota, Cliente, Produto, Transportadora } from "@/lib/types";
-import { emitirNota, type EmitirInput, type EmitirResultado } from "../actions";
+import { emitirNota, obterNota, type EmitirInput, type EmitirResultado, type NotaCompleta } from "../actions";
+import VisualizarDanfeModal from "../VisualizarDanfeModal";
 import { explicarRejeicao } from "@/lib/nfe/mensagens";
 import { listarClientes } from "@/app/clientes/actions";
 import NovoClienteModal from "@/app/clientes/NovoClienteModal";
@@ -53,6 +54,8 @@ export default function NovaNotaPage() {
 
   const [emitindo, setEmitindo] = useState(false);
   const [resultado, setResultado] = useState<EmitirResultado | null>(null);
+  // Nota recém-autorizada: abre o DANFE p/ baixar PDF/XML logo após emitir.
+  const [notaEmitida, setNotaEmitida] = useState<NotaCompleta | null>(null);
   const [corrigirCliente, setCorrigirCliente] = useState<Cliente | null>(null);
   // Muda a key do Stepper p/ remontá-lo no passo 1 ao recomeçar.
   const [formKey, setFormKey] = useState(0);
@@ -148,9 +151,22 @@ export default function NovaNotaPage() {
 
     setEmitindo(true);
     setResultado(null);
+    setNotaEmitida(null);
     const r = await emitirNota(input);
+    // Autorizada e gravada: abre a visualização do DANFE p/ baixar PDF/XML.
+    if (r.ok && r.autorizada && r.notaId) {
+      const nota = await obterNota(r.notaId);
+      if (nota) setNotaEmitida(nota);
+    }
     setEmitindo(false);
     setResultado(r);
+  }
+
+  // Fecha a visualização do DANFE e recomeça uma nova emissão do zero.
+  function novaEmissao() {
+    setNotaEmitida(null);
+    setResultado(null);
+    resetarFormulario();
   }
 
   // CIF (0), FOB (1) e "9 - Sem ocorrência" não exigem transportadora.
@@ -430,7 +446,7 @@ export default function NovaNotaPage() {
       </Stepper>
 
       <Modal
-        aberto={emitindo || resultado !== null}
+        aberto={emitindo || (resultado !== null && !notaEmitida)}
         onFechar={() => {
           if (emitindo) return;
           // Nota autorizada: ao fechar, recomeça do passo 1 com tudo limpo.
@@ -520,6 +536,15 @@ export default function NovaNotaPage() {
           </div>
         )}
       </Modal>
+
+      {notaEmitida && resultado?.ok && (
+        <VisualizarDanfeModal
+          nota={notaEmitida}
+          banner={{ cStat: resultado.cStat, nProt: resultado.nProt }}
+          onFechar={novaEmissao}
+          onEmitirOutra={novaEmissao}
+        />
+      )}
 
       {corrigirCliente && (
         <NovoClienteModal

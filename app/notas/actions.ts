@@ -9,6 +9,7 @@ import {
 import type { DadosNFe, EnderecoNFe } from "@/lib/nfe/types";
 import { resolverCodMunicipio } from "@/lib/nfe/ibge";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import { exigirEmpresa } from "@/lib/empresa";
 import { decriptar } from "@/lib/crypto";
 import { estadoLicencaUsuario } from "@/lib/licenca";
@@ -62,6 +63,7 @@ export type EmitirResultado =
       chave: string;
       nProt: string | null;
       numero: number;
+      notaId?: string; // id da nota gravada (p/ abrir DANFE/baixar XML após emitir)
       avisoPersistencia?: string;
       debugXml?: string; // XML enviado (exposto só em rejeição, p/ diagnóstico)
     }
@@ -232,8 +234,9 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     const valorTotal = itensNFe.reduce((s, it) => s + it.qCom * it.vUnCom, 0);
 
     let avisoPersistencia: string | undefined;
+    let notaId: string | undefined;
     try {
-      await prisma.$transaction([
+      const [notaCriada] = await prisma.$transaction([
         prisma.nota.create({
           data: {
             numero,
@@ -274,6 +277,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
             })]
           : []),
       ]);
+      notaId = notaCriada.id;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       avisoPersistencia = r.ok ? `Autorizada na SEFAZ, mas falhou ao gravar: ${msg}` : undefined;
@@ -287,6 +291,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       chave: r.chave,
       nProt: r.nProt,
       numero,
+      notaId,
       avisoPersistencia,
       debugXml: r.ok ? undefined : r.xmlEnviado,
     };
@@ -368,14 +373,16 @@ const STATUS_UI: Record<string, NotaCompleta["status"]> = {
 
 const fmtMasc = (cep: string | null) => cep ?? "";
 
-export async function listarNotas(): Promise<NotaCompleta[]> {
-  const empresaId = await exigirEmpresa();
-  const notas = await prisma.nota.findMany({
-    where: { emitenteId: empresaId },
-    orderBy: { emitidaEm: "desc" },
-    include: { cliente: true, emitente: true, transportadora: true, itens: { include: { produto: true } } },
-  });
-  return notas.map((n) => ({
+// Inclui tudo que o DANFE precisa.
+const INCLUDE_NOTA = {
+  cliente: true, emitente: true, transportadora: true,
+  itens: { include: { produto: true } },
+} as const;
+
+type NotaRow = Prisma.NotaGetPayload<{ include: typeof INCLUDE_NOTA }>;
+
+function mapNota(n: NotaRow): NotaCompleta {
+  return {
     id: n.id,
     numero: n.numero,
     serie: n.serie,
@@ -431,7 +438,27 @@ export async function listarNotas(): Promise<NotaCompleta[]> {
       nome: i.nome, ncm: i.ncm ?? "", cfop: i.cfop ?? "",
       unidade: i.unidade ?? "UN", quantidade: Number(i.quantidade), precoUnitario: Number(i.precoUnitario),
     })),
-  }));
+  };
+}
+
+export async function listarNotas(): Promise<NotaCompleta[]> {
+  const empresaId = await exigirEmpresa();
+  const notas = await prisma.nota.findMany({
+    where: { emitenteId: empresaId },
+    orderBy: { emitidaEm: "desc" },
+    include: INCLUDE_NOTA,
+  });
+  return notas.map(mapNota);
+}
+
+// Uma nota completa (p/ DANFE), escopada à empresa ativa. Usada após emitir.
+export async function obterNota(notaId: string): Promise<NotaCompleta | null> {
+  const empresaId = await exigirEmpresa();
+  const n = await prisma.nota.findFirst({
+    where: { id: notaId, emitenteId: empresaId },
+    include: INCLUDE_NOTA,
+  });
+  return n ? mapNota(n) : null;
 }
 
 // ----------------------------------------------------------------------------

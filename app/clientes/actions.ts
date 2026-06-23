@@ -13,6 +13,8 @@ type Row = {
   documento: string;
   nome: string;
   inscricaoEstadual: string | null;
+  categoriaId: string | null;
+  categoria?: { nome: string } | null;
   telefone: string | null;
   email: string | null;
   cep: string | null;
@@ -32,6 +34,8 @@ function paraUI(c: Row): Cliente {
     documento: c.documento,
     nome: c.nome,
     inscricaoEstadual: c.inscricaoEstadual ?? "",
+    categoriaId: c.categoriaId ?? "",
+    categoriaNome: c.categoria?.nome ?? "",
     contato: { telefone: c.telefone ?? "", email: c.email ?? "" },
     endereco: {
       cep: c.cep ?? "",
@@ -45,7 +49,7 @@ function paraUI(c: Row): Cliente {
   };
 }
 
-export type ClienteInput = Omit<Cliente, "id" | "codigoInterno">;
+export type ClienteInput = Omit<Cliente, "id" | "codigoInterno" | "categoriaNome">;
 
 function paraDados(input: ClienteInput) {
   return {
@@ -53,6 +57,7 @@ function paraDados(input: ClienteInput) {
     documento: input.documento,
     nome: input.nome,
     inscricaoEstadual: input.inscricaoEstadual || null,
+    categoriaId: input.categoriaId || null,
     telefone: input.contato.telefone || null,
     email: input.contato.email || null,
     cep: input.endereco.cep || null,
@@ -70,6 +75,7 @@ export async function listarClientes(): Promise<Cliente[]> {
   const rows = await prisma.cliente.findMany({
     where: { empresaId },
     orderBy: { codigoInterno: "asc" },
+    include: { categoria: { select: { nome: true } } },
   });
   return rows.map(paraUI);
 }
@@ -77,7 +83,10 @@ export async function listarClientes(): Promise<Cliente[]> {
 export async function criarCliente(input: ClienteInput): Promise<Cliente> {
   await exigirFeature("clientes");
   const empresaId = await exigirEmpresa();
-  const c = await prisma.cliente.create({ data: { empresaId, ...paraDados(input) } });
+  const c = await prisma.cliente.create({
+    data: { empresaId, ...paraDados(input) },
+    include: { categoria: { select: { nome: true } } },
+  });
   return paraUI(c);
 }
 

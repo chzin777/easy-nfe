@@ -6,11 +6,15 @@ export type Produto = {
   codigoInterno: number; // sequencial
   codigoBarras: string; // cEAN / GTIN
   nome: string;
+  marca: string;
+  peso: number; // peso líquido em kg (0 = não informado)
   unidade: string; // sigla da unidade de medida
   ncm: string;
   origem: string; // código da tabela de origem (0-8)
   preco: number;
   descricao: string;
+  categoriaId: string; // "" = sem categoria
+  categoriaNome: string; // rótulo (derivado) p/ listagem
   // Configurações fiscais
   cest: string;
   codigoBeneficio: string;
@@ -40,6 +44,8 @@ export type Cliente = {
   documento: string; // CPF ou CNPJ
   nome: string;
   inscricaoEstadual: string;
+  categoriaId: string; // "" = sem categoria
+  categoriaNome: string; // rótulo (derivado) p/ listagem
   contato: Contato;
   endereco: Endereco;
 };

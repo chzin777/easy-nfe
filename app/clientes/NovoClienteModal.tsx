@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Field, Input, SectionTitle } from "@/app/ui/primitives";
 import StepperModal from "@/app/ui/StepperModal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import { ContatoFields, EnderecoFields } from "@/app/ui/PessoaFields";
 import type { Cliente } from "@/lib/types";
 import { criarCliente, atualizarCliente, type ClienteInput } from "./actions";
+import { CategoriaSelect } from "@/app/categorias/CategoriasUI";
+import { listarCategorias, type Categoria } from "@/app/categorias/actions";
 
 type TipoPessoa = "PF" | "PJ";
 
@@ -15,6 +17,7 @@ const vazio: ClienteInput = {
   documento: "",
   nome: "",
   inscricaoEstadual: "",
+  categoriaId: "",
   contato: { telefone: "", email: "" },
   endereco: { cep: "", logradouro: "", numero: "", complemento: "", bairro: "", municipio: "", uf: "GO" },
 };
@@ -54,18 +57,31 @@ export default function NovoClienteModal({
   onFechar,
   onCriado,
   clienteInicial,
+  categorias: categoriasIniciais,
+  onCategoriasChange,
 }: {
   onFechar: () => void;
   onCriado: (c: Cliente) => void;
   clienteInicial?: Cliente;
+  categorias?: Categoria[];
+  onCategoriasChange?: (lista: Categoria[]) => void;
 }) {
   const editando = !!clienteInicial;
   const [form, setForm] = useState<ClienteInput>(() => {
     if (!clienteInicial) return vazio;
-    const { id: _id, codigoInterno: _ci, ...resto } = clienteInicial;
-    void _id; void _ci;
+    const { id: _id, codigoInterno: _ci, categoriaNome: _cn, ...resto } = clienteInicial;
+    void _id; void _ci; void _cn;
     return resto as ClienteInput;
   });
+  const [categorias, setCategorias] = useState<Categoria[]>(categoriasIniciais ?? []);
+  useEffect(() => {
+    if (categoriasIniciais) return;
+    void listarCategorias("cliente").then(setCategorias);
+  }, [categoriasIniciais]);
+  function mudarCategorias(lista: Categoria[]) {
+    setCategorias(lista);
+    onCategoriasChange?.(lista);
+  }
   // PF/PJ: ao editar, deriva pelo tamanho do documento; ao criar, exige escolha.
   const [tipoPessoa, setTipoPessoa] = useState<TipoPessoa | null>(() => {
     if (!clienteInicial) return null;
@@ -225,6 +241,15 @@ export default function NovoClienteModal({
                 </div>
               </Field>
             )}
+            <Field label="Categoria" className="sm:col-span-2">
+              <CategoriaSelect
+                tipo="cliente"
+                categorias={categorias}
+                value={form.categoriaId}
+                onChange={(id) => setForm((f) => ({ ...f, categoriaId: id }))}
+                onCategoriasChange={mudarCategorias}
+              />
+            </Field>
           </div>
         </Step>
 

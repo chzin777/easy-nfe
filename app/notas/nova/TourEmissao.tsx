@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Modal from "@/app/ui/Modal";
 import { Button } from "@/app/ui/primitives";
+import { tourVisto, marcarTourVisto } from "@/app/tour-actions";
 
-const CHAVE = "easy-nfe:tour-nova-nota-v1";
+// Chave do tutorial (persistida por usuário no banco, não no navegador).
+const CHAVE = "nova-nota-v1";
 
 type Slide = { titulo: string; texto: string; dica?: string; icon: React.ReactNode; cor: string };
 
@@ -50,14 +52,16 @@ export default function TourEmissao() {
   const [i, setI] = useState(0);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMontado(true);
-    if (localStorage.getItem(CHAVE) !== "1") {
-      setAberto(true);
-    }
+    // Fonte da verdade no servidor (por usuário): só abre se ainda não viu.
+    void tourVisto(CHAVE).then((visto) => {
+      if (!visto) setAberto(true);
+    });
   }, []);
 
   function concluir() {
-    localStorage.setItem(CHAVE, "1");
+    void marcarTourVisto(CHAVE);
     setAberto(false);
     setI(0);
   }

@@ -5,8 +5,11 @@ import { formatBRL, formatData } from "@/lib/format";
 import { TIPOS_NOTA, rotulo } from "@/lib/mock-data";
 import type { ReactNode } from "react";
 import type { StatusNota } from "@/lib/types";
-import { resumoDashboard } from "../dashboard-actions";
+import { resumoDashboard, type PeriodoFiltro } from "../dashboard-actions";
 import Graficos from "./Graficos";
+import FiltrosDashboard from "./FiltrosDashboard";
+
+const PERIODOS_VALIDOS = ["30d", "90d", "6m", "12m", "ano", "tudo"];
 
 const tomStatus: Record<StatusNota, "success" | "danger" | "warning" | "neutral" | "primary"> = {
   autorizada: "success",
@@ -16,8 +19,16 @@ const tomStatus: Record<StatusNota, "success" | "danger" | "warning" | "neutral"
   rascunho: "neutral",
 };
 
-export default async function Dashboard() {
-  const resumo = await resumoDashboard();
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ periodo?: string; modelo?: string }>;
+}) {
+  const sp = await searchParams;
+  const periodo = (PERIODOS_VALIDOS.includes(sp.periodo ?? "") ? sp.periodo : "6m") as PeriodoFiltro;
+  const modelo = (sp.modelo === "55" || sp.modelo === "65" ? sp.modelo : "") as "" | "55" | "65";
+
+  const resumo = await resumoDashboard({ periodo, modelo });
   const faturado = resumo.faturado;
 
   const cards: { titulo: string; valor: number; href: string; icon: ReactNode; cor: string }[] = [
@@ -31,17 +42,20 @@ export default async function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-5">
-        <div className="animate-fade-up">
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="mt-1.5 text-sm text-[var(--muted)]">Visão geral do sistema de emissão de NF-e.</p>
+      <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="animate-fade-up">
+            <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+            <p className="mt-1.5 text-sm text-[var(--muted)]">Visão geral do sistema de emissão de NF-e.</p>
+          </div>
+          <Link
+            href="/notas/nova"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(82,39,255,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(82,39,255,0.45)]"
+          >
+            + Emitir nova nota
+          </Link>
         </div>
-        <Link
-          href="/notas/nova"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(82,39,255,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(82,39,255,0.45)]"
-        >
-          + Emitir nova nota
-        </Link>
+        <FiltrosDashboard periodo={periodo} modelo={modelo} />
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

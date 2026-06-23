@@ -31,56 +31,154 @@ import ImportarPlanilhaModal from "@/app/ui/ImportarPlanilhaModal";
 import { COLUNAS_PRODUTO, validarLinhaProduto } from "@/lib/produtos-modelo";
 import NcmPicker from "./NcmPicker";
 import MoneyInput from "@/app/ui/MoneyInput";
+import { CategoriaSelect, GerenciarCategoriasModal } from "@/app/categorias/CategoriasUI";
+import { listarCategorias, type Categoria } from "@/app/categorias/actions";
 
-type Form = Omit<Produto, "id" | "codigoInterno">;
+type Form = Omit<Produto, "id" | "codigoInterno" | "categoriaNome">;
 
 const formVazio: Form = {
   codigoBarras: "",
   nome: "",
+  marca: "",
+  peso: 0,
   unidade: "UN",
   ncm: "",
   origem: "0",
   preco: 0,
   descricao: "",
+  categoriaId: "",
   cest: "",
   codigoBeneficio: "",
   creditoPresumidoIcms: "",
   reguladoAnp: false,
 };
 
+// Catálogo de colunas disponíveis na lista. `fixa` = sempre visível.
+const COLUNAS_DISPONIVEIS: { chave: string; label: string; fixa?: boolean; col: Coluna<Produto> }[] = [
+  {
+    chave: "codigo", label: "Código", col: {
+      chave: "codigo", cabecalho: "Cód.",
+      render: (p) => <span className="font-mono text-xs text-[var(--muted)]">{p.codigoInterno}</span>,
+    },
+  },
+  {
+    chave: "nome", label: "Produto", fixa: true, col: {
+      chave: "nome", cabecalho: "Produto",
+      render: (p) => (
+        <div>
+          <p className="font-medium">{p.nome}</p>
+          <p className="text-xs text-[var(--muted)]">GTIN {p.codigoBarras || "—"} · NCM {p.ncm || "—"}</p>
+        </div>
+      ),
+    },
+  },
+  {
+    chave: "marca", label: "Marca", col: {
+      chave: "marca", cabecalho: "Marca",
+      render: (p) => p.marca || <span className="text-slate-300">—</span>,
+    },
+  },
+  {
+    chave: "categoria", label: "Categoria", col: {
+      chave: "categoria", cabecalho: "Categoria",
+      render: (p) => (p.categoriaNome ? <Badge tom="primary">{p.categoriaNome}</Badge> : <span className="text-slate-300">—</span>),
+    },
+  },
+  {
+    chave: "unidade", label: "Unidade", col: {
+      chave: "unidade", cabecalho: "Un.", render: (p) => p.unidade,
+    },
+  },
+  {
+    chave: "peso", label: "Peso (kg)", col: {
+      chave: "peso", cabecalho: "Peso", alinhar: "right",
+      render: (p) => (p.peso > 0 ? `${p.peso.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg` : <span className="text-slate-300">—</span>),
+    },
+  },
+  {
+    chave: "ncm", label: "NCM", col: {
+      chave: "ncm", cabecalho: "NCM",
+      render: (p) => <span className="font-mono text-xs">{p.ncm || "—"}</span>,
+    },
+  },
+  {
+    chave: "gtin", label: "GTIN / EAN", col: {
+      chave: "gtin", cabecalho: "GTIN",
+      render: (p) => <span className="font-mono text-xs">{p.codigoBarras || "—"}</span>,
+    },
+  },
+  {
+    chave: "anp", label: "ANP", col: {
+      chave: "anp", cabecalho: "ANP", alinhar: "center",
+      render: (p) => (p.reguladoAnp ? <Badge tom="warning">ANP</Badge> : <span className="text-slate-300">—</span>),
+    },
+  },
+  {
+    chave: "preco", label: "Preço", col: {
+      chave: "preco", cabecalho: "Preço", alinhar: "right",
+      render: (p) => <span className="font-medium">{formatBRL(p.preco)}</span>,
+    },
+  },
+];
+
+const COLS_PADRAO = ["codigo", "nome", "marca", "categoria", "unidade", "anp", "preco"];
+const COLS_STORAGE = "easy-nfe:cols-produtos-v1";
+
 export default function ProdutosPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [busca, setBusca] = useState("");
+  const [filtroCategoria, setFiltroCategoria] = useState("");
   const [modo, setModo] = useState<"novo" | "editar" | null>(null);
   const [importar, setImportar] = useState(false);
+  const [gerenciarCat, setGerenciarCat] = useState(false);
+  const [colunasModal, setColunasModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Form>(formVazio);
   const [salvando, setSalvando] = useState(false);
   const [carregando, setCarregando] = useState(true);
 
+  // Colunas visíveis (persistidas no navegador).
+  const [colsVisiveis, setColsVisiveis] = useState<string[]>(COLS_PADRAO);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(COLS_STORAGE);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setColsVisiveis(JSON.parse(raw));
+    } catch { /* ignora */ }
+  }, []);
+  function salvarCols(cols: string[]) {
+    setColsVisiveis(cols);
+    try { localStorage.setItem(COLS_STORAGE, JSON.stringify(cols)); } catch { /* ignora */ }
+  }
+
   async function recarregar() {
     try {
-      setProdutos(await listarProdutos());
+      const [ps, cs] = await Promise.all([listarProdutos(), listarCategorias("produto")]);
+      setProdutos(ps);
+      setCategorias(cs);
     } finally {
       setCarregando(false);
     }
   }
   useEffect(() => {
-     
     void recarregar();
   }, []);
 
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    if (!q) return produtos;
-    return produtos.filter(
-      (p) =>
+    return produtos.filter((p) => {
+      if (filtroCategoria && p.categoriaId !== filtroCategoria) return false;
+      if (!q) return true;
+      return (
         p.nome.toLowerCase().includes(q) ||
+        p.marca.toLowerCase().includes(q) ||
         p.codigoBarras.includes(q) ||
         p.ncm.includes(q) ||
-        String(p.codigoInterno).includes(q),
-    );
-  }, [produtos, busca]);
+        String(p.codigoInterno).includes(q)
+      );
+    });
+  }, [produtos, busca, filtroCategoria]);
 
   function abrirNovo() {
     setEditId(null);
@@ -89,8 +187,8 @@ export default function ProdutosPage() {
   }
   function abrirEdicao(p: Produto) {
     setEditId(p.id);
-    const { id: _id, codigoInterno: _ci, ...resto } = p;
-    void _id; void _ci;
+    const { id: _id, codigoInterno: _ci, categoriaNome: _cn, ...resto } = p;
+    void _id; void _ci; void _cn;
     setForm(resto);
     setModo("editar");
   }
@@ -118,36 +216,10 @@ export default function ProdutosPage() {
     setForm((f) => ({ ...f, [chave]: valor }));
   }
 
-  const colunas: Coluna<Produto>[] = [
-    {
-      chave: "codigo",
-      cabecalho: "Cód.",
-      render: (p) => <span className="font-mono text-xs text-[var(--muted)]">{p.codigoInterno}</span>,
-    },
-    {
-      chave: "nome",
-      cabecalho: "Produto",
-      render: (p) => (
-        <div>
-          <p className="font-medium">{p.nome}</p>
-          <p className="text-xs text-[var(--muted)]">GTIN {p.codigoBarras || "—"} · NCM {p.ncm || "—"}</p>
-        </div>
-      ),
-    },
-    { chave: "unidade", cabecalho: "Un.", render: (p) => p.unidade },
-    {
-      chave: "anp",
-      cabecalho: "ANP",
-      alinhar: "center",
-      render: (p) => (p.reguladoAnp ? <Badge tom="warning">ANP</Badge> : <span className="text-slate-300">—</span>),
-    },
-    {
-      chave: "preco",
-      cabecalho: "Preço",
-      alinhar: "right",
-      render: (p) => <span className="font-medium">{formatBRL(p.preco)}</span>,
-    },
-  ];
+  const colunas = useMemo<Coluna<Produto>[]>(
+    () => COLUNAS_DISPONIVEIS.filter((c) => c.fixa || colsVisiveis.includes(c.chave)).map((c) => c.col),
+    [colsVisiveis],
+  );
 
   // Campos reutilizados nas etapas do stepper e no modal de edição.
   const identificacao = (
@@ -157,6 +229,18 @@ export default function ProdutosPage() {
       </Field>
       <Field label="Nome do produto" required>
         <Input value={form.nome} onChange={(e) => set("nome", e.target.value)} />
+      </Field>
+      <Field label="Marca">
+        <Input value={form.marca} onChange={(e) => set("marca", e.target.value)} placeholder="Ex.: Nestlé" />
+      </Field>
+      <Field label="Categoria">
+        <CategoriaSelect
+          tipo="produto"
+          categorias={categorias}
+          value={form.categoriaId}
+          onChange={(id) => set("categoriaId", id)}
+          onCategoriasChange={setCategorias}
+        />
       </Field>
       <Field label="Unidade de medida" required>
         <Select opcoes={UNIDADES} value={form.unidade} onChange={(e) => set("unidade", e.target.value)} />
@@ -174,6 +258,14 @@ export default function ProdutosPage() {
       </Field>
       <Field label="Preço" required>
         <MoneyInput value={form.preco} onChange={(v) => set("preco", v)} />
+      </Field>
+      <Field label="Peso líquido (kg)" hint="Opcional · ex.: 0,5">
+        <Input
+          inputMode="decimal"
+          value={form.peso ? String(form.peso).replace(".", ",") : ""}
+          onChange={(e) => set("peso", Number(e.target.value.replace(",", ".").replace(/[^\d.]/g, "")) || 0)}
+          placeholder="0"
+        />
       </Field>
       <Field label="Descrição do produto" className="sm:col-span-2">
         <Textarea value={form.descricao} onChange={(e) => set("descricao", e.target.value)} />
@@ -212,7 +304,9 @@ export default function ProdutosPage() {
         titulo="Produtos"
         subtitulo="Clique em um produto para ver detalhes e editar."
         acao={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variante="secondary" onClick={() => setGerenciarCat(true)}>Categorias</Button>
+            <Button variante="secondary" onClick={() => setColunasModal(true)}>Colunas</Button>
             <Button variante="secondary" onClick={() => setImportar(true)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="-ml-0.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" x2="12" y1="3" y2="15" /></svg>
               Importar
@@ -223,12 +317,17 @@ export default function ProdutosPage() {
       />
 
       <Card>
-        <div className="border-b border-[var(--border)] p-4">
+        <div className="grid grid-cols-1 gap-3 border-b border-[var(--border)] p-4 sm:grid-cols-[1fr_220px]">
           <Input
-            placeholder="Buscar por nome, código, GTIN ou NCM…"
+            placeholder="Buscar por nome, marca, código, GTIN ou NCM…"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            className="max-w-md"
+          />
+          <Select
+            placeholder="Todas as categorias"
+            opcoes={categorias.map((c) => ({ value: c.id, label: c.nome }))}
+            value={filtroCategoria}
+            onChange={(e) => setFiltroCategoria(e.target.value)}
           />
         </div>
         {carregando ? (
@@ -245,8 +344,59 @@ export default function ProdutosPage() {
 
       {/* Criação em etapas (modal compartilhado) */}
       {modo === "novo" && (
-        <NovoProdutoModal onFechar={fechar} onCriado={() => { recarregar(); fechar(); }} />
+        <NovoProdutoModal
+          categorias={categorias}
+          onCategoriasChange={setCategorias}
+          onFechar={fechar}
+          onCriado={() => { recarregar(); fechar(); }}
+        />
       )}
+
+      {/* Gerenciar categorias de produto */}
+      {gerenciarCat && (
+        <GerenciarCategoriasModal
+          tipo="produto"
+          onFechar={() => setGerenciarCat(false)}
+          onMudou={setCategorias}
+        />
+      )}
+
+      {/* Personalizar colunas da lista */}
+      <Modal
+        aberto={colunasModal}
+        onFechar={() => setColunasModal(false)}
+        titulo="Personalizar colunas"
+        largura="max-w-md"
+        rodape={<Button variante="secondary" onClick={() => setColunasModal(false)}>Fechar</Button>}
+      >
+        <p className="mb-3 text-sm text-[var(--muted)]">Escolha quais colunas aparecem na lista de produtos.</p>
+        <ul className="space-y-1">
+          {COLUNAS_DISPONIVEIS.map((c) => {
+            const ativa = c.fixa || colsVisiveis.includes(c.chave);
+            return (
+              <li key={c.chave}>
+                <label className={"flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm " + (c.fixa ? "opacity-60" : "cursor-pointer hover:bg-slate-50")}>
+                  <input
+                    type="checkbox"
+                    checked={ativa}
+                    disabled={c.fixa}
+                    onChange={(e) => {
+                      if (e.target.checked) salvarCols([...colsVisiveis, c.chave]);
+                      else salvarCols(colsVisiveis.filter((x) => x !== c.chave));
+                    }}
+                    className="h-4 w-4 accent-[var(--primary)]"
+                  />
+                  {c.label}
+                  {c.fixa && <span className="text-xs text-[var(--muted)]">(sempre visível)</span>}
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+        <button onClick={() => salvarCols(COLS_PADRAO)} className="mt-3 text-sm font-medium text-[var(--primary)] hover:underline">
+          Restaurar padrão
+        </button>
+      </Modal>
 
       {/* Importação em massa (CSV/XLSX) */}
       {importar && (

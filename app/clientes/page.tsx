@@ -29,23 +29,29 @@ import {
 import NovoClienteModal from "./NovoClienteModal";
 import ImportarPlanilhaModal from "@/app/ui/ImportarPlanilhaModal";
 import { COLUNAS_CLIENTE, validarLinhaCliente } from "@/lib/clientes-modelo";
+import { CategoriaSelect, GerenciarCategoriasModal } from "@/app/categorias/CategoriasUI";
+import { listarCategorias, type Categoria } from "@/app/categorias/actions";
 
-type Form = Omit<Cliente, "id" | "codigoInterno">;
+type Form = Omit<Cliente, "id" | "codigoInterno" | "categoriaNome">;
 
 const formVazio: Form = {
   tipoContribuinte: "1",
   documento: "",
   nome: "",
   inscricaoEstadual: "",
+  categoriaId: "",
   contato: { telefone: "", email: "" },
   endereco: { cep: "", logradouro: "", numero: "", complemento: "", bairro: "", municipio: "", uf: "GO" },
 };
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [busca, setBusca] = useState("");
+  const [filtroCategoria, setFiltroCategoria] = useState("");
   const [modo, setModo] = useState<"novo" | "editar" | null>(null);
   const [importar, setImportar] = useState(false);
+  const [gerenciarCat, setGerenciarCat] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Form>(formVazio);
   const [salvando, setSalvando] = useState(false);
@@ -53,26 +59,30 @@ export default function ClientesPage() {
 
   async function recarregar() {
     try {
-      setClientes(await listarClientes());
+      const [cs, cats] = await Promise.all([listarClientes(), listarCategorias("cliente")]);
+      setClientes(cs);
+      setCategorias(cats);
     } finally {
       setCarregando(false);
     }
   }
   useEffect(() => {
-     
+
     void recarregar();
   }, []);
 
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    if (!q) return clientes;
-    return clientes.filter(
-      (c) =>
+    return clientes.filter((c) => {
+      if (filtroCategoria && c.categoriaId !== filtroCategoria) return false;
+      if (!q) return true;
+      return (
         c.nome.toLowerCase().includes(q) ||
         c.documento.includes(q) ||
-        String(c.codigoInterno).includes(q),
-    );
-  }, [clientes, busca]);
+        String(c.codigoInterno).includes(q)
+      );
+    });
+  }, [clientes, busca, filtroCategoria]);
 
   function abrirNovo() {
     setEditId(null);
@@ -81,8 +91,8 @@ export default function ClientesPage() {
   }
   function abrirEdicao(c: Cliente) {
     setEditId(c.id);
-    const { id: _id, codigoInterno: _ci, ...resto } = c;
-    void _id; void _ci;
+    const { id: _id, codigoInterno: _ci, categoriaNome: _cn, ...resto } = c;
+    void _id; void _ci; void _cn;
     setForm(resto);
     setModo("editar");
   }
@@ -128,6 +138,11 @@ export default function ClientesPage() {
       render: (c) => <Badge tom="primary">{rotulo(TIPOS_CONTRIBUINTE, c.tipoContribuinte)}</Badge>,
     },
     {
+      chave: "categoria",
+      cabecalho: "Categoria",
+      render: (c) => (c.categoriaNome ? <Badge tom="primary">{c.categoriaNome}</Badge> : <span className="text-slate-300">—</span>),
+    },
+    {
       chave: "local",
       cabecalho: "Cidade/UF",
       render: (c) => (c.endereco.municipio ? `${c.endereco.municipio}/${c.endereco.uf}` : "—"),
@@ -152,6 +167,15 @@ export default function ClientesPage() {
       <Field label="Inscrição estadual" hint="Deixe vazio se isento">
         <Input value={form.inscricaoEstadual} onChange={(e) => setForm((f) => ({ ...f, inscricaoEstadual: e.target.value }))} />
       </Field>
+      <Field label="Categoria">
+        <CategoriaSelect
+          tipo="cliente"
+          categorias={categorias}
+          value={form.categoriaId}
+          onChange={(id) => setForm((f) => ({ ...f, categoriaId: id }))}
+          onCategoriasChange={setCategorias}
+        />
+      </Field>
     </div>
   );
 
@@ -161,7 +185,8 @@ export default function ClientesPage() {
         titulo="Clientes"
         subtitulo="Clique em um cliente para ver detalhes e editar."
         acao={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variante="secondary" onClick={() => setGerenciarCat(true)}>Categorias</Button>
             <Button variante="secondary" onClick={() => setImportar(true)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="-ml-0.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" x2="12" y1="3" y2="15" /></svg>
               Importar
@@ -172,12 +197,17 @@ export default function ClientesPage() {
       />
 
       <Card>
-        <div className="border-b border-[var(--border)] p-4">
+        <div className="grid grid-cols-1 gap-3 border-b border-[var(--border)] p-4 sm:grid-cols-[1fr_220px]">
           <Input
             placeholder="Buscar por nome, CPF/CNPJ ou código…"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            className="max-w-md"
+          />
+          <Select
+            placeholder="Todas as categorias"
+            opcoes={categorias.map((c) => ({ value: c.id, label: c.nome }))}
+            value={filtroCategoria}
+            onChange={(e) => setFiltroCategoria(e.target.value)}
           />
         </div>
         {carregando ? (
@@ -194,7 +224,21 @@ export default function ClientesPage() {
 
       {/* Criação em etapas (modal compartilhado) */}
       {modo === "novo" && (
-        <NovoClienteModal onFechar={fechar} onCriado={() => { recarregar(); fechar(); }} />
+        <NovoClienteModal
+          categorias={categorias}
+          onCategoriasChange={setCategorias}
+          onFechar={fechar}
+          onCriado={() => { recarregar(); fechar(); }}
+        />
+      )}
+
+      {/* Gerenciar categorias de cliente */}
+      {gerenciarCat && (
+        <GerenciarCategoriasModal
+          tipo="cliente"
+          onFechar={() => setGerenciarCat(false)}
+          onMudou={setCategorias}
+        />
       )}
 
       {/* Importação em massa (CSV/XLSX) */}

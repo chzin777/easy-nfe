@@ -34,52 +34,80 @@ const RESUMO_VAZIO: ResumoDashboard = {
   recentes: [], serieMensal: [], distribuicaoStatus: [],
 };
 
-export async function resumoDashboard(): Promise<ResumoDashboard> {
+export type PeriodoFiltro = "30d" | "90d" | "6m" | "12m" | "ano" | "tudo";
+export type FiltrosDashboard = { periodo?: PeriodoFiltro; modelo?: "" | "55" | "65" };
+
+// Data inicial do período + quantos meses cobrir na série temporal.
+function janelaPeriodo(periodo: PeriodoFiltro, agora: Date): { inicio: Date | null; meses: number } {
+  const ano = agora.getFullYear();
+  const mes = agora.getMonth();
+  switch (periodo) {
+    case "30d": return { inicio: new Date(agora.getTime() - 30 * 864e5), meses: 6 };
+    case "90d": return { inicio: new Date(agora.getTime() - 90 * 864e5), meses: 6 };
+    case "12m": return { inicio: new Date(ano, mes - 11, 1), meses: 12 };
+    case "ano": return { inicio: new Date(ano, 0, 1), meses: mes + 1 };
+    case "tudo": return { inicio: null, meses: 12 };
+    case "6m":
+    default: return { inicio: new Date(ano, mes - 5, 1), meses: 6 };
+  }
+}
+
+export async function resumoDashboard(filtros: FiltrosDashboard = {}): Promise<ResumoDashboard> {
   try {
-    return await resumoInterno();
+    return await resumoInterno(filtros);
   } catch {
     // Nunca derruba o render do painel por falha de consulta.
     return RESUMO_VAZIO;
   }
 }
 
-async function resumoInterno(): Promise<ResumoDashboard> {
+async function resumoInterno(filtros: FiltrosDashboard): Promise<ResumoDashboard> {
   const empresaId = await empresaAtivaId();
   if (!empresaId) return RESUMO_VAZIO;
 
-  // Janela dos últimos 6 meses para a série temporal.
+  const periodo = filtros.periodo ?? "6m";
+  const modelo = filtros.modelo || undefined;
   const agora = new Date();
-  const inicioJanela = new Date(agora.getFullYear(), agora.getMonth() - 5, 1);
+  const { inicio, meses } = janelaPeriodo(periodo, agora);
+
+  // Filtro comum a todas as métricas sensíveis a período/modelo.
+  const wherePeriodo = {
+    emitenteId: empresaId,
+    ...(modelo ? { modelo } : {}),
+    ...(inicio ? { emitidaEm: { gte: inicio } } : {}),
+  };
+  // Janela da série temporal (sempre cobre os `meses` buckets exibidos).
+  const inicioJanela = new Date(agora.getFullYear(), agora.getMonth() - (meses - 1), 1);
 
   const [produtos, clientes, transportadoras, autorizadas, agg, recentesRows, porStatus, notasJanela] = await Promise.all([
     prisma.produto.count({ where: { empresaId } }),
     prisma.cliente.count({ where: { empresaId } }),
     prisma.transportadora.count({ where: { empresaId } }),
-    prisma.nota.count({ where: { emitenteId: empresaId, status: "AUTORIZADA" } }),
+    prisma.nota.count({ where: { ...wherePeriodo, status: "AUTORIZADA" } }),
     prisma.nota.aggregate({
-      where: { emitenteId: empresaId, status: "AUTORIZADA" },
+      where: { ...wherePeriodo, status: "AUTORIZADA" },
       _sum: { valorTotal: true },
     }),
     prisma.nota.findMany({
-      where: { emitenteId: empresaId },
+      where: wherePeriodo,
       orderBy: { emitidaEm: "desc" },
       take: 5,
       include: { cliente: true },
     }),
     prisma.nota.groupBy({
       by: ["status"],
-      where: { emitenteId: empresaId },
+      where: wherePeriodo,
       _count: { _all: true },
     }),
     prisma.nota.findMany({
-      where: { emitenteId: empresaId, emitidaEm: { gte: inicioJanela } },
+      where: { emitenteId: empresaId, ...(modelo ? { modelo } : {}), emitidaEm: { gte: inicioJanela } },
       select: { emitidaEm: true, valorTotal: true, status: true },
     }),
   ]);
 
-  // Buckets dos últimos 6 meses.
+  // Buckets dos últimos N meses.
   const buckets: { mes: string; chave: string; notas: number; faturado: number }[] = [];
-  for (let i = 5; i >= 0; i--) {
+  for (let i = meses - 1; i >= 0; i--) {
     const d = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
     buckets.push({ mes: MESES[d.getMonth()], chave: `${d.getFullYear()}-${d.getMonth()}`, notas: 0, faturado: 0 });
   }
