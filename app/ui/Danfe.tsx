@@ -17,6 +17,9 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
     ? "COMPRA / ENTRADA DE MERCADORIA"
     : "VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCEIROS";
   const totalProdutos = nota.itens.reduce((s, i) => s + i.quantidade * i.precoUnitario, 0);
+  // Desconto por item = bruto − líquido (valorTotal já vem com desconto aplicado).
+  const descItem = (i: NotaCompleta["itens"][number]) => Math.max(0, i.quantidade * i.precoUnitario - i.valorTotal);
+  const totalDesconto = nota.itens.reduce((s, i) => s + descItem(i), 0);
   const dataEmissao = formatData(nota.emitidaEm);
   const horaEmissao = formatHora(nota.emitidaEm);
 
@@ -182,7 +185,7 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
           <div className="flex border-t border-black">
             <Cel label="Valor do frete" className="flex-1" alinhar="right">0,00</Cel>
             <Cel label="Valor do seguro" className="flex-1 border-l border-black" alinhar="right">0,00</Cel>
-            <Cel label="Desconto" className="flex-1 border-l border-black" alinhar="right">0,00</Cel>
+            <Cel label="Desconto" className="flex-1 border-l border-black" alinhar="right">{moeda(totalDesconto)}</Cel>
             <Cel label="Outras desp. acessórias" className="flex-1 border-l border-black" alinhar="right">0,00</Cel>
             <Cel label="Valor do IPI" className="flex-1 border-l border-black" alinhar="right">0,00</Cel>
             <Cel label="Valor total da nota" className="flex-1 border-l border-black bg-slate-50" alinhar="right">
@@ -253,7 +256,7 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
                 <Td>{it.unidade}</Td>
                 <Td alinhar="right">{it.quantidade.toFixed(2).replace(".", ",")}</Td>
                 <Td alinhar="right">{moeda(it.precoUnitario)}</Td>
-                <Td alinhar="right">0,00</Td>
+                <Td alinhar="right">{moeda(descItem(it))}</Td>
                 <Td alinhar="right">{moeda(it.quantidade * it.precoUnitario)}</Td>
                 <Td alinhar="right">0,00</Td>
                 <Td alinhar="right">0,00</Td>

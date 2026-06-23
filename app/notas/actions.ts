@@ -390,7 +390,7 @@ export type NotaCompleta = {
   } | null;
   itens: {
     codigo: string; nome: string; ncm: string; cfop: string;
-    unidade: string; quantidade: number; precoUnitario: number;
+    unidade: string; quantidade: number; precoUnitario: number; valorTotal: number;
   }[];
 };
 
@@ -465,6 +465,7 @@ function mapNota(n: NotaRow): NotaCompleta {
       codigo: i.produto ? String(i.produto.codigoInterno) : "—",
       nome: i.nome, ncm: i.ncm ?? "", cfop: i.cfop ?? "",
       unidade: i.unidade ?? "UN", quantidade: Number(i.quantidade), precoUnitario: Number(i.precoUnitario),
+      valorTotal: Number(i.valorTotal), // líquido (já com desconto)
     })),
   };
 }
