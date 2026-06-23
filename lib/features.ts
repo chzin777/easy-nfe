@@ -11,8 +11,7 @@ export const FEATURES: Feature[] = [
   { chave: "transportadoras", nome: "Cadastro de transportadoras", categoria: "Cadastros" },
 
   // Emissão
-  { chave: "orcamentos", nome: "Orçamentos — ver funil de vendas", categoria: "Emissão" },
-  { chave: "orcamentos_criar", nome: "Orçamentos — criar/editar", categoria: "Emissão" },
+  { chave: "orcamentos", nome: "Orçamentos (funil de vendas)", categoria: "Emissão" },
   { chave: "emitir_nfe", nome: "Emitir NF-e (mod. 55)", categoria: "Emissão" },
   { chave: "emitir_nfce", nome: "Emitir NFC-e (mod. 65)", categoria: "Emissão" },
   { chave: "emitir_nfse", nome: "Emitir NFS-e (serviço)", categoria: "Emissão" },
