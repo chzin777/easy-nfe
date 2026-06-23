@@ -101,6 +101,16 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     const cliente = await prisma.cliente.findFirst({ where: { id: input.clienteId, empresaId } });
     if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
 
+    // Consumidor final (cliente padrão, sem documento) só vale em NFC-e — a NF-e 55
+    // exige destinatário identificado com endereço.
+    const consumidorNaoIdent = !cliente.documento.replace(/\D/g, "");
+    if (!nfce && consumidorNaoIdent) {
+      return {
+        ok: false,
+        erro: 'O "Consumidor final" não identificado só pode ser usado em NFC-e (cupom). Para NF-e modelo 55, selecione um cliente com CPF/CNPJ e endereço.',
+      };
+    }
+
     // NF-e modelo 55 exige endereço completo do destinatário (SEFAZ rejeita 225 sem ele).
     // NFC-e não exige: o consumidor é opcional e dispensa endereço.
     if (!nfce) {
@@ -149,6 +159,10 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
         vDesc: 0,
         orig: p.origem,
         cest: p.cest || undefined,
+        cBenef: p.codigoBeneficio || undefined,
+        cst: p.cst || "40",
+        aliquotaIcms: p.aliquotaIcms == null ? undefined : Number(p.aliquotaIcms),
+        reducaoBaseIcms: p.reducaoBaseIcms == null ? undefined : Number(p.reducaoBaseIcms),
       };
     });
 
@@ -202,12 +216,15 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     if (indIEDest === "1" && !ieDest) indIEDest = "9";
 
     const dest: DadosNFe["dest"] = nfce
-      ? {
-          doc: cliente.documento,
-          xNome: tpAmb === "2" ? HOMOLOG_XNOME : cliente.nome,
-          indIEDest: "9",
-          ender: { xLgr: "", nro: "", xBairro: "", municipio: "", uf: destUf, cep: "" },
-        }
+      ? // Consumidor não identificado (sem documento): NFC-e dispensa o grupo dest.
+        consumidorNaoIdent
+        ? null
+        : {
+            doc: cliente.documento,
+            xNome: tpAmb === "2" ? HOMOLOG_XNOME : cliente.nome,
+            indIEDest: "9",
+            ender: { xLgr: "", nro: "", xBairro: "", municipio: "", uf: destUf, cep: "" },
+          }
       : {
           doc: cliente.documento,
           xNome: tpAmb === "2" ? HOMOLOG_XNOME : cliente.nome,
@@ -264,7 +281,13 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     let avisoPersistencia: string | undefined;
     let notaId: string | undefined;
     try {
-      const [notaCriada] = await prisma.$transaction([
+      const [, notaCriada] = await prisma.$transaction([
+        // Notas REJEITADAS de tentativas anteriores ocupam o mesmo número (unique
+        // emitente+modelo+serie+numero) e bloqueariam a gravação da autorizada.
+        // Remove a tentativa rejeitada antes de gravar (itens caem em cascata).
+        prisma.nota.deleteMany({
+          where: { emitenteId: empresa.id, modelo, serie: serieDoc, numero, status: "REJEITADA" },
+        }),
         prisma.nota.create({
           data: {
             numero,

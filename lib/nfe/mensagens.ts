@@ -2,7 +2,8 @@
 // Função pura — pode ser usada no client. Cobre as rejeições mais comuns; demais
 // caem no texto genérico com o xMotivo original.
 
-type Explicacao = { resumo: string; acao: string };
+// corrige: dica de qual cadastro abrir p/ resolver ("produto" | "cliente").
+type Explicacao = { resumo: string; acao: string; corrige?: "produto" | "cliente" };
 
 const MAPA: Record<string, Explicacao> = {
   "204": {
@@ -57,9 +58,22 @@ const MAPA: Record<string, Explicacao> = {
     resumo: "A empresa não está credenciada para emitir NF-e em produção nessa UF.",
     acao: "Faça o credenciamento na SEFAZ do seu estado antes de emitir em produção.",
   },
+  "930": {
+    resumo: "Produto isento (CST 40) sem o Código de Benefício Fiscal exigido pela UF.",
+    acao: "Cadastre o Código do benefício (cBenef) no produto — use a busca da tabela de GO.",
+    corrige: "produto",
+  },
+  "931": {
+    resumo: "O Código de Benefício Fiscal não combina com a tributação (CST 40 = isenção).",
+    acao: "Troque por um código do tipo Isenção na busca da tabela de GO (a nota sai isenta).",
+    corrige: "produto",
+  },
 };
 
-export function explicarRejeicao(cStat: string | null, xMotivo: string | null): { resumo: string; acao: string | null } {
+export function explicarRejeicao(
+  cStat: string | null,
+  xMotivo: string | null,
+): { resumo: string; acao: string | null; corrige?: "produto" | "cliente" } {
   if (cStat && MAPA[cStat]) return MAPA[cStat];
   return {
     resumo: xMotivo || "A SEFAZ recusou a nota.",

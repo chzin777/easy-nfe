@@ -32,7 +32,7 @@ import { COLUNAS_CLIENTE, validarLinhaCliente } from "@/lib/clientes-modelo";
 import { CategoriaSelect, GerenciarCategoriasModal } from "@/app/categorias/CategoriasUI";
 import { listarCategorias, type Categoria } from "@/app/categorias/actions";
 
-type Form = Omit<Cliente, "id" | "codigoInterno" | "categoriaNome">;
+type Form = Omit<Cliente, "id" | "codigoInterno" | "categoriaNome" | "padrao">;
 
 const formVazio: Form = {
   tipoContribuinte: "1",
@@ -269,7 +269,12 @@ export default function ClientesPage() {
         titulo={(editId ? clientes.find((c) => c.id === editId)?.nome : "") || "Cliente"}
         rodape={
           <div className="flex w-full items-center justify-between">
-            <Button variante="ghost" className="text-[var(--danger)]" onClick={excluir} disabled={salvando}>Excluir</Button>
+            {/* Consumidor final (padrão) não pode ser excluído. */}
+            {clientes.find((c) => c.id === editId)?.padrao ? (
+              <span className="text-xs text-[var(--muted)]">Cliente padrão do sistema</span>
+            ) : (
+              <Button variante="ghost" className="text-[var(--danger)]" onClick={excluir} disabled={salvando}>Excluir</Button>
+            )}
             <div className="flex gap-2">
               <Button variante="secondary" onClick={fechar} disabled={salvando}>Cancelar</Button>
               <Button onClick={salvarEdicao} disabled={salvando}>{salvando ? "Salvando…" : "Salvar alterações"}</Button>

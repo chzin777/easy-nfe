@@ -40,6 +40,27 @@ export async function consultarStatus(
   return { ok: cStat === "107", cStat, xMotivo: extrai(r.body, "xMotivo") };
 }
 
+// Consulta a situação de uma NF-e pela chave (NfeConsultaProtocolo). Devolve o
+// cStat do protocolo (100 = autorizada) e o nProt, p/ recuperar/cancelar notas
+// que ficaram fora do sistema. Read-only.
+export async function consultarNFe(
+  cert: Certificado,
+  tpAmb: "1" | "2",
+  chave: string,
+): Promise<{ cStat: string | null; xMotivo: string | null; nProt: string | null; protNFe: string | null }> {
+  const cons =
+    `<consSitNFe versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">` +
+    `<tpAmb>${tpAmb}</tpAmb><xServ>CONSULTAR</xServ><chNFe>${chave}</chNFe></consSitNFe>`;
+  const r = await soap(tpAmb, "consulta", cons, cert);
+  const prot = extraiBloco(r.body, "protNFe");
+  // cStat do protNFe = situação da NF-e (100 autorizada, 101 cancelada, etc).
+  // Sem protNFe, cai no cStat do retorno (217 = não consta, etc).
+  const cStat = prot ? extrai(prot, "cStat") : extrai(r.body, "cStat");
+  const xMotivo = prot ? extrai(prot, "xMotivo") : extrai(r.body, "xMotivo");
+  const nProt = prot ? extrai(prot, "nProt") : null;
+  return { cStat, xMotivo, nProt, protNFe: prot };
+}
+
 // Monta, assina e transmite a NF-e (autorização síncrona). Não persiste nada.
 export async function emitirNFe(
   cert: Certificado,

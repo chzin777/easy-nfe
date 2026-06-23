@@ -9,6 +9,7 @@ import type { ClienteImport } from "@/lib/clientes-modelo";
 type Row = {
   id: string;
   codigoInterno: number;
+  padrao: boolean;
   tipoContribuinte: string;
   documento: string;
   nome: string;
@@ -30,6 +31,7 @@ function paraUI(c: Row): Cliente {
   return {
     id: c.id,
     codigoInterno: c.codigoInterno,
+    padrao: c.padrao,
     tipoContribuinte: c.tipoContribuinte,
     documento: c.documento,
     nome: c.nome,
@@ -49,7 +51,18 @@ function paraUI(c: Row): Cliente {
   };
 }
 
-export type ClienteInput = Omit<Cliente, "id" | "codigoInterno" | "categoriaNome">;
+export type ClienteInput = Omit<Cliente, "id" | "codigoInterno" | "categoriaNome" | "padrao">;
+
+// Garante o cliente "Consumidor final" (padrão) da empresa. Idempotente — usado
+// como seed lazy: toda empresa passa a ter esse cliente ao listar/usar clientes.
+// Consumidor não identificado: sem documento, não contribuinte (indIEDest=9).
+export async function garantirConsumidorFinal(empresaId: string): Promise<void> {
+  const existe = await prisma.cliente.findFirst({ where: { empresaId, padrao: true }, select: { id: true } });
+  if (existe) return;
+  await prisma.cliente.create({
+    data: { empresaId, padrao: true, nome: "Consumidor final", tipoContribuinte: "9", documento: "" },
+  });
+}
 
 function paraDados(input: ClienteInput) {
   return {
@@ -72,9 +85,11 @@ function paraDados(input: ClienteInput) {
 
 export async function listarClientes(): Promise<Cliente[]> {
   const empresaId = await exigirEmpresa();
+  await garantirConsumidorFinal(empresaId); // seed lazy p/ empresas já existentes
   const rows = await prisma.cliente.findMany({
     where: { empresaId },
-    orderBy: { codigoInterno: "asc" },
+    // Consumidor final sempre no topo da lista.
+    orderBy: [{ padrao: "desc" }, { codigoInterno: "asc" }],
     include: { categoria: { select: { nome: true } } },
   });
   return rows.map(paraUI);
@@ -140,7 +155,8 @@ export async function importarClientes(
 export async function excluirCliente(id: string): Promise<void> {
   await exigirFeature("clientes");
   const empresaId = await exigirEmpresa();
-  await prisma.cliente.deleteMany({ where: { id, empresaId } });
+  // Não exclui o Consumidor final (cliente padrão do sistema).
+  await prisma.cliente.deleteMany({ where: { id, empresaId, padrao: false } });
 }
 
 export type DadosCnpj = {

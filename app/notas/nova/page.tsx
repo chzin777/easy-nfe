@@ -29,6 +29,7 @@ import VisualizarDanfeModal from "../VisualizarDanfeModal";
 import { explicarRejeicao } from "@/lib/nfe/mensagens";
 import { listarClientes } from "@/app/clientes/actions";
 import NovoClienteModal from "@/app/clientes/NovoClienteModal";
+import NovoProdutoModal from "@/app/produtos/NovoProdutoModal";
 import ClientePicker from "./ClientePicker";
 import ProdutoPicker from "./ProdutoPicker";
 import TransportadoraPicker from "./TransportadoraPicker";
@@ -68,8 +69,11 @@ export default function NovaNotaPage() {
   // Nota recém-autorizada: abre o DANFE p/ baixar PDF/XML logo após emitir.
   const [notaEmitida, setNotaEmitida] = useState<NotaCompleta | null>(null);
   const [corrigirCliente, setCorrigirCliente] = useState<Cliente | null>(null);
-  // Muda a key do Stepper p/ remontá-lo no passo 1 ao recomeçar.
+  const [corrigirProduto, setCorrigirProduto] = useState<Produto | null>(null);
+  // Muda a key do Stepper p/ remontá-lo ao recomeçar/voltar a um passo.
   const [formKey, setFormKey] = useState(0);
+  // Passo em que o Stepper monta (1 ao recomeçar; 4 ao voltar de uma correção).
+  const [passoEmissao, setPassoEmissao] = useState(1);
 
   // Limpa todos os campos e volta ao passo 1 (mantém listas já carregadas).
   function resetarFormulario() {
@@ -82,6 +86,7 @@ export default function NovaNotaPage() {
     setDescNota({ tipo: "valor", valor: 0 });
     setProdutoSel("");
     setQtd(1);
+    setPassoEmissao(1);
     setFormKey((k) => k + 1);
   }
 
@@ -221,6 +226,7 @@ export default function NovaNotaPage() {
 
       <Stepper
         key={formKey}
+        initialStep={passoEmissao}
         nextButtonText="Continuar"
         backButtonText="Voltar"
         completeButtonText="Emitir nota"
@@ -575,11 +581,29 @@ export default function NovaNotaPage() {
                 <p className="font-semibold">Nota recusada pela SEFAZ</p>
                 {(() => {
                   const ex = explicarRejeicao(resultado.cStat, resultado.xMotivo);
+                  // Produto a corrigir: 1º item cujo produto ainda não tem benefício.
+                  const alvo =
+                    ex.corrige === "produto"
+                      ? produtos.find((p) => itens.some((it) => it.produtoId === p.id) && !p.codigoBeneficio?.trim()) ??
+                        produtos.find((p) => itens.some((it) => it.produtoId === p.id)) ??
+                        null
+                      : null;
                   return (
                     <>
                       <p className="text-sm">{ex.resumo}</p>
                       {ex.acao && <p className="text-xs opacity-90">O que fazer: {ex.acao}</p>}
                       <p className="text-[10px] opacity-70">Código técnico: cStat {resultado.cStat}</p>
+                      {alvo && (
+                        <Button
+                          className="mt-1"
+                          onClick={() => {
+                            setResultado(null);
+                            setCorrigirProduto(alvo);
+                          }}
+                        >
+                          Corrigir produto “{alvo.nome}”
+                        </Button>
+                      )}
                     </>
                   );
                 })()}
@@ -624,10 +648,40 @@ export default function NovaNotaPage() {
       {corrigirCliente && (
         <NovoClienteModal
           clienteInicial={corrigirCliente}
+          passoInicial={4}
+          aviso={
+            <>
+              A SEFAZ recusou a nota por causa do <b>endereço do destinatário</b>. Confira e complete os campos abaixo e salve para emitir de novo.
+            </>
+          }
           onFechar={() => setCorrigirCliente(null)}
           onCriado={(c) => {
             setClientes((lista) => lista.map((x) => (x.id === c.id ? c : x)));
             setCorrigirCliente(null);
+            // Volta o Stepper p/ a Conferência (passo 4) — dados preservados — p/ reemitir.
+            setPassoEmissao(4);
+            setFormKey((k) => k + 1);
+          }}
+        />
+      )}
+
+      {corrigirProduto && (
+        <NovoProdutoModal
+          produtoInicial={corrigirProduto}
+          passoInicial={3}
+          aviso={
+            <>
+              A SEFAZ recusou a nota: este produto é isento (CST 40) e precisa do{" "}
+              <b>Código do benefício fiscal</b>. Use o botão <b>Buscar</b> no campo (ex.: <b>GO811053</b> — cesta básica) e salve para emitir de novo.
+            </>
+          }
+          onFechar={() => setCorrigirProduto(null)}
+          onCriado={(p) => {
+            setProdutos((lista) => lista.map((x) => (x.id === p.id ? p : x)));
+            setCorrigirProduto(null);
+            // Volta o Stepper p/ a Conferência (passo 4) — dados preservados — p/ reemitir.
+            setPassoEmissao(4);
+            setFormKey((k) => k + 1);
           }}
         />
       )}

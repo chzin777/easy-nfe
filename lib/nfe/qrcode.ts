@@ -9,6 +9,11 @@ const URL_CONSULTA_GO: Record<"1" | "2", string> = {
   "2": "https://nfewebhomolog.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe",
 };
 
+// urlChave: endereço de consulta POR CHAVE de acesso (digitação manual). É um
+// valor distinto da URL do QR Code e a SEFAZ-GO valida exatamente (rejeição 878
+// se divergir). GO usa a mesma URL em produção e homologação.
+const URL_CHAVE_GO = "https://www.sefaz.go.gov.br/nfce/consulta";
+
 // Monta o conteúdo do QR Code e a URL de consulta por chave (urlChave), que vão
 // no bloco <infNFeSupl>. Online (tpEmis=1): parâmetros chave|versao|tpAmb|cIdToken,
 // hash SHA-1 (hex maiúsculo) da concatenação desses parâmetros + CSC.
@@ -24,5 +29,5 @@ export function montarQrCode(p: {
   const dados = `${p.chave}|2|${p.tpAmb}|${cIdToken}`;
   const hash = createHash("sha1").update(dados + p.csc).digest("hex").toUpperCase();
   const qrCode = `${urlConsulta}?p=${dados}|${hash}`;
-  return { qrCode, urlChave: urlConsulta };
+  return { qrCode, urlChave: URL_CHAVE_GO };
 }

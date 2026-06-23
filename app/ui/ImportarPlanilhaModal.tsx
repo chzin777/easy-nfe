@@ -30,6 +30,8 @@ type Props<T> = {
   titulo: string;
   nomeModelo: string; // ex.: "modelo-produtos"
   nomePlanilha: string; // aba do xlsx, ex.: "Produtos"
+  // URL do modelo oficial (.xlsx em /public). Se setado, o botão "Modelo .xlsx" baixa esse arquivo.
+  modeloUrl?: string;
   colunas: ColunaModelo[];
   // chave que precisa existir no cabeçalho p/ aceitar o arquivo (ex.: "nome").
   headerObrigatorio: string;
@@ -43,15 +45,28 @@ type Props<T> = {
 
 type Fase = "inicio" | "lendo" | "preview" | "importando" | "fim";
 
-// Normaliza cabeçalho/valor p/ comparação (sem acento, minúsculo).
+// Normaliza cabeçalho/valor p/ comparação (sem acento, sem símbolos decorativos, minúsculo).
 function norm(s: string): string {
-  return String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  return String(s)
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^\p{L}\p{N} ]/gu, "") // remove ★, ⚡, *, etc.
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Linha de banner/instrução/rodapé do modelo oficial (não é dado).
+function ehLinhaDecorativa(linha: unknown[]): boolean {
+  const texto = linha.map((c) => String(c)).join(" ");
+  return /easy-nfe/i.test(texto) || /★\s*=/.test(texto) || /campo obrigat[óo]rio/i.test(texto);
 }
 
 export default function ImportarPlanilhaModal<T>({
   titulo,
   nomeModelo,
   nomePlanilha,
+  modeloUrl,
   colunas,
   headerObrigatorio,
   validar,
@@ -85,6 +100,14 @@ export default function ImportarPlanilhaModal<T>({
 
   // ---- Modelo (download) ------------------------------------------------
   async function baixarModelo(tipo: "xlsx" | "csv") {
+    // Modelo oficial: baixa o arquivo de /public direto.
+    if (tipo === "xlsx" && modeloUrl) {
+      const a = document.createElement("a");
+      a.href = modeloUrl;
+      a.download = `${nomeModelo}.xlsx`;
+      a.click();
+      return;
+    }
     const XLSX = await import("xlsx");
     const headers = colunas.map((c) => c.header);
     const exemplo = colunas.map((c) => c.exemplo);
@@ -121,21 +144,34 @@ export default function ImportarPlanilhaModal<T>({
         const buf = await file.arrayBuffer();
         wb = XLSX.read(buf, { type: "array", raw: false });
       }
-      const ws = wb.Sheets[wb.SheetNames[0]];
+      // Seleciona a aba pelo nome (ex.: "Produtos"); cai p/ a 1ª se não achar.
+      const nomeAba =
+        wb.SheetNames.find((n) => norm(n) === norm(nomePlanilha)) ?? wb.SheetNames[0];
+      const ws = wb.Sheets[nomeAba];
       if (!ws) throw new Error("Planilha vazia.");
       const matriz = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "", raw: false, blankrows: false });
-      if (matriz.length < 2) throw new Error("Arquivo sem linhas de dados (precisa do cabeçalho + ao menos 1 linha).");
 
       const mapa = mapaColunas();
-      const cabecalho = matriz[0].map((h) => mapa.get(norm(String(h))) ?? null);
-      if (!cabecalho.some((k) => k === headerObrigatorio)) {
+      // Acha a linha de cabeçalho (o modelo oficial tem banner antes dela).
+      let headerRow = -1;
+      let cabecalho: (string | null)[] = [];
+      for (let i = 0; i < matriz.length; i++) {
+        const keys = (matriz[i] ?? []).map((h) => mapa.get(norm(String(h))) ?? null);
+        if (keys.includes(headerObrigatorio)) {
+          headerRow = i;
+          cabecalho = keys;
+          break;
+        }
+      }
+      if (headerRow < 0) {
         throw new Error('Cabeçalho não reconhecido. Use o modelo padrão (precisa ao menos a coluna "Nome").');
       }
 
       const validadas: LinhaValidada<T>[] = [];
-      for (let r = 1; r < matriz.length; r++) {
+      for (let r = headerRow + 1; r < matriz.length; r++) {
         const linha = matriz[r];
         if (!linha || linha.every((c) => String(c).trim() === "")) continue;
+        if (ehLinhaDecorativa(linha)) continue; // rodapé/instrução do modelo oficial
         const bruto: Record<string, string> = {};
         cabecalho.forEach((key, col) => {
           if (key) bruto[key] = String(linha[col] ?? "");

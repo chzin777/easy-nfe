@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Field, Input, SectionTitle } from "@/app/ui/primitives";
 import StepperModal from "@/app/ui/StepperModal";
 import Stepper, { Step } from "@/app/ui/Stepper";
@@ -59,12 +59,16 @@ export default function NovoClienteModal({
   clienteInicial,
   categorias: categoriasIniciais,
   onCategoriasChange,
+  passoInicial = 1,
+  aviso,
 }: {
   onFechar: () => void;
   onCriado: (c: Cliente) => void;
   clienteInicial?: Cliente;
   categorias?: Categoria[];
   onCategoriasChange?: (lista: Categoria[]) => void;
+  passoInicial?: number;
+  aviso?: ReactNode;
 }) {
   const editando = !!clienteInicial;
   const [form, setForm] = useState<ClienteInput>(() => {
@@ -166,7 +170,13 @@ export default function NovoClienteModal({
 
   return (
     <StepperModal onFechar={onFechar} largura="max-w-2xl">
+      {aviso && (
+        <div className="mb-4 rounded-lg border border-[var(--warning)] bg-[var(--warning-soft)] px-3 py-2.5 text-sm text-[var(--warning)]">
+          {aviso}
+        </div>
+      )}
       <Stepper
+        initialStep={passoInicial}
         completeButtonText={editando ? "Salvar cliente" : "Cadastrar cliente"}
         onFinalStepCompleted={salvar}
         canProceed={(s) => {

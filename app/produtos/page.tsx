@@ -30,6 +30,8 @@ import NovoProdutoModal from "./NovoProdutoModal";
 import ImportarPlanilhaModal from "@/app/ui/ImportarPlanilhaModal";
 import { COLUNAS_PRODUTO, validarLinhaProduto } from "@/lib/produtos-modelo";
 import NcmPicker from "./NcmPicker";
+import BeneficioPicker from "./BeneficioPicker";
+import TributacaoFields from "./TributacaoFields";
 import MoneyInput from "@/app/ui/MoneyInput";
 import { CategoriaSelect, GerenciarCategoriasModal } from "@/app/categorias/CategoriasUI";
 import { listarCategorias, type Categoria } from "@/app/categorias/actions";
@@ -47,6 +49,9 @@ const formVazio: Form = {
   preco: 0,
   descricao: "",
   categoriaId: "",
+  cst: "40",
+  aliquotaIcms: 0,
+  reducaoBaseIcms: 0,
   cest: "",
   codigoBeneficio: "",
   creditoPresumidoIcms: "",
@@ -275,11 +280,15 @@ export default function ProdutosPage() {
 
   const fiscal = (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <TributacaoFields
+        value={{ cst: form.cst, aliquotaIcms: form.aliquotaIcms, reducaoBaseIcms: form.reducaoBaseIcms }}
+        onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+      />
       <Field label="CEST">
         <Input value={form.cest} onChange={(e) => set("cest", e.target.value)} placeholder="0000000" />
       </Field>
-      <Field label="Código do benefício">
-        <Input value={form.codigoBeneficio} onChange={(e) => set("codigoBeneficio", e.target.value)} placeholder="Ex.: GO820001" />
+      <Field label="Código do benefício" hint="Busca na tabela oficial de GO">
+        <BeneficioPicker value={form.codigoBeneficio} onChange={(v) => set("codigoBeneficio", v)} nomeProduto={form.nome} cst={form.cst} />
       </Field>
       <Field label="Crédito presumido de ICMS">
         <Input value={form.creditoPresumidoIcms} onChange={(e) => set("creditoPresumidoIcms", e.target.value)} />
@@ -404,6 +413,7 @@ export default function ProdutosPage() {
           titulo="Importar produtos"
           nomeModelo="modelo-produtos"
           nomePlanilha="Produtos"
+          modeloUrl="/modelo.xlsx"
           colunas={COLUNAS_PRODUTO}
           headerObrigatorio="nome"
           validar={validarLinhaProduto}

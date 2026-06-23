@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Field, Input, Select, Textarea, SectionTitle } from "@/app/ui/primitives";
 import StepperModal from "@/app/ui/StepperModal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import { ORIGENS, UNIDADES } from "@/lib/mock-data";
 import type { Produto } from "@/lib/types";
-import { criarProduto, type ProdutoInput } from "./actions";
+import { criarProduto, atualizarProduto, type ProdutoInput } from "./actions";
 import NcmPicker from "./NcmPicker";
+import BeneficioPicker from "./BeneficioPicker";
+import TributacaoFields from "./TributacaoFields";
 import MoneyInput from "@/app/ui/MoneyInput";
 import { CategoriaSelect } from "@/app/categorias/CategoriasUI";
 import { listarCategorias, type Categoria } from "@/app/categorias/actions";
@@ -23,25 +25,43 @@ const vazio: ProdutoInput = {
   preco: 0,
   descricao: "",
   categoriaId: "",
+  cst: "40",
+  aliquotaIcms: 0,
+  reducaoBaseIcms: 0,
   cest: "",
   codigoBeneficio: "",
   creditoPresumidoIcms: "",
   reguladoAnp: false,
 };
 
+// Converte um Produto carregado em ProdutoInput (modo edição).
+function paraInput(p: Produto): ProdutoInput {
+  const { id: _id, codigoInterno: _ci, categoriaNome: _cn, ...resto } = p;
+  return resto;
+}
+
 // Modal de cadastro de produto em etapas (stepper). Reutilizado na página e nos pickers.
+// Em modo edição (produtoInicial), pré-preenche e salva via atualizarProduto.
+// `aviso` mostra um banner no topo (ex.: o que a SEFAZ exige corrigir).
 export default function NovoProdutoModal({
   onFechar,
   onCriado,
   categorias: categoriasIniciais,
   onCategoriasChange,
+  produtoInicial,
+  aviso,
+  passoInicial = 1,
 }: {
   onFechar: () => void;
   onCriado: (p: Produto) => void;
   categorias?: Categoria[];
   onCategoriasChange?: (lista: Categoria[]) => void;
+  produtoInicial?: Produto;
+  aviso?: ReactNode;
+  passoInicial?: number;
 }) {
-  const [form, setForm] = useState<ProdutoInput>(vazio);
+  const edicao = !!produtoInicial;
+  const [form, setForm] = useState<ProdutoInput>(produtoInicial ? paraInput(produtoInicial) : vazio);
   const [erro, setErro] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>(categoriasIniciais ?? []);
   function set<K extends keyof ProdutoInput>(k: K, v: ProdutoInput[K]) { setForm((f) => ({ ...f, [k]: v })); }
@@ -59,7 +79,10 @@ export default function NovoProdutoModal({
   async function salvar() {
     setErro(null);
     try {
-      onCriado(await criarProduto(form));
+      const p = produtoInicial
+        ? await atualizarProduto(produtoInicial.id, form)
+        : await criarProduto(form);
+      onCriado(p);
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
     }
@@ -67,8 +90,14 @@ export default function NovoProdutoModal({
 
   return (
     <StepperModal onFechar={onFechar} largura="max-w-2xl">
+      {aviso && (
+        <div className="mb-4 rounded-lg border border-[var(--warning)] bg-[var(--warning-soft)] px-3 py-2.5 text-sm text-[var(--warning)]">
+          {aviso}
+        </div>
+      )}
       <Stepper
-        completeButtonText="Cadastrar produto"
+        initialStep={passoInicial}
+        completeButtonText={edicao ? "Salvar correções" : "Cadastrar produto"}
         onFinalStepCompleted={salvar}
         canProceed={(s) => (s === 1 ? form.nome.trim() !== "" && form.ncm.trim() !== "" : true)}
       >
@@ -112,8 +141,14 @@ export default function NovoProdutoModal({
         <Step>
           <SectionTitle>Configurações fiscais</SectionTitle>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <TributacaoFields
+              value={{ cst: form.cst, aliquotaIcms: form.aliquotaIcms, reducaoBaseIcms: form.reducaoBaseIcms }}
+              onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+            />
             <Field label="CEST"><Input value={form.cest} onChange={(e) => set("cest", e.target.value)} placeholder="0000000" /></Field>
-            <Field label="Código do benefício"><Input value={form.codigoBeneficio} onChange={(e) => set("codigoBeneficio", e.target.value)} placeholder="Ex.: GO820001" /></Field>
+            <Field label="Código do benefício" hint="Busca na tabela oficial de GO">
+              <BeneficioPicker value={form.codigoBeneficio} onChange={(v) => set("codigoBeneficio", v)} nomeProduto={form.nome} cst={form.cst} />
+            </Field>
             <Field label="Crédito presumido de ICMS"><Input value={form.creditoPresumidoIcms} onChange={(e) => set("creditoPresumidoIcms", e.target.value)} /></Field>
             <Field label="Produto regulamentado pela ANP?">
               <label className="flex h-[46px] items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 text-sm">

@@ -16,6 +16,9 @@ export type Produto = {
   categoriaId: string; // "" = sem categoria
   categoriaNome: string; // rótulo (derivado) p/ listagem
   // Configurações fiscais
+  cst: string; // tributação ICMS (regime normal): "40" isenção (padrão) | "20" redução de BC
+  aliquotaIcms: number; // pICMS p/ CST 20 (0 = não usado)
+  reducaoBaseIcms: number; // pRedBC % p/ CST 20 (0 = não usado)
   cest: string;
   codigoBeneficio: string;
   creditoPresumidoIcms: string;
@@ -40,6 +43,7 @@ export type Contato = {
 export type Cliente = {
   id: string;
   codigoInterno: number;
+  padrao: boolean; // "Consumidor final" do sistema (fixo, não excluível)
   tipoContribuinte: string; // 1 / 2 / 9
   documento: string; // CPF ou CNPJ
   nome: string;

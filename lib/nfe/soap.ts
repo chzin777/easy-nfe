@@ -1,7 +1,7 @@
 import https from "node:https";
 import type { Certificado } from "./cert";
 
-export type Servico = "status" | "autoriza" | "evento";
+export type Servico = "status" | "autoriza" | "evento" | "consulta";
 
 // Webservices da SEFAZ-GO (autorizadora própria). Outras UFs exigem outros endpoints.
 const ENDPOINTS: Record<"1" | "2", Record<Servico, string>> = {
@@ -10,12 +10,14 @@ const ENDPOINTS: Record<"1" | "2", Record<Servico, string>> = {
     status: "https://nfe.sefaz.go.gov.br/nfe/services/NFeStatusServico4",
     autoriza: "https://nfe.sefaz.go.gov.br/nfe/services/NFeAutorizacao4",
     evento: "https://nfe.sefaz.go.gov.br/nfe/services/NFeRecepcaoEvento4",
+    consulta: "https://nfe.sefaz.go.gov.br/nfe/services/NFeConsultaProtocolo4",
   },
   // Homologação
   "2": {
     status: "https://homolog.sefaz.go.gov.br/nfe/services/NFeStatusServico4",
     autoriza: "https://homolog.sefaz.go.gov.br/nfe/services/NFeAutorizacao4",
     evento: "https://homolog.sefaz.go.gov.br/nfe/services/NFeRecepcaoEvento4",
+    consulta: "https://homolog.sefaz.go.gov.br/nfe/services/NFeConsultaProtocolo4",
   },
 };
 
@@ -23,6 +25,7 @@ const WSDL_NS: Record<Servico, string> = {
   status: "http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4",
   autoriza: "http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4",
   evento: "http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4",
+  consulta: "http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4",
 };
 
 export function endpoint(tpAmb: "1" | "2", servico: Servico): string {

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { buscarNcm, type NcmSugestao } from "./actions";
 import LightningLoader from "@/app/ui/LightningLoader";
 import Modal from "@/app/ui/Modal";
+import { avisoNcmIncoerente } from "@/lib/nfe/ncm-coerencia";
 
 // Formata 8 dígitos como 0000.00.00 para exibição.
 function fmt(ncm: string) {
@@ -62,6 +63,8 @@ export default function NcmPicker({
     "w-full rounded-lg border border-[var(--border)] bg-white px-3.5 py-2.5 text-sm outline-none transition-all " +
     "focus:border-[var(--primary)] focus:ring-4 focus:ring-[var(--primary-soft)] hover:border-slate-300";
 
+  const aviso = avisoNcmIncoerente(nomeProduto, value);
+
   return (
     <>
       <div className="flex gap-2">
@@ -81,6 +84,12 @@ export default function NcmPicker({
           Buscar
         </button>
       </div>
+      {aviso && (
+        <p className="mt-1.5 flex items-start gap-1.5 text-xs text-[var(--warning)]">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+          {aviso}
+        </p>
+      )}
 
       <Modal aberto={aberto} onFechar={() => setAberto(false)} titulo="Buscar NCM pelo nome" largura="max-w-lg">
         <input

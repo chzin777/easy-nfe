@@ -20,6 +20,9 @@ type ProdutoRow = {
   descricao: string | null;
   categoriaId: string | null;
   categoria?: { nome: string } | null;
+  cst: string | null;
+  aliquotaIcms: unknown;
+  reducaoBaseIcms: unknown;
   cest: string | null;
   codigoBeneficio: string | null;
   creditoPresumidoIcms: string | null;
@@ -41,6 +44,9 @@ function paraUI(p: ProdutoRow): Produto {
     descricao: p.descricao ?? "",
     categoriaId: p.categoriaId ?? "",
     categoriaNome: p.categoria?.nome ?? "",
+    cst: p.cst ?? "40",
+    aliquotaIcms: p.aliquotaIcms == null ? 0 : Number(p.aliquotaIcms),
+    reducaoBaseIcms: p.reducaoBaseIcms == null ? 0 : Number(p.reducaoBaseIcms),
     cest: p.cest ?? "",
     codigoBeneficio: p.codigoBeneficio ?? "",
     creditoPresumidoIcms: p.creditoPresumidoIcms ?? "",
@@ -63,6 +69,9 @@ function paraDados(input: ProdutoInput) {
     preco: input.preco,
     descricao: input.descricao || null,
     categoriaId: input.categoriaId || null,
+    cst: input.cst || "40",
+    aliquotaIcms: input.cst === "20" && input.aliquotaIcms > 0 ? input.aliquotaIcms : null,
+    reducaoBaseIcms: input.cst === "20" && input.reducaoBaseIcms > 0 ? input.reducaoBaseIcms : null,
     cest: input.cest || null,
     codigoBeneficio: input.codigoBeneficio || null,
     creditoPresumidoIcms: input.creditoPresumidoIcms || null,

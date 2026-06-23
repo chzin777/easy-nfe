@@ -42,6 +42,10 @@ export type ItemNFe = {
   vDesc?: number; // desconto do item (já calculado, em R$)
   orig: string; // 0-8
   cest?: string;
+  cBenef?: string; // código de benefício fiscal (GO etc.) p/ CST 40/41/50
+  cst?: string; // tributação ICMS (regime normal): "40" isenção (padrão) | "20" redução de BC
+  aliquotaIcms?: number; // pICMS p/ CST 20
+  reducaoBaseIcms?: number; // pRedBC % p/ CST 20
 };
 
 export type DadosNFe = {

@@ -351,7 +351,9 @@ model Produto {
   // fiscais
   cfopPadrao          String?
   csosn               String? // Simples
-  cst                 String? // Regime normal
+  cst                 String? // Regime normal: "40" isenção (padrão) | "20" redução de BC
+  aliquotaIcms        Decimal? @db.Decimal(5, 2) // pICMS p/ CST 20 (ex.: 17,00)
+  reducaoBaseIcms     Decimal? @db.Decimal(5, 2) // pRedBC % p/ CST 20 (ex.: 58,82)
   cest                String?
   codigoBeneficio     String?
   creditoPresumidoIcms String?
@@ -376,8 +378,9 @@ model Cliente {
   empresa          Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
 
   codigoInterno    Int      @unique @default(autoincrement())
+  padrao           Boolean  @default(false) // "Consumidor final" do sistema (não editável/excluível)
   tipoContribuinte String // 1 / 2 / 9
-  documento        String // CPF ou CNPJ
+  documento        String // CPF ou CNPJ (vazio no Consumidor final)
   nome             String
   inscricaoEstadual String?
 

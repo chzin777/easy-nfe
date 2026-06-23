@@ -41,28 +41,61 @@ function enderXml(tag: string, e: EnderecoNFe): string {
 // imposto destacado (CSOSN 102). Regime Normal usa CST 40 (isenta) p/ manter a nota
 // válida sem alíquotas cadastradas — refinar quando o cadastro de produto trouxer
 // situação tributária própria.
-function icmsXml(crt: string, orig: string): string {
-  if (crt === "1" || crt === "2") {
-    return `<ICMS><ICMSSN102><orig>${orig}</orig><CSOSN>102</CSOSN></ICMSSN102></ICMS>`;
-  }
-  return `<ICMS><ICMS40><orig>${orig}</orig><CST>40</CST></ICMS40></ICMS>`;
+// cBenef: 8-10 alfanuméricos (ex.: GO811053). UF como GO rejeita CST isenta
+// sem o código (cStat 930). ATENÇÃO: no schema 4.00 o cBenef é filho de <prod>
+// (após CEST, antes de CFOP) — NÃO do grupo ICMS. Pô-lo no ICMS40 gera cStat 225.
+function cBenefTag(cBenef?: string): string {
+  const c = (cBenef ?? "").trim().toUpperCase();
+  return /^[A-Z0-9]{8,10}$/.test(c) ? `<cBenef>${c}</cBenef>` : "";
 }
 
-function detXml(item: ItemNFe, nItem: number, crt: string): string {
+function r2(v: number): number {
+  return Math.round(v * 100) / 100;
+}
+
+// Monta o grupo ICMS e devolve também vBC/vICMS do item p/ somar nos totais.
+// Simples Nacional → CSOSN 102 (sem imposto destacado).
+// Regime Normal: CST 40 (isenta, padrão) ou CST 20 (redução de base de cálculo).
+function icmsXml(crt: string, item: ItemNFe, base: number): { xml: string; vBC: number; vICMS: number } {
+  const orig = item.orig;
+  if (crt === "1" || crt === "2") {
+    return { xml: `<ICMS><ICMSSN102><orig>${orig}</orig><CSOSN>102</CSOSN></ICMSSN102></ICMS>`, vBC: 0, vICMS: 0 };
+  }
+  if (item.cst === "20") {
+    // Redução de base de cálculo. modBC=3 (valor da operação).
+    const pRed = Math.min(Math.max(item.reducaoBaseIcms ?? 0, 0), 100);
+    const pICMS = Math.max(item.aliquotaIcms ?? 0, 0);
+    const vBC = r2(base * (1 - pRed / 100));
+    const vICMS = r2(vBC * (pICMS / 100));
+    const xml =
+      `<ICMS><ICMS20>` +
+      `<orig>${orig}</orig><CST>20</CST><modBC>3</modBC>` +
+      `<pRedBC>${n2(pRed)}</pRedBC><vBC>${n2(vBC)}</vBC>` +
+      `<pICMS>${n2(pICMS)}</pICMS><vICMS>${n2(vICMS)}</vICMS>` +
+      `</ICMS20></ICMS>`;
+    return { xml, vBC, vICMS };
+  }
+  // ICMS40 (CST 40 isenta): orig, CST. Sem cBenef aqui (vai no <prod>).
+  return { xml: `<ICMS><ICMS40><orig>${orig}</orig><CST>40</CST></ICMS40></ICMS>`, vBC: 0, vICMS: 0 };
+}
+
+function detXml(item: ItemNFe, nItem: number, crt: string): { xml: string; vBC: number; vICMS: number } {
   const vProd = item.qCom * item.vUnCom;
   // Desconto do item (vDesc) — limitado ao valor do produto. Só inclui se > 0.
   const vDesc = Math.min(Math.max(item.vDesc ?? 0, 0), vProd);
   const descTag = vDesc > 0 ? `<vDesc>${n2(vDesc)}</vDesc>` : "";
+  const icms = icmsXml(crt, item, vProd - vDesc);
   // CEST tem EXATAMENTE 7 dígitos no schema 4.00. Valor inválido (ex.: 8 dígitos)
   // gera rejeição 225 — então só inclui quando bater os 7 dígitos.
   const cestDig = (item.cest ?? "").replace(/\D/g, "");
   const cestTag = cestDig.length === 7 ? `<CEST>${cestDig}</CEST>` : "";
-  return (
+  const xml =
     `<det nItem="${nItem}">` +
     `<prod>` +
     `<cProd>${esc(item.cProd)}</cProd><cEAN>${esc(item.cEAN)}</cEAN>` +
     `<xProd>${esc(item.xProd)}</xProd><NCM>${item.ncm}</NCM>` +
     cestTag +
+    cBenefTag(item.cBenef) + // schema: cBenef em <prod>, após CEST e antes do CFOP
     `<CFOP>${item.cfop}</CFOP><uCom>${esc(item.uCom)}</uCom>` +
     `<qCom>${n4(item.qCom)}</qCom><vUnCom>${n10(item.vUnCom)}</vUnCom>` +
     `<vProd>${n2(vProd)}</vProd><cEANTrib>${esc(item.cEAN)}</cEANTrib>` +
@@ -72,12 +105,12 @@ function detXml(item: ItemNFe, nItem: number, crt: string): string {
     `<indTot>1</indTot>` +
     `</prod>` +
     `<imposto>` +
-    icmsXml(crt, item.orig) +
+    icms.xml +
     `<PIS><PISNT><CST>07</CST></PISNT></PIS>` +
     `<COFINS><COFINSNT><CST>07</CST></COFINSNT></COFINS>` +
     `</imposto>` +
-    `</det>`
-  );
+    `</det>`;
+  return { xml, vBC: icms.vBC, vICMS: icms.vICMS };
 }
 
 // Monta a <NFe> não assinada e devolve também a chave de acesso.
@@ -117,7 +150,10 @@ export function montarNFe(
   );
   const vTotal = vProdTotal - vDescTotal; // vNF (líquido)
   const cMunFG = dados.emit.ender.cMun ?? "";
-  const dets = dados.itens.map((it, i) => detXml(it, i + 1, dados.emit.crt)).join("");
+  const detsArr = dados.itens.map((it, i) => detXml(it, i + 1, dados.emit.crt));
+  const dets = detsArr.map((d) => d.xml).join("");
+  const vBCTotal = detsArr.reduce((s, d) => s + d.vBC, 0);
+  const vICMSTotal = detsArr.reduce((s, d) => s + d.vICMS, 0);
 
   // NFC-e: DANFE em cupom (tpImp=4), operação presencial (indPres=1), sempre interna
   // (idDest=1). NF-e 55: DANFE normal (tpImp=1), indPres=1 (mantido como já estava).
@@ -159,7 +195,7 @@ export function montarNFe(
 
   const total =
     `<total><ICMSTot>` +
-    `<vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP>` +
+    `<vBC>${n2(vBCTotal)}</vBC><vICMS>${n2(vICMSTotal)}</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP>` +
     `<vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet>` +
     `<vProd>${n2(vProdTotal)}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>${n2(vDescTotal)}</vDesc>` +
     `<vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS>` +
