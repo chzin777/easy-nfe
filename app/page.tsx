@@ -8,6 +8,7 @@ import Aurora from "./ui/Aurora";
 import Reveal from "./ui/Reveal";
 import ScrollVelocity from "./ui/ScrollVelocity";
 import ScrollLink from "./ui/ScrollLink";
+import { ContainerScroll } from "./ui/ContainerScroll";
 
 const WPP_PARCEIRO = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Sou contador(a) e quero ser parceiro(a) do Easy-NFe. Gostaria de saber como funciona o programa de parcerias para contadores.");
 const WPP_VENDAS = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Tenho dúvidas sobre os planos do Easy-NFe e gostaria de ajuda para escolher o ideal para minha empresa.");
@@ -101,61 +102,63 @@ export default async function Landing() {
   const agruparPorCategoria = grupos.some((g) => g.categoria !== "");
 
   return (
-    <div id="topo" className="min-h-screen bg-slate-950 text-slate-900">
+    <div id="topo" className="min-h-screen bg-white text-slate-900">
       {/* Navbar */}
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/50 backdrop-blur-md">
+      <header className="sticky top-0 z-30 bg-white/60 backdrop-blur-md">
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <ScrollLink href="#topo" className="flex items-center gap-2.5 text-white transition hover:opacity-80">
+          <ScrollLink href="#topo" className="flex items-center gap-2.5 text-slate-900 transition hover:opacity-80">
             <span className="relative h-8 w-8 shrink-0">
               <Image src="/images/logo/logo.png" alt="Easy-NFe" fill className="object-contain" />
             </span>
             <span className="text-base font-bold tracking-tight">Easy NFe</span>
           </ScrollLink>
-          <div className="hidden items-center gap-8 text-sm text-slate-300 sm:flex">
-            <ScrollLink href="#recursos" className="transition hover:text-white">Recursos</ScrollLink>
-            <ScrollLink href="#como-funciona" className="transition hover:text-white">Como funciona</ScrollLink>
-            <ScrollLink href="#planos" className="transition hover:text-white">Planos</ScrollLink>
-            <ScrollLink href="#parceiros" className="transition hover:text-white">Parceiros</ScrollLink>
-            <ScrollLink href="#faq" className="transition hover:text-white">FAQ</ScrollLink>
+          <div className="hidden items-center gap-8 text-sm text-slate-600 sm:flex">
+            <ScrollLink href="#recursos" className="transition hover:text-[var(--primary)]">Recursos</ScrollLink>
+            <ScrollLink href="#como-funciona" className="transition hover:text-[var(--primary)]">Como funciona</ScrollLink>
+            <ScrollLink href="#planos" className="transition hover:text-[var(--primary)]">Planos</ScrollLink>
+            <ScrollLink href="#parceiros" className="transition hover:text-[var(--primary)]">Parceiros</ScrollLink>
+            <ScrollLink href="#faq" className="transition hover:text-[var(--primary)]">FAQ</ScrollLink>
           </div>
           <div className="flex items-center gap-2.5">
-            <Link href="/cadastro" className="group relative hidden items-center gap-1.5 overflow-hidden rounded-lg bg-white px-4 py-2 text-sm font-bold text-[var(--primary)] shadow-lg shadow-violet-500/30 ring-1 ring-white/60 transition hover:-translate-y-0.5 hover:shadow-violet-400/50 sm:inline-flex">
-              <span className="absolute -left-1/3 top-0 h-full w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/70 to-transparent transition-all duration-700 group-hover:left-[120%]" />
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" className="text-amber-500"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg>
+            <Link href="/cadastro" className="group relative hidden items-center gap-1.5 overflow-hidden rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-4 py-2 text-sm font-bold text-white shadow-lg shadow-violet-500/30 transition hover:-translate-y-0.5 hover:shadow-violet-400/50 sm:inline-flex">
+              <span className="absolute -left-1/3 top-0 h-full w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/40 to-transparent transition-all duration-700 group-hover:left-[120%]" />
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" className="text-amber-300"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg>
               Teste grátis 7 dias
             </Link>
-            <Link href="/login" className="rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:-translate-y-0.5">
+            <Link href="/login" className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:bg-slate-200">
               Entrar
             </Link>
           </div>
         </nav>
       </header>
 
+      {/* Hero + preview — fundo branco contínuo */}
+      <div className="bg-white">
       {/* Hero */}
-      <section className="relative overflow-hidden bg-slate-950 text-white">
+      <section className="relative overflow-hidden bg-transparent text-[var(--foreground)]">
         {/* Aurora WebGL de fundo */}
-        <div className="pointer-events-none absolute inset-0 opacity-80">
+        <div className="pointer-events-none absolute inset-0 opacity-30">
           <Aurora colorStops={["#f367ff", "#B497CF", "#5227FF"]} blend={0.5} amplitude={1.0} speed={1} />
         </div>
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/40" />
-        <div className="relative mx-auto max-w-4xl px-6 py-28 text-center">
-          <h1 className="text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
-            Emita NF-e em segundos,
-            <span className="bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent"> direto do seu sistema.</span>
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-white via-white/60 to-white/80" />
+        <div className="relative mx-auto max-w-4xl px-6 pb-10 pt-28 text-center">
+          <h1 className="text-4xl font-extrabold uppercase leading-tight tracking-tight sm:text-6xl">
+            Emita notas fiscais de forma fácil, rápida e
+            <span className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent"> segura!</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-300">
-            Assinatura digital A1, envio à SEFAZ, DANFE e cancelamento — com vendas online,
-            WhatsApp e e-mail integrados. Tudo em uma plataforma só.
+          <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-600">
+            O <span className="font-semibold text-[var(--primary)]">Easy-NFe</span> é a plataforma completa para
+            emissão de Notas Fiscais Eletrônicas, com integração via SEFAZ e gestão intuitiva do seu negócio.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link href="/cadastro" className="animate-pulse-trial w-full rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-7 py-3.5 text-base font-semibold text-white transition hover:-translate-y-0.5 sm:w-auto">
               Testar grátis por 7 dias
             </Link>
-            <ScrollLink href="#planos" className="w-full rounded-xl bg-white/10 px-6 py-3.5 text-center text-base font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/20 sm:w-auto">
+            <ScrollLink href="#planos" className="w-full rounded-xl bg-slate-100 px-6 py-3.5 text-center text-base font-semibold text-slate-900 ring-1 ring-slate-200 transition hover:bg-slate-200 sm:w-auto">
               Ver planos
             </ScrollLink>
           </div>
-          <p className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-sm text-slate-400">
+          <p className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-sm text-slate-500">
             <span className="inline-flex items-center gap-1.5">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-violet-400"><path d="M20 6 9 17l-5-5" /></svg>
               Sem cartão de crédito
@@ -171,6 +174,26 @@ export default async function Landing() {
           </p>
         </div>
       </section>
+
+      {/* Preview do produto com scroll 3D */}
+      <ContainerScroll
+        titleComponent={
+          <h2 className="mb-6 text-3xl font-bold tracking-tight text-[var(--foreground)] sm:text-4xl">
+            Tudo num painel só
+          </h2>
+        }
+      >
+        <Image
+          src="/images/prints/dashboard.png"
+          alt="Painel do Easy-NFe"
+          width={1400}
+          height={880}
+          className="mx-auto h-full w-full rounded-2xl object-cover object-left-top"
+          draggable={false}
+          priority
+        />
+      </ContainerScroll>
+      </div>
 
       {/* Stats */}
       <section className="border-b border-[var(--border)] bg-white">

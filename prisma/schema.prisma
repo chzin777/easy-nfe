@@ -287,6 +287,7 @@ model Emitente {
   notasRecebidas NotaRecebida[]
   produtos      Produto[]
   clientes      Cliente[]
+  fornecedores  Fornecedor[]
   transportadoras Transportadora[]
   categorias    Categoria[]
   acessos       AcessoEmpresa[]
@@ -402,6 +403,44 @@ model Cliente {
 
   @@index([empresaId])
   @@map("clientes")
+}
+
+// ----------------------------------------------------------------------------
+// Fornecedores (empresas que faturam CONTRA o CNPJ da empresa). Casados pelo
+// CNPJ do emitente das notas recebidas (Distribuição DFe) p/ identificar a origem.
+// ----------------------------------------------------------------------------
+model Fornecedor {
+  id               String   @id @default(uuid())
+
+  empresaId        String
+  empresa          Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  codigoInterno    Int      @unique @default(autoincrement())
+  documento        String // CNPJ (ou CPF)
+  nome             String // razão social
+  nomeFantasia     String?
+  inscricaoEstadual String?
+
+  telefone         String?
+  email            String?
+
+  cep              String?
+  logradouro       String?
+  numero           String?
+  complemento      String?
+  bairro           String?
+  codMunicipio     String?
+  municipio        String?
+  uf               String?
+
+  observacoes      String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([empresaId, documento])
+  @@index([empresaId])
+  @@map("fornecedores")
 }
 
 // ----------------------------------------------------------------------------

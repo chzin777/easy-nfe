@@ -50,6 +50,9 @@ function icmsXml(crt: string, orig: string): string {
 
 function detXml(item: ItemNFe, nItem: number, crt: string): string {
   const vProd = item.qCom * item.vUnCom;
+  // Desconto do item (vDesc) — limitado ao valor do produto. Só inclui se > 0.
+  const vDesc = Math.min(Math.max(item.vDesc ?? 0, 0), vProd);
+  const descTag = vDesc > 0 ? `<vDesc>${n2(vDesc)}</vDesc>` : "";
   // CEST tem EXATAMENTE 7 dígitos no schema 4.00. Valor inválido (ex.: 8 dígitos)
   // gera rejeição 225 — então só inclui quando bater os 7 dígitos.
   const cestDig = (item.cest ?? "").replace(/\D/g, "");
@@ -64,7 +67,9 @@ function detXml(item: ItemNFe, nItem: number, crt: string): string {
     `<qCom>${n4(item.qCom)}</qCom><vUnCom>${n10(item.vUnCom)}</vUnCom>` +
     `<vProd>${n2(vProd)}</vProd><cEANTrib>${esc(item.cEAN)}</cEANTrib>` +
     `<uTrib>${esc(item.uCom)}</uTrib><qTrib>${n4(item.qCom)}</qTrib>` +
-    `<vUnTrib>${n10(item.vUnCom)}</vUnTrib><indTot>1</indTot>` +
+    `<vUnTrib>${n10(item.vUnCom)}</vUnTrib>` +
+    descTag +
+    `<indTot>1</indTot>` +
     `</prod>` +
     `<imposto>` +
     icmsXml(crt, item.orig) +
@@ -105,7 +110,12 @@ export function montarNFe(
     cNF,
   });
 
-  const vTotal = dados.itens.reduce((s, i) => s + i.qCom * i.vUnCom, 0);
+  const vProdTotal = dados.itens.reduce((s, i) => s + i.qCom * i.vUnCom, 0);
+  const vDescTotal = dados.itens.reduce(
+    (s, i) => s + Math.min(Math.max(i.vDesc ?? 0, 0), i.qCom * i.vUnCom),
+    0,
+  );
+  const vTotal = vProdTotal - vDescTotal; // vNF (líquido)
   const cMunFG = dados.emit.ender.cMun ?? "";
   const dets = dados.itens.map((it, i) => detXml(it, i + 1, dados.emit.crt)).join("");
 
@@ -151,7 +161,7 @@ export function montarNFe(
     `<total><ICMSTot>` +
     `<vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP>` +
     `<vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet>` +
-    `<vProd>${n2(vTotal)}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>0.00</vDesc>` +
+    `<vProd>${n2(vProdTotal)}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>${n2(vDescTotal)}</vDesc>` +
     `<vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS>` +
     `<vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${n2(vTotal)}</vNF><vTotTrib>0.00</vTotTrib>` +
     `</ICMSTot></total>`;

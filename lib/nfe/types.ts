@@ -39,6 +39,7 @@ export type ItemNFe = {
   uCom: string;
   qCom: number;
   vUnCom: number;
+  vDesc?: number; // desconto do item (já calculado, em R$)
   orig: string; // 0-8
   cest?: string;
 };

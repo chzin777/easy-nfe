@@ -14,7 +14,17 @@ import Modal from "@/app/ui/Modal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import { TIPOS_NOTA, MODALIDADES_FRETE, rotulo } from "@/lib/mock-data";
 import type { ItemNota, Cliente, Produto, Transportadora } from "@/lib/types";
-import { emitirNota, obterNota, type EmitirInput, type EmitirResultado, type NotaCompleta } from "../actions";
+
+// Item da nota com desconto opcional (não persiste no tipo base).
+type LinhaItem = ItemNota & { descTipo: DescontoTipo; descValor: number };
+
+// Desconto aplicado a um valor base (R$ ou %), limitado ao próprio valor.
+function calcDesc(base: number, tipo: DescontoTipo, valor: number): number {
+  if (!valor || valor <= 0) return 0;
+  const v = tipo === "percent" ? (base * valor) / 100 : valor;
+  return Math.min(Math.max(v, 0), base);
+}
+import { emitirNota, obterNota, type EmitirInput, type EmitirResultado, type NotaCompleta, type DescontoTipo } from "../actions";
 import VisualizarDanfeModal from "../VisualizarDanfeModal";
 import { explicarRejeicao } from "@/lib/nfe/mensagens";
 import { listarClientes } from "@/app/clientes/actions";
@@ -42,7 +52,8 @@ export default function NovaNotaPage() {
   const [transportadoraId, setTransportadoraId] = useState("");
   const [modFrete, setModFrete] = useState("9");
   const [info, setInfo] = useState("");
-  const [itens, setItens] = useState<ItemNota[]>([]);
+  const [itens, setItens] = useState<LinhaItem[]>([]);
+  const [descNota, setDescNota] = useState<{ tipo: DescontoTipo; valor: number }>({ tipo: "valor", valor: 0 });
 
   const [produtoSel, setProdutoSel] = useState("");
   const [qtd, setQtd] = useState(1);
@@ -68,6 +79,7 @@ export default function NovaNotaPage() {
     setModFrete("9");
     setInfo("");
     setItens([]);
+    setDescNota({ tipo: "valor", valor: 0 });
     setProdutoSel("");
     setQtd(1);
     setFormKey((k) => k + 1);
@@ -89,10 +101,18 @@ export default function NovaNotaPage() {
   }, []);
 
 
-  const total = useMemo(
-    () => itens.reduce((s, i) => s + i.quantidade * i.precoUnitario, 0),
-    [itens],
-  );
+  const totais = useMemo(() => {
+    const bruto = itens.reduce((s, i) => s + i.quantidade * i.precoUnitario, 0);
+    const descItens = itens.reduce(
+      (s, i) => s + calcDesc(i.quantidade * i.precoUnitario, i.descTipo, i.descValor),
+      0,
+    );
+    const liquidoItens = bruto - descItens;
+    const descGeral = calcDesc(liquidoItens, descNota.tipo, descNota.valor);
+    const descTotal = descItens + descGeral;
+    return { bruto, descTotal, total: liquidoItens - descGeral };
+  }, [itens, descNota]);
+  const total = totais.total;
   const cliente = clientes.find((c) => c.id === clienteId);
   const transportadora = transportadoras.find((t) => t.id === transportadoraId);
 
@@ -110,7 +130,7 @@ export default function NovaNotaPage() {
           i.produtoId === prod.id ? { ...i, quantidade: arred(i.quantidade + q, casas) } : i,
         );
       }
-      return [...lista, { produtoId: prod.id, nome: prod.nome, quantidade: q, precoUnitario: prod.preco }];
+      return [...lista, { produtoId: prod.id, nome: prod.nome, quantidade: q, precoUnitario: prod.preco, descTipo: "valor" as DescontoTipo, descValor: 0 }];
     });
     setProdutoSel("");
     setQtd(1);
@@ -130,6 +150,10 @@ export default function NovaNotaPage() {
     setItens((lista) => lista.filter((i) => i.produtoId !== produtoId));
   }
 
+  function definirDesc(produtoId: string, patch: Partial<Pick<LinhaItem, "descTipo" | "descValor">>) {
+    setItens((lista) => lista.map((i) => (i.produtoId === produtoId ? { ...i, ...patch } : i)));
+  }
+
   async function emitir() {
     if (!clienteId) {
       setResultado({ ok: false, erro: "Selecione um cliente." });
@@ -146,7 +170,13 @@ export default function NovaNotaPage() {
       tipoNota,
       modFrete,
       infCpl: info || undefined,
-      itens: itens.map((i) => ({ produtoId: i.produtoId, quantidade: i.quantidade })),
+      itens: itens.map((i) => ({
+        produtoId: i.produtoId,
+        quantidade: i.quantidade,
+        descTipo: i.descTipo,
+        descValor: i.descValor || 0,
+      })),
+      descontoNota: descNota.valor > 0 ? descNota : undefined,
     };
 
     setEmitindo(true);
@@ -295,7 +325,18 @@ export default function NovaNotaPage() {
                     </div>
                     <div className="mt-3 flex items-center justify-between">
                       <QtyStepper valor={i.quantidade} onChange={(v) => definirQtd(i.produtoId, v)} casas={casas} />
-                      <span className="text-base font-semibold">{formatBRL(i.quantidade * i.precoUnitario)}</span>
+                      <span className="text-base font-semibold">
+                        {formatBRL(i.quantidade * i.precoUnitario - calcDesc(i.quantidade * i.precoUnitario, i.descTipo, i.descValor))}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-xs text-[var(--muted)]">Desconto</span>
+                      <DescInput
+                        tipo={i.descTipo}
+                        valor={i.descValor}
+                        onTipo={(t) => definirDesc(i.produtoId, { descTipo: t })}
+                        onValor={(v) => definirDesc(i.produtoId, { descValor: v })}
+                      />
                     </div>
                   </div>
                 ))}
@@ -315,6 +356,7 @@ export default function NovaNotaPage() {
                   <th className="px-4 py-2.5">Produto</th>
                   <th className="px-4 py-2.5 text-center">Qtd.</th>
                   <th className="px-4 py-2.5 text-right">Preço un.</th>
+                  <th className="px-4 py-2.5 text-center">Desconto</th>
                   <th className="px-4 py-2.5 text-right">Subtotal</th>
                   <th className="px-4 py-2.5"></th>
                 </tr>
@@ -322,7 +364,7 @@ export default function NovaNotaPage() {
               <tbody>
                 {itens.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-[var(--muted)]">
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-[var(--muted)]">
                       Nenhum produto adicionado.
                     </td>
                   </tr>
@@ -336,7 +378,19 @@ export default function NovaNotaPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">{formatBRL(i.precoUnitario)}</td>
-                      <td className="px-4 py-3 text-right font-medium">{formatBRL(i.quantidade * i.precoUnitario)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-center">
+                          <DescInput
+                            tipo={i.descTipo}
+                            valor={i.descValor}
+                            onTipo={(t) => definirDesc(i.produtoId, { descTipo: t })}
+                            onValor={(v) => definirDesc(i.produtoId, { descValor: v })}
+                          />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium">
+                        {formatBRL(i.quantidade * i.precoUnitario - calcDesc(i.quantidade * i.precoUnitario, i.descTipo, i.descValor))}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => removerItem(i.produtoId)}
@@ -353,7 +407,7 @@ export default function NovaNotaPage() {
               {itens.length > 0 && (
                 <tfoot>
                   <tr className="bg-slate-50">
-                    <td colSpan={3} className="px-4 py-3 text-right text-sm font-medium">Total da nota</td>
+                    <td colSpan={4} className="px-4 py-3 text-right text-sm font-medium">Total da nota</td>
                     <td className="px-4 py-3 text-right text-base font-semibold text-[var(--primary)]">{formatBRL(total)}</td>
                     <td></td>
                   </tr>
@@ -431,6 +485,27 @@ export default function NovaNotaPage() {
                 ))}
               </ul>
             )}
+            <div className="space-y-2 border-t border-[var(--border)] px-4 py-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-[var(--muted)]">Subtotal dos produtos</span>
+                <span className="font-medium">{formatBRL(totais.bruto)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-[var(--muted)]">Desconto da nota</span>
+                <DescInput
+                  tipo={descNota.tipo}
+                  valor={descNota.valor}
+                  onTipo={(t) => setDescNota((d) => ({ ...d, tipo: t }))}
+                  onValor={(v) => setDescNota((d) => ({ ...d, valor: v }))}
+                />
+              </div>
+              {totais.descTotal > 0 && (
+                <div className="flex items-center justify-between text-sm text-[var(--danger)]">
+                  <span>Descontos (itens + nota)</span>
+                  <span className="font-medium">− {formatBRL(totais.descTotal)}</span>
+                </div>
+              )}
+            </div>
             <div className="flex items-center justify-between border-t border-[var(--border)] bg-[var(--primary-soft)] px-4 py-3">
               <span className="text-sm font-semibold">Total da nota</span>
               <span className="text-lg font-bold text-[var(--primary)]">{formatBRL(total)}</span>
@@ -626,6 +701,40 @@ function QtyStepper({
       >
         +
       </button>
+    </div>
+  );
+}
+
+// Desconto (R$ ou %) — botão alterna o tipo e o campo aceita decimais (vírgula BR).
+function DescInput({
+  tipo,
+  valor,
+  onTipo,
+  onValor,
+}: {
+  tipo: DescontoTipo;
+  valor: number;
+  onTipo: (t: DescontoTipo) => void;
+  onValor: (v: number) => void;
+}) {
+  return (
+    <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-white">
+      <button
+        type="button"
+        onClick={() => onTipo(tipo === "valor" ? "percent" : "valor")}
+        title="Alternar entre R$ e %"
+        className="px-2.5 py-2 text-xs font-bold text-[var(--primary)] transition hover:bg-slate-50"
+      >
+        {tipo === "valor" ? "R$" : "%"}
+      </button>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={valor ? String(valor).replace(".", ",") : ""}
+        onChange={(e) => onValor(Number(e.target.value.replace(",", ".").replace(/[^\d.]/g, "")) || 0)}
+        placeholder="0"
+        className="w-16 border-l border-[var(--border)] py-2 text-center text-sm tabular-nums outline-none focus:bg-[var(--primary-soft)]/40"
+      />
     </div>
   );
 }

@@ -45,13 +45,17 @@ function endEmpresa(e: {
   };
 }
 
+export type DescontoTipo = "valor" | "percent";
+
 export type EmitirInput = {
   clienteId: string;
   transportadoraId: string | null;
   tipoNota: string;
   modFrete: string; // 0-4, 9 (NT 2016.002)
   infCpl?: string;
-  itens: { produtoId: string; quantidade: number }[];
+  itens: { produtoId: string; quantidade: number; descTipo?: DescontoTipo; descValor?: number }[];
+  // Desconto geral da nota (rateado entre os itens). % ou R$.
+  descontoNota?: { tipo: DescontoTipo; valor: number };
 };
 
 export type EmitirResultado =
@@ -142,9 +146,33 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
         uCom: p.unidade,
         qCom: i.quantidade,
         vUnCom: Number(p.preco),
+        vDesc: 0,
         orig: p.origem,
         cest: p.cest || undefined,
       };
+    });
+
+    // ----- Descontos (por item + desconto geral rateado) -----
+    const bases = itensNFe.map((it) => it.qCom * it.vUnCom);
+    const descItem = itensNFe.map((_it, i) => {
+      const d = input.itens[i];
+      const base = bases[i];
+      if (!d?.descValor || d.descValor <= 0) return 0;
+      const v = d.descTipo === "percent" ? (base * d.descValor) / 100 : d.descValor;
+      return Math.min(Math.max(v, 0), base);
+    });
+    const liquidoItens = bases.map((b, i) => b - descItem[i]);
+    const somaLiquida = liquidoItens.reduce((s, v) => s + v, 0);
+    let descNotaTotal = 0;
+    if (input.descontoNota && input.descontoNota.valor > 0 && somaLiquida > 0) {
+      descNotaTotal = input.descontoNota.tipo === "percent"
+        ? (somaLiquida * input.descontoNota.valor) / 100
+        : input.descontoNota.valor;
+      descNotaTotal = Math.min(descNotaTotal, somaLiquida);
+    }
+    itensNFe.forEach((it, i) => {
+      const rateio = somaLiquida > 0 ? descNotaTotal * (liquidoItens[i] / somaLiquida) : 0;
+      it.vDesc = Number(Math.min(descItem[i] + rateio, bases[i]).toFixed(2));
     });
 
     // NCM precisa ter 8 dígitos — senão a SEFAZ rejeita por schema (225).
@@ -231,7 +259,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       r = await emitirNFe(cert, dados);
     }
 
-    const valorTotal = itensNFe.reduce((s, it) => s + it.qCom * it.vUnCom, 0);
+    const valorTotal = itensNFe.reduce((s, it) => s + it.qCom * it.vUnCom - (it.vDesc ?? 0), 0);
 
     let avisoPersistencia: string | undefined;
     let notaId: string | undefined;
@@ -262,7 +290,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
               create: itensNFe.map((it, idx) => ({
                 produtoId: input.itens[idx].produtoId,
                 nome: it.xProd, ncm: it.ncm, cfop: it.cfop, unidade: it.uCom,
-                quantidade: it.qCom, precoUnitario: it.vUnCom, valorTotal: it.qCom * it.vUnCom,
+                quantidade: it.qCom, precoUnitario: it.vUnCom, valorTotal: it.qCom * it.vUnCom - (it.vDesc ?? 0),
               })),
             },
           },
