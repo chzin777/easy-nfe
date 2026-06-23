@@ -15,6 +15,7 @@ import {
 import Tabs from "@/app/ui/Tabs";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { EnderecoFields } from "@/app/ui/PessoaFields";
+import NovaEmpresaModal from "./NovaEmpresaModal";
 import {
   listarEmpresas,
   obterEmpresaAtiva,
@@ -67,6 +68,7 @@ export default function ConfiguracoesPage() {
   const [salvo, setSalvo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [trocando, setTrocando] = useState(false);
+  const [novaAberta, setNovaAberta] = useState(false);
 
   async function carregar() {
     const [lista, ativa] = await Promise.all([listarEmpresas(), obterEmpresaAtiva()]);
@@ -79,13 +81,16 @@ export default function ConfiguracoesPage() {
   }, []);
 
   async function onTrocar(id: string) {
-    if (id === "__nova__") {
-      setForm(empresaVazia);
-      return;
-    }
     setTrocando(true);
     await trocarEmpresa(id);
     await carregar();
+    setTrocando(false);
+  }
+
+  async function aoCriarEmpresa() {
+    setNovaAberta(false);
+    setTrocando(true);
+    await carregar(); // a empresa nova já vem como ativa (server action)
     setTrocando(false);
   }
 
@@ -107,7 +112,7 @@ export default function ConfiguracoesPage() {
     setForm((s) => ({ ...s, [k]: v }));
   }
 
-  const ativaValue = form.id ?? "__nova__";
+  const ativaValue = form.id ?? "";
 
   return (
     <div className="space-y-6">
@@ -117,42 +122,55 @@ export default function ConfiguracoesPage() {
         acao={
           <div className="flex items-center gap-3">
             {salvo && <span className="text-sm font-medium text-[var(--success)]">✓ Salvo</span>}
-            <Button onClick={salvar} disabled={salvando}>
-              {salvando ? "Salvando…" : form.id ? "Salvar alterações" : "Cadastrar empresa"}
-            </Button>
+            {form.id && (
+              <Button variante="secondary" onClick={salvar} disabled={salvando}>
+                {salvando ? "Salvando…" : "Salvar alterações"}
+              </Button>
+            )}
+            <Button onClick={() => setNovaAberta(true)}>+ Nova empresa</Button>
           </div>
         }
       />
 
-      {/* Seletor de empresa */}
-      <Card className="p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium text-[var(--muted)]">Empresa ativa:</span>
-          <div className="min-w-[280px] flex-1">
-            <SeletorEmpresa empresas={empresas} ativaId={ativaValue} onSelecionar={onTrocar} />
-          </div>
-        </div>
-        {empresas.length === 0 && (
-          <p className="mt-2 text-sm text-[var(--warning)]">Cadastre sua primeira empresa para emitir notas.</p>
-        )}
-      </Card>
+      {empresas.length === 0 ? (
+        <Card className="flex flex-col items-center gap-4 p-10 text-center">
+          <p className="max-w-md text-sm text-[var(--muted)]">
+            Cadastre sua primeira empresa emitente — dados fiscais, endereço e certificado A1 — para começar a emitir notas.
+          </p>
+          <Button onClick={() => setNovaAberta(true)}>+ Cadastrar empresa</Button>
+        </Card>
+      ) : (
+        <>
+          {/* Seletor de empresa */}
+          <Card className="p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium text-[var(--muted)]">Empresa ativa:</span>
+              <div className="min-w-[280px] flex-1">
+                <SeletorEmpresa empresas={empresas} ativaId={ativaValue} onSelecionar={onTrocar} onNova={() => setNovaAberta(true)} />
+              </div>
+            </div>
+          </Card>
 
-      {erro && (
-        <p className="rounded-lg bg-[var(--danger-soft,#fee2e2)] px-4 py-3 text-sm font-medium text-[var(--danger)]">{erro}</p>
+          {erro && (
+            <p className="rounded-lg bg-[var(--danger-soft,#fee2e2)] px-4 py-3 text-sm font-medium text-[var(--danger)]">{erro}</p>
+          )}
+
+          <Card className="relative p-6">
+            {trocando && <LightningLoader overlay texto="Carregando empresa…" />}
+            <Tabs
+              abas={[
+                { id: "emit", label: "Empresa emitente", content: <AbaEmitente form={form} setE={setE} setForm={setForm} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
+                { id: "cert", label: "Certificado A1", content: <AbaCertificado /> },
+                { id: "cobranca", label: "Cobrança", content: <AbaCobranca /> },
+                { id: "equipe", label: "Equipe", content: <AbaEquipe /> },
+                { id: "amb", label: "Ambiente & numeração", content: <AbaAmbiente form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
+              ]}
+            />
+          </Card>
+        </>
       )}
 
-      <Card className="relative p-6">
-        {trocando && <LightningLoader overlay texto="Carregando empresa…" />}
-        <Tabs
-          abas={[
-            { id: "emit", label: "Empresa emitente", content: <AbaEmitente form={form} setE={setE} setForm={setForm} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
-            { id: "cert", label: "Certificado A1", content: <AbaCertificado /> },
-            { id: "cobranca", label: "Cobrança", content: <AbaCobranca /> },
-            { id: "equipe", label: "Equipe", content: <AbaEquipe /> },
-            { id: "amb", label: "Ambiente & numeração", content: <AbaAmbiente form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
-          ]}
-        />
-      </Card>
+      {novaAberta && <NovaEmpresaModal onFechar={() => setNovaAberta(false)} onCriada={aoCriarEmpresa} />}
     </div>
   );
 }
@@ -322,10 +340,12 @@ function SeletorEmpresa({
   empresas,
   ativaId,
   onSelecionar,
+  onNova,
 }: {
   empresas: EmpresaResumo[];
   ativaId: string;
   onSelecionar: (id: string) => void;
+  onNova: () => void;
 }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
@@ -362,7 +382,7 @@ function SeletorEmpresa({
               <span className="block truncate font-mono text-[11px] text-[var(--muted)]">{ativa.cnpj}</span>
             </>
           ) : (
-            <span className="block text-sm font-medium text-[var(--primary)]">Nova empresa (não salva)</span>
+            <span className="block text-sm font-medium text-[var(--muted)]">Selecione uma empresa</span>
           )}
         </span>
         <svg className={"shrink-0 text-slate-400 transition-transform " + (aberto ? "rotate-180" : "")} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
@@ -404,7 +424,7 @@ function SeletorEmpresa({
           </ul>
           <button
             type="button"
-            onClick={() => { onSelecionar("__nova__"); setAberto(false); setBusca(""); }}
+            onClick={() => { onNova(); setAberto(false); setBusca(""); }}
             className="flex w-full items-center gap-2 border-t border-[var(--border)] px-3 py-2.5 text-sm font-medium text-[var(--primary)] hover:bg-[var(--primary-soft)]"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>

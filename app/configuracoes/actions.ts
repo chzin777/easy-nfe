@@ -320,6 +320,16 @@ export async function salvarCertificado(
   const { uid, role } = await exigirSessao();
   const empresaId = await exigirEmpresa();
   if (!(await ehDono(uid, role, empresaId))) return { ok: false, erro: "Apenas o dono da empresa pode alterar o certificado." };
+  return gravarCertificado(empresaId, pfxBase64, senha);
+}
+
+// Valida (CNPJ deve bater com o da empresa) e grava o certificado cifrado na
+// empresa informada por id. Interno — o controle de acesso fica no chamador.
+async function gravarCertificado(
+  empresaId: string,
+  pfxBase64: string,
+  senha: string,
+): Promise<{ ok: true } | { ok: false; erro: string }> {
   const info = await inspecionarCertificado(pfxBase64, senha);
   if (!info.ok) return { ok: false, erro: info.erro };
 
@@ -340,6 +350,37 @@ export async function salvarCertificado(
     data: { certData: blob, certTitular: info.titular, certValidoAte: new Date(info.validoAte) },
   });
   return { ok: true };
+}
+
+// Cria a empresa e, no mesmo fluxo, grava o certificado A1 — o jeito certo de
+// cadastrar uma empresa nova (o cert vai direto na empresa recém-criada, sem
+// depender de qual empresa está "ativa"). O cert é validado ANTES da criação
+// para não deixar empresa órfã caso o arquivo/senha/CNPJ estejam errados.
+export async function criarEmpresaComCertificado(
+  dados: EmpresaDados,
+  cert: { pfxBase64: string; senha: string } | null,
+): Promise<{ ok: true; id: string } | { ok: false; erro: string }> {
+  if (cert) {
+    const info = await inspecionarCertificado(cert.pfxBase64, cert.senha);
+    if (!info.ok) return { ok: false, erro: info.erro };
+    const cnpjCert = (info.cnpj || "").replace(/\D/g, "");
+    const cnpjEmpresa = dados.cnpj.replace(/\D/g, "");
+    if (cnpjCert && cnpjEmpresa && cnpjCert !== cnpjEmpresa) {
+      return {
+        ok: false,
+        erro: `O certificado é do CNPJ ${info.cnpj}, mas a empresa informada é ${cnpjEmpresa}. Use o certificado correto.`,
+      };
+    }
+  }
+
+  const r = await salvarEmpresa({ ...dados, id: undefined });
+  if (!r.ok) return r;
+
+  if (cert) {
+    const c = await gravarCertificado(r.id, cert.pfxBase64, cert.senha);
+    if (!c.ok) return { ok: false, erro: `Empresa criada, mas o certificado falhou: ${c.erro}` };
+  }
+  return { ok: true, id: r.id };
 }
 
 export async function removerCertificado(): Promise<void> {
