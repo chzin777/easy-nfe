@@ -46,6 +46,27 @@ const grupos: Grupo[] = [
   },
 ];
 
+const FEATURES_CACHE_KEY = "sidebar:features";
+
+// Cache local das features p/ semear o primeiro render e evitar flash no F5.
+function lerFeaturesCache(): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(FEATURES_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function gravarFeaturesCache(features: string[]) {
+  try {
+    window.localStorage.setItem(FEATURES_CACHE_KEY, JSON.stringify(features));
+  } catch {
+    // ignora (modo privado / quota)
+  }
+}
+
 export default function Sidebar({
   aberto = false,
   onFechar,
@@ -74,9 +95,17 @@ export default function Sidebar({
     });
 
   useEffect(() => {
+    // Semeia do cache após montar (evita mismatch de hidratação) e revalida.
+    const cache = lerFeaturesCache();
+    if (cache) setFeatures(cache);
     listarEmpresas().then(setEmpresas).catch(() => {});
     papelAtual().then(setRole).catch(() => {});
-    obterMinhasFeatures().then(setFeatures).catch(() => setFeatures([]));
+    obterMinhasFeatures()
+      .then((f) => {
+        setFeatures(f);
+        gravarFeaturesCache(f);
+      })
+      .catch(() => setFeatures([]));
   }, []);
 
   // Acesso total às funcionalidades (admin, suporte e contador).
@@ -84,8 +113,11 @@ export default function Sidebar({
   // Painel administrativo: só admin/suporte (contador NÃO).
   const painelAdmin = role === "ADMIN" || role === "SUPORTE";
 
-  // Filtra itens pelas features do plano (acesso total vê tudo; enquanto carrega, mostra tudo).
-  const podeVer = (it: Item) => acessoTotal || !it.feature || features === null || features.includes(it.feature);
+  // Filtra itens pelas features do plano. Acesso total vê tudo. Enquanto carrega
+  // (features === null, sem cache) esconde os itens com feature — evita flash de
+  // item bloqueado no F5; é melhor aparecer depois do que sumir depois.
+  const podeVer = (it: Item) =>
+    acessoTotal || !it.feature || (features !== null && features.includes(it.feature));
 
   const gruposRender: Grupo[] = grupos
     .map((g) => {
