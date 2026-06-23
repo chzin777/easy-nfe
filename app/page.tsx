@@ -102,7 +102,7 @@ export default async function Landing() {
   const agruparPorCategoria = grupos.some((g) => g.categoria !== "");
 
   return (
-    <div id="topo" className="min-h-screen bg-white text-slate-900">
+    <div id="topo" className="min-h-screen text-slate-900">
       {/* Navbar */}
       <header className="sticky top-0 z-30 bg-white/60 backdrop-blur-md">
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
