@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
+import { exigirFeature } from "@/lib/permissoes";
 import type { Endereco } from "@/lib/types";
 
 export type Fornecedor = {
@@ -84,6 +85,7 @@ export async function listarFornecedores(): Promise<Fornecedor[]> {
 }
 
 export async function criarFornecedor(input: FornecedorInput): Promise<Fornecedor> {
+  await exigirFeature("fornecedores");
   const empresaId = await exigirEmpresa();
   if (!input.documento.replace(/\D/g, "")) throw new Error("CNPJ/CPF é obrigatório.");
   if (!input.nome.trim()) throw new Error("Razão social é obrigatória.");
@@ -92,11 +94,13 @@ export async function criarFornecedor(input: FornecedorInput): Promise<Fornecedo
 }
 
 export async function atualizarFornecedor(id: string, input: FornecedorInput): Promise<void> {
+  await exigirFeature("fornecedores");
   const empresaId = await exigirEmpresa();
   await prisma.fornecedor.updateMany({ where: { id, empresaId }, data: paraDados(input) });
 }
 
 export async function excluirFornecedor(id: string): Promise<void> {
+  await exigirFeature("fornecedores");
   const empresaId = await exigirEmpresa();
   await prisma.fornecedor.deleteMany({ where: { id, empresaId } });
 }

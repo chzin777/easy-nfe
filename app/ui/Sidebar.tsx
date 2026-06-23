@@ -22,7 +22,7 @@ const grupos: Grupo[] = [
     itens: [
       { href: "/produtos", label: "Produtos", icon: <IconBox />, feature: "produtos" },
       { href: "/clientes", label: "Clientes", icon: <IconUser />, feature: "clientes" },
-      { href: "/fornecedores", label: "Fornecedores", icon: <IconFactory /> },
+      { href: "/fornecedores", label: "Fornecedores", icon: <IconFactory />, feature: "fornecedores" },
       { href: "/transportadoras", label: "Transportadoras", icon: <IconTruck />, feature: "transportadoras" },
     ],
   },
