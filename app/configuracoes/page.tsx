@@ -16,6 +16,7 @@ import Tabs from "@/app/ui/Tabs";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { EnderecoFields } from "@/app/ui/PessoaFields";
 import NovaEmpresaModal from "./NovaEmpresaModal";
+import AbaWhatsApp from "./AbaWhatsApp";
 import {
   listarEmpresas,
   obterEmpresaAtiva,
@@ -163,6 +164,7 @@ export default function ConfiguracoesPage() {
                 { id: "cert", label: "Certificado A1", content: <AbaCertificado /> },
                 { id: "cobranca", label: "Cobrança", content: <AbaCobranca /> },
                 { id: "equipe", label: "Equipe", content: <AbaEquipe /> },
+                { id: "whatsapp", label: "WhatsApp", content: <AbaWhatsApp /> },
                 { id: "amb", label: "Ambiente & numeração", content: <AbaAmbiente form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
               ]}
             />

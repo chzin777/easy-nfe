@@ -47,6 +47,7 @@ export default function NotasEmitidasPage() {
   const [processando, setProcessando] = useState(false);
   const [erroEvento, setErroEvento] = useState<string | null>(null);
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   async function recarregar() {
     const lista = await listarNotas();
@@ -60,13 +61,19 @@ export default function NotasEmitidasPage() {
     void recarregar();
   }, []);
 
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   // Gera o PDF do DANFE renderizado (#danfe-print) e baixa o arquivo.
   async function baixarPdf(nota: NotaCompleta) {
     setGerandoPdf(true);
     try {
       await baixarDanfePdf("danfe-print", nota.numero);
     } catch {
-      alert("Falha ao gerar o PDF. Tente novamente.");
+      setToast("Falha ao gerar o PDF. Tente novamente.");
     } finally {
       setGerandoPdf(false);
     }
@@ -74,7 +81,7 @@ export default function NotasEmitidasPage() {
 
   async function baixarXml(nota: NotaCompleta) {
     const r = await obterXmlNota(nota.id);
-    if (!r.ok) { alert(r.erro); return; }
+    if (!r.ok) { setToast(r.erro); return; }
     const blob = new Blob([r.xml], { type: "application/xml;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -251,6 +258,15 @@ export default function NotasEmitidasPage() {
 
   return (
     <div className="space-y-6">
+      {toast && (
+        <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2">
+          <div className="flex items-center gap-3 rounded-xl border border-[var(--danger)] bg-white px-4 py-3 text-sm shadow-lg">
+            <span className="text-[var(--danger)]">⚠</span>
+            <span>{toast}</span>
+            <button onClick={() => setToast(null)} className="text-[var(--muted)] hover:text-[var(--foreground)]">✕</button>
+          </div>
+        </div>
+      )}
       <PageHeader
         titulo="Notas emitidas"
         subtitulo="Histórico de notas com filtros, eventos e exportação."

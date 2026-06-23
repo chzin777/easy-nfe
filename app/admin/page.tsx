@@ -313,6 +313,23 @@ function nomePlanoAnterior(planos: Required<PlanoDados>[], ordem: number, selfId
     .sort((a, b) => b.ordem - a.ordem)[0]?.nome;
 }
 
+// IDs de benefícios já herdados via "tudo_anterior", subindo a cadeia de planos.
+function idsHerdados(planos: Required<PlanoDados>[], catalogo: Beneficio[], ordem: number, selfId?: string): Set<string> {
+  const porId = new Map(catalogo.map((b) => [b.id, b]));
+  const ids = new Set<string>();
+  const visitados = new Set<string>();
+  let atual = planos.filter((x) => x.ordem < ordem && x.id !== selfId).sort((a, b) => b.ordem - a.ordem)[0];
+  while (atual && !visitados.has(atual.id)) {
+    visitados.add(atual.id);
+    for (const id of atual.beneficioIds) ids.add(id);
+    // se o plano anterior também herda, sobe mais um nível
+    if (!atual.beneficioIds.some((id) => porId.get(id)?.chave === "tudo_anterior")) break;
+    const ord = atual.ordem;
+    atual = planos.filter((x) => x.ordem < ord).sort((a, b) => b.ordem - a.ordem)[0];
+  }
+  return ids;
+}
+
 // Rótulo do benefício, resolvendo o especial "tudo_anterior" dinamicamente.
 function rotuloBeneficio(b: Beneficio, prevNome?: string): string {
   if (b.chave === "tudo_anterior") return `Tudo do ${prevNome ?? "plano anterior"}`;
@@ -488,7 +505,9 @@ function PlanoModal({ inicial, catalogo, planos, categorias, onFechar, onSalvo }
 
   const prevNome = nomePlanoAnterior(planos, p.ordem, p.id);
   const noPlano = p.beneficioIds.map((id) => catalogo.find((b) => b.id === id)).filter(Boolean) as Beneficio[];
-  const disponiveis = catalogo.filter((b) => !p.beneficioIds.includes(b.id));
+  const temTudoAnterior = p.beneficioIds.some((id) => catalogo.find((b) => b.id === id)?.chave === "tudo_anterior");
+  const herdados = temTudoAnterior ? idsHerdados(planos, catalogo, p.ordem, p.id) : new Set<string>();
+  const disponiveis = catalogo.filter((b) => !p.beneficioIds.includes(b.id) && !herdados.has(b.id));
 
   function adicionar(id: string) { if (!p.beneficioIds.includes(id)) set("beneficioIds", [...p.beneficioIds, id]); }
   function remover(id: string) { set("beneficioIds", p.beneficioIds.filter((x) => x !== id)); }

@@ -14,6 +14,8 @@ import { exigirEmpresa } from "@/lib/empresa";
 import { decriptar } from "@/lib/crypto";
 import { estadoLicencaUsuario } from "@/lib/licenca";
 import { exigirFeature } from "@/lib/permissoes";
+import { dispararNotaWhatsApp } from "@/lib/whatsapp";
+import { after } from "next/server";
 
 // Carrega o certificado A1 (PFX+senha) armazenado criptografado na empresa.
 function certDaEmpresa(certData: string | null): { pfxBase64: string; senha: string } {
@@ -329,6 +331,12 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
           : []),
       ]);
       notaId = notaCriada.id;
+      // Envio por WhatsApp ao cliente — só quando autorizada. Roda após a
+      // resposta (after) p/ não atrasar a emissão; falhas são engolidas dentro.
+      if (r.ok) {
+        const id = notaId;
+        after(() => dispararNotaWhatsApp(empresa.id, id));
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       avisoPersistencia = r.ok ? `Autorizada na SEFAZ, mas falhou ao gravar: ${msg}` : undefined;

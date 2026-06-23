@@ -14,7 +14,15 @@ import {
 import { definirEmpresaAtiva, hashSenha } from "@/lib/auth";
 import { resolverCodMunicipio as resolverCodMunicipioIBGE } from "@/lib/nfe/ibge";
 import { encriptar } from "@/lib/crypto";
-import { temFeature } from "@/lib/permissoes";
+import { temFeature, exigirFeature } from "@/lib/permissoes";
+import {
+  TEMPLATE_PADRAO,
+  workerConfigurado,
+  statusSessao,
+  conectarSessao,
+  desconectarSessao,
+  type WhatsAppStatus,
+} from "@/lib/whatsapp";
 
 const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
@@ -562,6 +570,114 @@ export async function removerMembro(userId: string): Promise<{ ok: true } | { ok
       return { ok: false, erro: "A empresa precisa de ao menos um dono. Promova outro antes de remover este." };
     }
     await prisma.acessoEmpresa.deleteMany({ where: { userId, empresaId } });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ----------------------------------------------------------------------------
+// WhatsApp — envio da NF-e ao cliente. Preferências por empresa; a sessão
+// (pareada por QR Code) vive no worker externo (ver lib/whatsapp.ts).
+// ----------------------------------------------------------------------------
+
+export type ConfigWhatsAppView = {
+  ativaEmissao: boolean;
+  enviarDanfe: boolean;
+  template: string;
+  templatePadrao: string;
+  workerConfigurado: boolean;
+  temFeature: boolean;
+};
+
+export async function obterConfigWhatsApp(): Promise<ConfigWhatsAppView> {
+  const empresaId = await exigirEmpresa();
+  const feat = await temFeature("integracao_whatsapp");
+  const cfg = await prisma.configWhatsApp.findUnique({ where: { empresaId } });
+  return {
+    ativaEmissao: cfg?.ativaEmissao ?? false,
+    enviarDanfe: cfg?.enviarDanfe ?? true,
+    template: cfg?.template ?? "",
+    templatePadrao: TEMPLATE_PADRAO,
+    workerConfigurado: workerConfigurado(),
+    temFeature: feat,
+  };
+}
+
+export async function salvarConfigWhatsApp(input: {
+  ativaEmissao: boolean;
+  enviarDanfe: boolean;
+  template: string;
+}): Promise<{ ok: true } | { ok: false; erro: string }> {
+  try {
+    const { uid, role } = await exigirSessao();
+    const empresaId = await exigirEmpresa();
+    await exigirFeature("integracao_whatsapp");
+    if (!(await ehDono(uid, role, empresaId))) {
+      return { ok: false, erro: "Apenas o dono da empresa pode configurar o WhatsApp." };
+    }
+    const template = input.template.trim() || null;
+    await prisma.configWhatsApp.upsert({
+      where: { empresaId },
+      update: { ativaEmissao: input.ativaEmissao, enviarDanfe: input.enviarDanfe, template },
+      create: { empresaId, ativaEmissao: input.ativaEmissao, enviarDanfe: input.enviarDanfe, template },
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Consulta o status no worker e espelha conectado/telefone no banco.
+export async function statusWhatsApp(): Promise<
+  (WhatsAppStatus & { ok: true }) | { ok: false; erro: string }
+> {
+  try {
+    const empresaId = await exigirEmpresa();
+    await exigirFeature("integracao_whatsapp");
+    const st = await statusSessao(empresaId);
+    await prisma.configWhatsApp.upsert({
+      where: { empresaId },
+      update: { conectado: st.conectado, telefone: st.telefone ?? null },
+      create: { empresaId, conectado: st.conectado, telefone: st.telefone ?? null },
+    });
+    return { ok: true, ...st };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Inicia/retoma a sessão no worker e devolve o QR para parear.
+export async function conectarWhatsApp(): Promise<
+  (WhatsAppStatus & { ok: true }) | { ok: false; erro: string }
+> {
+  try {
+    const { uid, role } = await exigirSessao();
+    const empresaId = await exigirEmpresa();
+    await exigirFeature("integracao_whatsapp");
+    if (!(await ehDono(uid, role, empresaId))) {
+      return { ok: false, erro: "Apenas o dono da empresa pode conectar o WhatsApp." };
+    }
+    const st = await conectarSessao(empresaId);
+    return { ok: true, ...st };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function desconectarWhatsApp(): Promise<{ ok: true } | { ok: false; erro: string }> {
+  try {
+    const { uid, role } = await exigirSessao();
+    const empresaId = await exigirEmpresa();
+    await exigirFeature("integracao_whatsapp");
+    if (!(await ehDono(uid, role, empresaId))) {
+      return { ok: false, erro: "Apenas o dono da empresa pode desconectar o WhatsApp." };
+    }
+    await desconectarSessao(empresaId);
+    await prisma.configWhatsApp.updateMany({
+      where: { empresaId },
+      data: { conectado: false, telefone: null },
+    });
     return { ok: true };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };

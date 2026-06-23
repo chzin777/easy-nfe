@@ -22,22 +22,24 @@ export default function VisualizarDanfeModal({
   onEmitirOutra?: () => void;
 }) {
   const [gerando, setGerando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const elId = `danfe-print-${nota.id}`;
 
   async function pdf() {
-    setGerando(true);
+    setGerando(true); setErro(null);
     try {
       await baixarDanfePdf(elId, nota.numero);
     } catch {
-      alert("Falha ao gerar o PDF. Tente novamente.");
+      setErro("Falha ao gerar o PDF. Tente novamente.");
     } finally {
       setGerando(false);
     }
   }
 
   async function xml() {
+    setErro(null);
     const r = await obterXmlNota(nota.id);
-    if (!r.ok) { alert(r.erro); return; }
+    if (!r.ok) { setErro(r.erro); return; }
     const blob = new Blob([r.xml], { type: "application/xml;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -62,6 +64,12 @@ export default function VisualizarDanfeModal({
         </div>
       }
     >
+      {erro && (
+        <div className="mb-4 flex items-center justify-between gap-2 rounded-lg bg-[var(--danger-soft,#fee2e2)] px-3 py-2.5 text-sm font-medium text-[var(--danger)]">
+          <span>⚠ {erro}</span>
+          <button onClick={() => setErro(null)} className="text-[var(--muted)] hover:text-[var(--foreground)]">✕</button>
+        </div>
+      )}
       {banner && (
         <div className="mb-4 flex items-center gap-2 rounded-lg bg-[var(--success-soft)] px-3 py-2.5 text-sm font-medium text-[var(--success)]">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>

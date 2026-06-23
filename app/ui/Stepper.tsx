@@ -22,6 +22,8 @@ interface StepperProps extends HTMLAttributes<HTMLDivElement> {
   canProceed?: (step: number) => boolean;
   /** Conteúdo extra exibido na barra fixa inferior no mobile (ex.: total da nota). */
   resumoMobile?: ReactNode;
+  /** Cabeçalho opcional dentro do card, acima dos indicadores (ex.: título + total). */
+  cabecalho?: ReactNode;
 }
 
 export default function Stepper({
@@ -35,6 +37,7 @@ export default function Stepper({
   disableStepIndicators = false,
   canProceed,
   resumoMobile,
+  cabecalho,
   ...rest
 }: StepperProps) {
   const [currentStep, setCurrentStep] = useState<number>(initialStep);
@@ -78,6 +81,9 @@ export default function Stepper({
   return (
     <div className="w-full scroll-mt-20" ref={rootRef} {...rest}>
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_8px_30px_rgba(16,24,40,0.06)]">
+        {cabecalho && (
+          <div className="border-b border-[var(--border)] px-4 py-3 sm:px-8">{cabecalho}</div>
+        )}
         <div className="flex w-full items-center gap-2 bg-gradient-to-r from-slate-50 to-white px-4 py-5 sm:px-8 sm:py-6">
           {stepsArray.map((_, index) => {
             const stepNumber = index + 1;

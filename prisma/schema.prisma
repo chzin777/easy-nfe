@@ -284,6 +284,7 @@ model Emitente {
   dfeSincNSUEm  DateTime?
 
   notas         Nota[]
+  orcamentos    Orcamento[]
   notasRecebidas NotaRecebida[]
   produtos      Produto[]
   clientes      Cliente[]
@@ -291,6 +292,7 @@ model Emitente {
   transportadoras Transportadora[]
   categorias    Categoria[]
   acessos       AcessoEmpresa[]
+  whatsapp      ConfigWhatsApp?
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -360,6 +362,7 @@ model Produto {
   reguladoAnp         Boolean  @default(false)
 
   itens               ItemNota[]
+  itensOrcamento      ItemOrcamento[]
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -400,6 +403,7 @@ model Cliente {
   uf               String?
 
   notas            Nota[]
+  orcamentos       Orcamento[]
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -474,6 +478,7 @@ model Transportadora {
   uf               String?
 
   notas            Nota[]
+  orcamentos       Orcamento[]
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -503,6 +508,7 @@ model Nota {
   transportadora      Transportadora? @relation(fields: [transportadoraId], references: [id])
 
   itens               ItemNota[]
+  orcamento           Orcamento? // orçamento que gerou esta nota (quando convertido)
 
   informacoesAdicionais String?
   status              StatusNota @default(RASCUNHO)
@@ -611,4 +617,102 @@ model ConfigSistema {
   updatedAt DateTime @updatedAt
 
   @@map("config_sistema")
+}
+
+// ----------------------------------------------------------------------------
+// Envio de NF-e por WhatsApp — config por empresa. A sessão do WhatsApp (pareada
+// via QR Code) vive num worker externo sempre-ligado (Baileys); aqui guardamos
+// apenas as preferências e o espelho do estado de conexão reportado pelo worker.
+// ----------------------------------------------------------------------------
+model ConfigWhatsApp {
+  id           String   @id @default(uuid())
+
+  empresaId    String   @unique
+  empresa      Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  conectado    Boolean  @default(false) // espelho do status do worker
+  telefone     String? // número (JID) conectado, preenchido pelo worker
+  ativaEmissao Boolean  @default(false) // envia automaticamente ao autorizar a nota
+  enviarDanfe  Boolean  @default(true) // anexa o PDF do DANFE (gerado no worker)
+  template     String?  @db.Text // mensagem; null = usa o padrão do sistema
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("config_whatsapp")
+}
+
+// ----------------------------------------------------------------------------
+// Orçamentos (funil de vendas) — vira NF-e ao fechar a venda.
+// ----------------------------------------------------------------------------
+enum StatusOrcamento {
+  RASCUNHO    // em elaboração
+  ENVIADO     // enviado ao cliente
+  NEGOCIACAO  // em negociação
+  APROVADO    // aprovado pelo cliente
+  FECHADO     // virou NF-e (venda fechada)
+  PERDIDO     // não fechou
+  CANCELADO   // cancelado
+}
+
+model Orcamento {
+  id               String   @id @default(uuid())
+  numero           Int
+
+  emitenteId       String
+  emitente         Emitente @relation(fields: [emitenteId], references: [id], onDelete: Cascade)
+
+  clienteId        String
+  cliente          Cliente  @relation(fields: [clienteId], references: [id])
+
+  transportadoraId String?
+  transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id])
+
+  tipoNota         String   @default("55-saida") // modelo da NF ao fechar
+  modFrete         String   @default("9")
+  observacoes      String?
+  validade         DateTime? // até quando o orçamento vale
+
+  descontoTipo     String   @default("valor") // "valor" | "percent"
+  descontoValor    Decimal  @db.Decimal(15, 2) @default(0)
+
+  status           StatusOrcamento @default(RASCUNHO)
+  ordem            Int      @default(0) // posição dentro da coluna do kanban
+  valorTotal       Decimal  @db.Decimal(15, 2) @default(0)
+  motivoPerda      String?
+
+  // Nota gerada ao fechar a venda.
+  notaId           String?  @unique
+  nota             Nota?    @relation(fields: [notaId], references: [id])
+
+  itens            ItemOrcamento[]
+
+  criadoEm         DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([emitenteId, numero])
+  @@index([emitenteId, status])
+  @@map("orcamentos")
+}
+
+model ItemOrcamento {
+  id            String   @id @default(uuid())
+  orcamentoId   String
+  orcamento     Orcamento @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+
+  produtoId     String?
+  produto       Produto? @relation(fields: [produtoId], references: [id])
+
+  nome          String   // snapshot
+  ncm           String?
+  cfop          String?
+  unidade       String?
+  quantidade    Decimal  @db.Decimal(15, 4)
+  precoUnitario Decimal  @db.Decimal(15, 10)
+  descontoTipo  String   @default("valor")
+  descontoValor Decimal  @db.Decimal(15, 2) @default(0)
+  valorTotal    Decimal  @db.Decimal(15, 2)
+
+  @@map("itens_orcamento")
 }
