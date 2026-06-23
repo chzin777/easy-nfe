@@ -18,6 +18,7 @@ const MAPA = {
   nfce_nfse: ["emitir_nfce", "emitir_nfse"],
   api: ["api"],
   gerente: [],
+  orcamentos: ["orcamentos"],
 };
 
 for (const [chave, features] of Object.entries(MAPA)) {

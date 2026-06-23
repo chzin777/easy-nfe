@@ -17,6 +17,7 @@ const CATALOGO = [
   { chave: "nfce_nfse", nome: "NFC-e e NFS-e", ordem: 12 },
   { chave: "api", nome: "API de integração", ordem: 13 },
   { chave: "gerente", nome: "Gerente de conta dedicado", ordem: 14 },
+  { chave: "orcamentos", nome: "Orçamentos", ordem: 15 },
 ];
 
 for (const b of CATALOGO) {
