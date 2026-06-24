@@ -35,6 +35,7 @@ const vazia: EmpresaDados = {
   cscNFCe: "",
   idCscNFCe: "",
   casasDecimaisQtd: "2",
+  bloquearSemEstoque: false,
 };
 
 const soDigitos = (s: string) => s.replace(/\D/g, "");

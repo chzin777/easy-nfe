@@ -87,6 +87,8 @@ export default function ImportarPage() {
         codigoBeneficio: "",
         creditoPresumidoIcms: "",
         reguladoAnp: false,
+        estoque: 0,
+        controlaEstoque: false,
       });
     }
     await recarregarCatalogo();

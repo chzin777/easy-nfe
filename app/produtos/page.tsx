@@ -25,6 +25,7 @@ import {
   atualizarProduto,
   excluirProduto,
   importarProdutos,
+  ajustarEstoque,
 } from "./actions";
 import NovoProdutoModal from "./NovoProdutoModal";
 import ImportarPlanilhaModal from "@/app/ui/ImportarPlanilhaModal";
@@ -56,6 +57,8 @@ const formVazio: Form = {
   codigoBeneficio: "",
   creditoPresumidoIcms: "",
   reguladoAnp: false,
+  estoque: 0,
+  controlaEstoque: false,
 };
 
 // Catálogo de colunas disponíveis na lista. `fixa` = sempre visível.
@@ -119,6 +122,19 @@ const COLUNAS_DISPONIVEIS: { chave: string; label: string; fixa?: boolean; col: 
     },
   },
   {
+    chave: "estoque", label: "Estoque", col: {
+      chave: "estoque", cabecalho: "Estoque", alinhar: "right",
+      render: (p) =>
+        p.controlaEstoque ? (
+          <span className={"font-medium " + (p.estoque <= 0 ? "text-[var(--danger)]" : "")}>
+            {p.estoque.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}
+          </span>
+        ) : (
+          <span className="text-slate-300">—</span>
+        ),
+    },
+  },
+  {
     chave: "preco", label: "Preço", col: {
       chave: "preco", cabecalho: "Preço", alinhar: "right",
       render: (p) => <span className="font-medium">{formatBRL(p.preco)}</span>,
@@ -126,7 +142,7 @@ const COLUNAS_DISPONIVEIS: { chave: string; label: string; fixa?: boolean; col: 
   },
 ];
 
-const COLS_PADRAO = ["codigo", "nome", "marca", "categoria", "unidade", "anp", "preco"];
+const COLS_PADRAO = ["codigo", "nome", "marca", "categoria", "unidade", "estoque", "preco"];
 const COLS_STORAGE = "easy-nfe:cols-produtos-v1";
 
 export default function ProdutosPage() {
@@ -216,6 +232,16 @@ export default function ProdutosPage() {
     setSalvando(false);
     fechar();
   }
+  // Ajuste de estoque: commita o saldo digitado (form.estoque) via movimento.
+  const [ajustando, setAjustando] = useState(false);
+  async function salvarAjuste() {
+    if (!editId) return;
+    setAjustando(true);
+    const r = await ajustarEstoque(editId, form.estoque, "Ajuste manual");
+    setAjustando(false);
+    if (r.ok) await recarregar();
+    else alert(r.erro);
+  }
 
   function set<K extends keyof Form>(chave: K, valor: Form[K]) {
     setForm((f) => ({ ...f, [chave]: valor }));
@@ -272,6 +298,32 @@ export default function ProdutosPage() {
           placeholder="0"
         />
       </Field>
+      <Field label="Controle de estoque" hint="Baixa automática a cada NF-e">
+        <label className="flex h-[46px] items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 text-sm">
+          <input
+            type="checkbox"
+            checked={form.controlaEstoque}
+            onChange={(e) => set("controlaEstoque", e.target.checked)}
+            className="h-4 w-4 accent-[var(--primary)]"
+          />
+          Controlar estoque deste produto
+        </label>
+      </Field>
+      {form.controlaEstoque && (
+        <Field label="Estoque atual" hint="Altere e clique em Ajustar p/ registrar o movimento">
+          <div className="flex gap-2">
+            <Input
+              inputMode="decimal"
+              value={String(form.estoque).replace(".", ",")}
+              onChange={(e) => set("estoque", Number(e.target.value.replace(",", ".").replace(/[^\d.-]/g, "")) || 0)}
+              placeholder="0"
+            />
+            <Button type="button" variante="secondary" onClick={salvarAjuste} disabled={ajustando || !editId}>
+              {ajustando ? "…" : "Ajustar"}
+            </Button>
+          </div>
+        </Field>
+      )}
       <Field label="Descrição do produto" className="sm:col-span-2">
         <Textarea value={form.descricao} onChange={(e) => set("descricao", e.target.value)} />
       </Field>

@@ -266,6 +266,10 @@ model Emitente {
   // casas decimais permitidas na quantidade dos itens (qCom). 0–4. Padrão 2.
   casasDecimaisQtd Int   @default(2)
 
+  // Controle de estoque: bloquear emissão quando algum item controlado não tem
+  // saldo suficiente. false = só baixa (permite negativo, estoque é indicador).
+  bloquearSemEstoque Boolean @default(false)
+
   // NFC-e (modelo 65) — série/numeração próprias + CSC (Código de Segurança do
   // Contribuinte) emitido pela SEFAZ, usado no hash do QR Code.
   serieNFCe         Int     @default(1)
@@ -293,6 +297,7 @@ model Emitente {
   categorias    Categoria[]
   acessos       AcessoEmpresa[]
   whatsapp      ConfigWhatsApp?
+  movimentosEstoque MovimentoEstoque[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -361,14 +366,53 @@ model Produto {
   creditoPresumidoIcms String?
   reguladoAnp         Boolean  @default(false)
 
+  // Estoque. controlaEstoque = opt-in; só produtos marcados têm baixa na emissão.
+  estoque             Decimal  @default(0) @db.Decimal(15, 4)
+  controlaEstoque     Boolean  @default(false)
+
   itens               ItemNota[]
   itensOrcamento      ItemOrcamento[]
+  movimentosEstoque   MovimentoEstoque[]
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   @@index([empresaId])
   @@map("produtos")
+}
+
+// ----------------------------------------------------------------------------
+// Movimentos de estoque — histórico de entradas/saídas/ajustes por produto.
+// quantidade é sempre positiva; o sinal vem do tipo. saldoApos = saldo após.
+// ----------------------------------------------------------------------------
+enum TipoMovimentoEstoque {
+  ENTRADA // compra/ajuste positivo
+  SAIDA   // emissão de NF-e
+  AJUSTE  // ajuste manual (pode ser + ou -, ver quantidade vs saldoApos)
+}
+
+model MovimentoEstoque {
+  id         String   @id @default(uuid())
+
+  empresaId  String
+  empresa    Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  produtoId  String
+  produto    Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  tipo       TipoMovimentoEstoque
+  quantidade Decimal  @db.Decimal(15, 4) // delta absoluto (sempre > 0)
+  saldoApos  Decimal  @db.Decimal(15, 4)
+  motivo     String?
+
+  notaId     String?
+  nota       Nota?    @relation(fields: [notaId], references: [id], onDelete: SetNull)
+
+  createdAt  DateTime @default(now())
+
+  @@index([empresaId, produtoId])
+  @@index([notaId])
+  @@map("movimentos_estoque")
 }
 
 // ----------------------------------------------------------------------------
@@ -509,6 +553,7 @@ model Nota {
 
   itens               ItemNota[]
   orcamento           Orcamento? // orçamento que gerou esta nota (quando convertido)
+  movimentosEstoque   MovimentoEstoque[]
 
   informacoesAdicionais String?
   status              StatusNota @default(RASCUNHO)

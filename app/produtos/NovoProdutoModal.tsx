@@ -32,6 +32,8 @@ const vazio: ProdutoInput = {
   codigoBeneficio: "",
   creditoPresumidoIcms: "",
   reguladoAnp: false,
+  estoque: 0,
+  controlaEstoque: false,
 };
 
 // Converte um Produto carregado em ProdutoInput (modo edição).
@@ -135,6 +137,22 @@ export default function NovoProdutoModal({
                 placeholder="0"
               />
             </Field>
+            <Field label="Controle de estoque" hint="Baixa automática a cada NF-e">
+              <label className="flex h-[46px] items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 text-sm">
+                <input type="checkbox" checked={form.controlaEstoque} onChange={(e) => set("controlaEstoque", e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+                Controlar estoque deste produto
+              </label>
+            </Field>
+            {!edicao && form.controlaEstoque && (
+              <Field label="Estoque inicial" hint="Saldo atual em unidades">
+                <Input
+                  inputMode="decimal"
+                  value={form.estoque ? String(form.estoque).replace(".", ",") : ""}
+                  onChange={(e) => set("estoque", Number(e.target.value.replace(",", ".").replace(/[^\d.]/g, "")) || 0)}
+                  placeholder="0"
+                />
+              </Field>
+            )}
             <Field label="Descrição do produto" className="sm:col-span-2"><Textarea value={form.descricao} onChange={(e) => set("descricao", e.target.value)} /></Field>
           </div>
         </Step>

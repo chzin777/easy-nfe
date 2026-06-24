@@ -27,6 +27,8 @@ type ProdutoRow = {
   codigoBeneficio: string | null;
   creditoPresumidoIcms: string | null;
   reguladoAnp: boolean;
+  estoque: unknown;
+  controlaEstoque: boolean;
 };
 
 function paraUI(p: ProdutoRow): Produto {
@@ -51,6 +53,8 @@ function paraUI(p: ProdutoRow): Produto {
     codigoBeneficio: p.codigoBeneficio ?? "",
     creditoPresumidoIcms: p.creditoPresumidoIcms ?? "",
     reguladoAnp: p.reguladoAnp,
+    estoque: p.estoque == null ? 0 : Number(p.estoque),
+    controlaEstoque: p.controlaEstoque,
   };
 }
 
@@ -76,6 +80,7 @@ function paraDados(input: ProdutoInput) {
     codigoBeneficio: input.codigoBeneficio || null,
     creditoPresumidoIcms: input.creditoPresumidoIcms || null,
     reguladoAnp: input.reguladoAnp,
+    controlaEstoque: input.controlaEstoque,
   };
 }
 
@@ -92,10 +97,20 @@ export async function listarProdutos(): Promise<Produto[]> {
 export async function criarProduto(input: ProdutoInput): Promise<Produto> {
   await exigirFeature("produtos");
   const empresaId = await exigirEmpresa();
+  // estoque inicial só na criação (depois muda via emissão/ajuste, nunca pelo form).
+  const estoqueInicial = input.controlaEstoque && input.estoque > 0 ? input.estoque : 0;
   const p = await prisma.produto.create({
-    data: { empresaId, ...paraDados(input) },
+    data: { empresaId, ...paraDados(input), estoque: estoqueInicial },
     include: { categoria: { select: { nome: true } } },
   });
+  if (estoqueInicial > 0) {
+    await prisma.movimentoEstoque.create({
+      data: {
+        empresaId, produtoId: p.id, tipo: "ENTRADA",
+        quantidade: estoqueInicial, saldoApos: estoqueInicial, motivo: "Estoque inicial",
+      },
+    });
+  }
   return paraUI(p);
 }
 
@@ -159,6 +174,71 @@ export async function excluirProduto(id: string): Promise<void> {
   await exigirFeature("produtos");
   const empresaId = await exigirEmpresa();
   await prisma.produto.deleteMany({ where: { id, empresaId } });
+}
+
+// Ajuste manual de estoque. `novoSaldo` = saldo final desejado; registra o
+// movimento (ENTRADA/SAIDA/AJUSTE conforme o delta) e atualiza o produto.
+export async function ajustarEstoque(
+  produtoId: string,
+  novoSaldo: number,
+  motivo?: string,
+): Promise<{ ok: true; estoque: number } | { ok: false; erro: string }> {
+  try {
+    await exigirFeature("produtos");
+    const empresaId = await exigirEmpresa();
+    if (!Number.isFinite(novoSaldo)) return { ok: false, erro: "Saldo inválido." };
+    const saldo = Math.round(novoSaldo * 1e4) / 1e4; // 4 casas
+
+    const prod = await prisma.produto.findFirst({ where: { id: produtoId, empresaId } });
+    if (!prod) return { ok: false, erro: "Produto não encontrado." };
+
+    const atual = Number(prod.estoque);
+    const delta = saldo - atual;
+    if (delta === 0) return { ok: true, estoque: atual };
+
+    await prisma.$transaction([
+      prisma.produto.update({ where: { id: produtoId }, data: { estoque: saldo } }),
+      prisma.movimentoEstoque.create({
+        data: {
+          empresaId, produtoId, tipo: "AJUSTE",
+          quantidade: Math.abs(delta), saldoApos: saldo,
+          motivo: motivo?.trim() || "Ajuste manual",
+        },
+      }),
+    ]);
+    return { ok: true, estoque: saldo };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export type MovimentoEstoqueRow = {
+  id: string;
+  tipo: "ENTRADA" | "SAIDA" | "AJUSTE";
+  quantidade: number;
+  saldoApos: number;
+  motivo: string | null;
+  notaId: string | null;
+  createdAt: string;
+};
+
+// Histórico de movimentos de um produto (mais recentes primeiro).
+export async function listarMovimentosEstoque(produtoId: string): Promise<MovimentoEstoqueRow[]> {
+  const empresaId = await exigirEmpresa();
+  const rows = await prisma.movimentoEstoque.findMany({
+    where: { empresaId, produtoId },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  return rows.map((m) => ({
+    id: m.id,
+    tipo: m.tipo,
+    quantidade: Number(m.quantidade),
+    saldoApos: Number(m.saldoApos),
+    motivo: m.motivo,
+    notaId: m.notaId,
+    createdAt: m.createdAt.toISOString(),
+  }));
 }
 
 // codigo = só dígitos. completo = true quando tem 8 dígitos (válido p/ NF-e);

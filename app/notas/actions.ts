@@ -75,6 +75,57 @@ export type EmitirResultado =
     }
   | { ok: false; erro: string; codigo?: string; clienteId?: string };
 
+// Soma as quantidades por produto controlado (vários itens podem repetir produto).
+type ItemQtd = { produtoId: string; quantidade: number };
+type ProdEstoque = { id: string; nome: string; estoque: unknown; controlaEstoque: boolean };
+function agregarControlados(itens: ItemQtd[], porId: Map<string, ProdEstoque>): Map<string, number> {
+  const mapa = new Map<string, number>();
+  for (const i of itens) {
+    const p = porId.get(i.produtoId);
+    if (p?.controlaEstoque) mapa.set(i.produtoId, (mapa.get(i.produtoId) ?? 0) + i.quantidade);
+  }
+  return mapa;
+}
+
+// Baixa o estoque dos itens controlados após autorização. Atômico; registra
+// um movimento de SAÍDA por produto com o saldo resultante.
+async function baixarEstoqueEmissao(
+  empresaId: string, notaId: string, numero: number,
+  itens: ItemQtd[], porId: Map<string, ProdEstoque>,
+): Promise<void> {
+  const mapa = agregarControlados(itens, porId);
+  if (!mapa.size) return;
+  await prisma.$transaction(async (tx) => {
+    for (const [pid, qty] of mapa) {
+      const upd = await tx.produto.update({ where: { id: pid }, data: { estoque: { decrement: qty } } });
+      await tx.movimentoEstoque.create({
+        data: { empresaId, produtoId: pid, notaId, tipo: "SAIDA", quantidade: qty, saldoApos: Number(upd.estoque), motivo: `NF-e ${numero}` },
+      });
+    }
+  });
+}
+
+// Devolve o estoque ao cancelar uma nota (movimento de ENTRADA por produto).
+async function restaurarEstoqueCancelamento(empresaId: string, notaId: string, numero: number): Promise<void> {
+  const itens = await prisma.itemNota.findMany({
+    where: { notaId, produtoId: { not: null } },
+    include: { produto: { select: { id: true, controlaEstoque: true } } },
+  });
+  const mapa = new Map<string, number>();
+  for (const it of itens) {
+    if (it.produto?.controlaEstoque) mapa.set(it.produto.id, (mapa.get(it.produto.id) ?? 0) + Number(it.quantidade));
+  }
+  if (!mapa.size) return;
+  await prisma.$transaction(async (tx) => {
+    for (const [pid, qty] of mapa) {
+      const upd = await tx.produto.update({ where: { id: pid }, data: { estoque: { increment: qty } } });
+      await tx.movimentoEstoque.create({
+        data: { empresaId, produtoId: pid, notaId, tipo: "ENTRADA", quantidade: qty, saldoApos: Number(upd.estoque), motivo: `Cancelamento NF-e ${numero}` },
+      });
+    }
+  });
+}
+
 // Emite a NF-e da empresa ativa. Resolve emitente, cliente e produtos do banco —
 // o cliente só envia ids + o certificado (que vive apenas na sessão do navegador).
 export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
@@ -136,6 +187,19 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       where: { empresaId, id: { in: input.itens.map((i) => i.produtoId) } },
     });
     const porId = new Map(produtos.map((p) => [p.id, p]));
+
+    // Bloqueio por estoque insuficiente (parâmetro da empresa). Só itens marcados
+    // como "controla estoque" entram na conta; saldo negativo nunca é permitido aqui.
+    if (empresa.bloquearSemEstoque) {
+      const necessario = agregarControlados(input.itens, porId);
+      const semSaldo = [...necessario.entries()].filter(([id, q]) => Number(porId.get(id)!.estoque) < q);
+      if (semSaldo.length) {
+        const nomes = semSaldo
+          .map(([id, q]) => `${porId.get(id)!.nome} (saldo ${Number(porId.get(id)!.estoque)}, pedido ${q})`)
+          .join("; ");
+        return { ok: false, erro: `Estoque insuficiente para: ${nomes}. Ajuste o estoque ou desative o bloqueio em Configurações.` };
+      }
+    }
 
     const transp = input.transportadoraId
       ? await prisma.transportadora.findFirst({ where: { id: input.transportadoraId, empresaId } })
@@ -331,6 +395,16 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
           : []),
       ]);
       notaId = notaCriada.id;
+      // Baixa de estoque dos itens controlados — só quando autorizada. Falha aqui
+      // não invalida a nota (já gravada); vira aviso.
+      if (r.ok) {
+        try {
+          await baixarEstoqueEmissao(empresa.id, notaId, numero, input.itens, porId);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          avisoPersistencia = `Nota autorizada e gravada, mas falhou ao baixar o estoque: ${msg}`;
+        }
+      }
       // Envio por WhatsApp ao cliente — só quando autorizada. Roda após a
       // resposta (after) p/ não atrasar a emissão; falhas são engolidas dentro.
       if (r.ok) {
@@ -575,6 +649,12 @@ export async function cancelarNota(input: CancelarInput): Promise<CancelarResult
           canceladaEm: new Date(),
         },
       });
+      // Devolve ao estoque os itens controlados. Falha não impede o cancelamento.
+      try {
+        await restaurarEstoqueCancelamento(empresaId, nota.id, nota.numero);
+      } catch {
+        // ignora — cancelamento na SEFAZ já efetivado; estoque pode ser ajustado à mão.
+      }
     }
     return { ok: r.ok, cStat: r.cStat, xMotivo: r.xMotivo, nProt: r.nProt };
   } catch (e) {

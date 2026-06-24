@@ -60,6 +60,7 @@ const empresaVazia: EmpresaDados = {
   cscNFCe: "",
   idCscNFCe: "",
   casasDecimaisQtd: "2",
+  bloquearSemEstoque: false,
 };
 
 export default function ConfiguracoesPage() {
@@ -580,6 +581,20 @@ function AbaAmbiente({
               value={form.casasDecimaisQtd}
               onChange={(e) => setE("casasDecimaisQtd", e.target.value)}
             />
+          </Field>
+          <Field
+            label="Controle de estoque"
+            hint="Vale só p/ produtos marcados como 'controla estoque'"
+          >
+            <label className="flex h-[46px] items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={form.bloquearSemEstoque}
+                onChange={(e) => setE("bloquearSemEstoque", e.target.checked)}
+                className="h-4 w-4 accent-[var(--primary)]"
+              />
+              Bloquear emissão sem saldo suficiente
+            </label>
           </Field>
         </div>
       </section>

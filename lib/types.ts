@@ -23,6 +23,9 @@ export type Produto = {
   codigoBeneficio: string;
   creditoPresumidoIcms: string;
   reguladoAnp: boolean;
+  // Estoque
+  estoque: number; // saldo atual
+  controlaEstoque: boolean; // opt-in: baixa na emissão de NF-e
 };
 
 export type Endereco = {

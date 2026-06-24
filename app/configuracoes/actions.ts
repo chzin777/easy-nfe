@@ -157,6 +157,8 @@ export type EmpresaDados = {
   idCscNFCe: string;
   // casas decimais na quantidade dos itens (0–4)
   casasDecimaisQtd: string;
+  // estoque: bloquear emissão quando item controlado não tem saldo
+  bloquearSemEstoque: boolean;
 };
 
 export type EmpresaResumo = { id: string; razaoSocial: string; cnpj: string; ativa: boolean };
@@ -218,6 +220,7 @@ export async function obterEmpresaAtiva(): Promise<EmpresaDados | null> {
     cscNFCe: e.cscNFCe ?? "",
     idCscNFCe: e.idCscNFCe ?? "",
     casasDecimaisQtd: String(e.casasDecimaisQtd),
+    bloquearSemEstoque: e.bloquearSemEstoque,
   };
 }
 
@@ -262,6 +265,7 @@ export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id
       cscNFCe: dados.cscNFCe?.trim() || null,
       idCscNFCe: dados.idCscNFCe?.replace(/\D/g, "") || null,
       casasDecimaisQtd: Math.min(4, Math.max(0, Number(dados.casasDecimaisQtd) || 0)),
+      bloquearSemEstoque: !!dados.bloquearSemEstoque,
     };
 
     const { role } = await exigirSessao();
