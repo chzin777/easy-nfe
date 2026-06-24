@@ -12,7 +12,7 @@ const MAPA = {
   nfe_email: ["integracao_email"],
   whatsapp: ["integracao_whatsapp"],
   multiusuario: ["multiusuario"],
-  suporte_prioritario: [],
+  suporte_prioritario: ["suporte_prioritario"],
   ecommerce: ["integracao_ecommerce"],
   dfe: ["dfe"],
   nfce_nfse: ["emitir_nfce", "emitir_nfse"],

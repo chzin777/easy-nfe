@@ -8,7 +8,10 @@ import Aurora from "./ui/Aurora";
 import Reveal from "./ui/Reveal";
 import ScrollVelocity from "./ui/ScrollVelocity";
 import ScrollLink from "./ui/ScrollLink";
-import { ContainerScroll } from "./ui/ContainerScroll";
+import MotionCard from "./ui/MotionCard";
+import { MacbookScroll } from "./ui/MacbookScroll";
+import SectionReveal from "./ui/SectionReveal";
+import BlurText from "./ui/BlurText";
 
 const WPP_PARCEIRO = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Sou contador(a) e quero ser parceiro(a) do Easy-NFe. Gostaria de saber como funciona o programa de parcerias para contadores.");
 const WPP_VENDAS = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Tenho dúvidas sobre os planos do Easy-NFe e gostaria de ajuda para escolher o ideal para minha empresa.");
@@ -70,24 +73,36 @@ export default async function Landing() {
   if (await lerSessao()) redirect("/painel");
 
   const planos = await carregarPlanos();
+  type Beneficio = (typeof planos)[number]["beneficios"][number];
   const planoAnterior = (ordem: number) =>
     planos.filter((x) => x.ordem < ordem).sort((a, b) => b.ordem - a.ordem)[0];
-  const nomePlanoAnterior = (ordem: number) => planoAnterior(ordem)?.nome;
   const planoSeguinte = (ordem: number) =>
     planos.filter((x) => x.ordem > ordem).sort((a, b) => a.ordem - b.ordem)[0];
-  // Com "Tudo do {anterior}", esconde os benefícios já cobertos pelo plano de baixo (redundância).
-  const beneficiosVisiveis = (p: (typeof planos)[number]) => {
-    const temTudoAnterior = p.beneficios.some((b) => b.chave === "tudo_anterior");
-    if (!temTudoAnterior) return p.beneficios;
-    const anteriores = new Set((planoAnterior(p.ordem)?.beneficios ?? []).map((b) => b.chave));
-    return p.beneficios.filter((b) => b.chave === "tudo_anterior" || !anteriores.has(b.chave));
+  // Expande "tudo_anterior" nos benefícios REAIS do plano de baixo (recursivo, p/
+  // cadeias de planos), deduplicando por chave. Mostra a lista completa em vez de
+  // um "Tudo do X" genérico.
+  const beneficiosExpandidos = (p: (typeof planos)[number]): Beneficio[] => {
+    const out: Beneficio[] = [];
+    const visto = new Set<string>();
+    const push = (b: Beneficio) => {
+      if (!visto.has(b.chave)) { visto.add(b.chave); out.push(b); }
+    };
+    for (const b of p.beneficios) {
+      if (b.chave === "tudo_anterior") {
+        const ant = planoAnterior(p.ordem);
+        if (ant) beneficiosExpandidos(ant).forEach(push);
+      } else {
+        push(b);
+      }
+    }
+    return out;
   };
   // Desvantagens = benefícios que o próximo plano tem e este não (motiva o upgrade).
   const desvantagens = (p: (typeof planos)[number]) => {
     const prox = planoSeguinte(p.ordem);
     if (!prox) return [];
-    const tem = new Set(p.beneficios.map((b) => b.chave));
-    return prox.beneficios.filter((b) => b.chave !== "tudo_anterior" && !tem.has(b.chave));
+    const tem = new Set(beneficiosExpandidos(p).map((b) => b.chave));
+    return beneficiosExpandidos(prox).filter((b) => !tem.has(b.chave));
   };
 
   const destaqueId = planos.find((p) => p.popular)?.id;
@@ -142,10 +157,13 @@ export default async function Landing() {
         </div>
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-white via-white/60 to-white/80" />
         <div className="relative mx-auto max-w-4xl px-6 pb-10 pt-28 text-center">
-          <h1 className="text-4xl font-extrabold uppercase leading-tight tracking-tight sm:text-6xl">
-            Emita notas fiscais de forma fácil, rápida e
-            <span className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent"> segura!</span>
-          </h1>
+          <BlurText
+            text="Emita notas fiscais de forma fácil, rápida e segura!"
+            delay={120}
+            animateBy="words"
+            direction="top"
+            className="justify-center text-4xl font-extrabold uppercase leading-tight tracking-tight sm:text-6xl"
+          />
           <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-600">
             O <span className="font-semibold text-[var(--primary)]">Easy-NFe</span> é a plataforma completa para
             emissão de Notas Fiscais Eletrônicas, com integração via SEFAZ e gestão intuitiva do seu negócio.
@@ -175,45 +193,39 @@ export default async function Landing() {
         </div>
       </section>
 
-      {/* Preview do produto com scroll 3D */}
-      <ContainerScroll
-        titleComponent={
-          <h2 className="mb-6 text-3xl font-bold tracking-tight text-[var(--foreground)] sm:text-4xl">
-            Tudo num painel só
-          </h2>
-        }
-      >
-        <Image
+      {/* Preview do produto no Macbook com scroll 3D */}
+      <div className="-mt-20 hidden overflow-hidden md:block">
+        <MacbookScroll
           src="/images/prints/dashboard.png"
-          alt="Painel do Easy-NFe"
-          width={1400}
-          height={880}
-          className="mx-auto h-full w-full rounded-2xl object-cover object-left-top"
-          draggable={false}
-          priority
+          showGradient
+          title={
+            <span className="text-3xl font-bold tracking-tight text-[var(--foreground)] sm:text-4xl">
+              Tudo num painel só
+            </span>
+          }
         />
-      </ContainerScroll>
+      </div>
       </div>
 
       {/* Stats */}
       <section className="border-b border-[var(--border)] bg-white">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-6 py-12 lg:grid-cols-4">
+        <SectionReveal className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-6 py-12 lg:grid-cols-4">
           {STATS.map((s) => (
             <div key={s.rotulo} className="text-center">
               <p className="text-3xl font-extrabold tracking-tight text-[var(--primary)]">{s.valor}</p>
               <p className="mt-1 text-sm text-[var(--muted)]">{s.rotulo}</p>
             </div>
           ))}
-        </div>
+        </SectionReveal>
       </section>
 
       {/* Recursos */}
       <section id="recursos" className="bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-24">
-        <Reveal className="mx-auto max-w-2xl text-center">
+        <SectionReveal className="mx-auto max-w-6xl px-6 py-24">
+        <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight">Tudo que sua empresa precisa para faturar</h2>
           <p className="mt-3 text-[var(--muted)]">Do certificado à entrega da nota ao cliente, sem planilha nem retrabalho.</p>
-        </Reveal>
+        </div>
         <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {RECURSOS.map((r) => (
             <div key={r.titulo} className="rounded-2xl border border-[var(--border)] bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-[0_12px_32px_-12px_rgba(82,39,255,0.3)]">
@@ -223,16 +235,16 @@ export default async function Landing() {
             </div>
           ))}
         </div>
-        </div>
+        </SectionReveal>
       </section>
 
       {/* Como funciona */}
       <section id="como-funciona" className="bg-white pb-24">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal className="mx-auto max-w-2xl text-center">
+        <SectionReveal className="mx-auto max-w-6xl px-6">
+          <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight">Da configuração à nota na mão do cliente</h2>
             <p className="mt-3 text-[var(--muted)]">Quatro passos. Sem instalar nada.</p>
-          </Reveal>
+          </div>
           <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {PASSOS.map((p) => (
               <div key={p.n} className="relative rounded-2xl border border-[var(--border)] p-6">
@@ -242,12 +254,12 @@ export default async function Landing() {
               </div>
             ))}
           </div>
-        </div>
+        </SectionReveal>
       </section>
 
       {/* Integrações */}
       <section className="bg-slate-950 py-20 text-white">
-        <div className="mx-auto max-w-6xl px-6 text-center">
+        <SectionReveal className="mx-auto max-w-6xl px-6 text-center">
           <h2 className="text-2xl font-bold tracking-tight">Conectado ao que você já usa</h2>
           <p className="mx-auto mt-3 max-w-xl text-sm text-slate-400">Integrações nativas para você não digitar nota duas vezes.</p>
           <div className="mt-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -258,16 +270,16 @@ export default async function Landing() {
               </div>
             ))}
           </div>
-        </div>
+        </SectionReveal>
       </section>
 
       {/* Depoimentos */}
       <section className="bg-white py-24">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal className="mx-auto max-w-2xl text-center">
+        <SectionReveal className="mx-auto max-w-6xl px-6">
+          <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight">Quem usa, recomenda</h2>
             <p className="mt-3 text-[var(--muted)]">Negócios que trocaram a planilha pelo Easy-NFe.</p>
-          </Reveal>
+          </div>
           <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {["1", "2", "3"].map((n) => (
               <div key={n} className="relative aspect-[19/20] overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-sm">
@@ -281,12 +293,12 @@ export default async function Landing() {
               </div>
             ))}
           </div>
-        </div>
+        </SectionReveal>
       </section>
 
       {/* Parcerias com contadores */}
       <section id="parceiros" className="bg-slate-50 py-24">
-        <div className="mx-auto max-w-6xl px-6">
+        <SectionReveal className="mx-auto max-w-6xl px-6">
           <div className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-gradient-to-br from-slate-900 to-slate-800 p-8 text-white sm:p-12 lg:p-16">
             <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-violet-600/20 blur-3xl" />
 
@@ -334,22 +346,24 @@ export default async function Landing() {
               <p className="text-xs text-slate-400">Resposta rápida pelo WhatsApp · sem compromisso</p>
             </div>
           </div>
-        </div>
+        </SectionReveal>
       </section>
 
       {/* Faixa de texto em movimento (reage ao scroll) */}
       <section className="overflow-hidden border-y border-[var(--border)] bg-slate-950 py-8 text-white">
-        <ScrollVelocity
-          texts={["Emita NF-e em segundos  •  Vendas online  •", "WhatsApp  •  E-mail  •  DANFE  •  Sem fidelidade  •"]}
-          velocity={70}
-          numCopies={6}
-          className="px-4 text-transparent bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text"
-        />
+        <SectionReveal>
+          <ScrollVelocity
+            texts={["Emita NF-e em segundos  •  Vendas online  •", "WhatsApp  •  E-mail  •  DANFE  •  Sem fidelidade  •"]}
+            velocity={70}
+            numCopies={6}
+            className="px-4 text-transparent bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text"
+          />
+        </SectionReveal>
       </section>
 
       {/* Planos */}
       <section id="planos" className="bg-slate-50 py-24">
-        <div className="mx-auto max-w-6xl px-6">
+        <SectionReveal className="mx-auto max-w-6xl px-6">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight">Planos para cada tamanho de operação</h2>
             <p className="mt-3 text-[var(--muted)]">Comece com 7 dias grátis. Sem fidelidade.</p>
@@ -364,10 +378,10 @@ export default async function Landing() {
                   <h3 className="mb-5 text-center text-sm font-semibold uppercase tracking-wider text-[var(--primary)]">{g.categoria}</h3>
                 )}
                 <div className="flex flex-wrap justify-center gap-6">
-                  {g.itens.map((p) => {
+                  {g.itens.map((p, idx) => {
                     const destaque = p.id === destaqueId;
                     return (
-                      <div key={p.id} className={"relative flex w-full flex-col rounded-2xl border bg-white p-7 sm:w-[21rem] md:w-[22rem] " + (destaque ? "border-[var(--primary)] shadow-xl shadow-violet-500/10 ring-1 ring-[var(--primary)]" : "border-[var(--border)] shadow-sm")}>
+                      <MotionCard key={p.id} index={idx} className={"relative flex w-full flex-col rounded-2xl border bg-white p-7 sm:w-[21rem] md:w-[22rem] " + (destaque ? "border-[var(--primary)] shadow-xl shadow-violet-500/10 ring-1 ring-[var(--primary)]" : "border-[var(--border)] shadow-sm hover:shadow-lg")}>
                         {destaque && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--primary)] px-3 py-1 text-xs font-semibold text-white">Mais popular</span>}
                         <h3 className="text-lg font-bold">{p.nome}</h3>
                         {p.descricao && <p className="mt-1 text-sm text-[var(--muted)]">{p.descricao}</p>}
@@ -386,8 +400,8 @@ export default async function Landing() {
                         )}
                         <p className="mt-1 text-xs text-[var(--muted)]">{p.limiteEmpresas < 0 ? "Empresas ilimitadas" : `${p.limiteEmpresas} empresa(s)`}</p>
                         <ul className="mt-6 flex-1 space-y-2.5 text-sm">
-                          {beneficiosVisiveis(p).map((b, j) => (
-                            <li key={j} className="flex gap-2"><span className="text-[var(--success)]">✓</span><span className="text-slate-600">{b.chave === "tudo_anterior" ? `Tudo do ${nomePlanoAnterior(p.ordem) ?? "plano anterior"}` : b.nome}</span></li>
+                          {beneficiosExpandidos(p).map((b, j) => (
+                            <li key={j} className="flex gap-2"><span className="text-[var(--success)]">✓</span><span className="text-slate-600">{b.nome}</span></li>
                           ))}
                           {desvantagens(p).map((b, j) => (
                             <li key={`x-${j}`} className="flex gap-2"><span className="text-slate-300">✗</span><span className="text-slate-400 line-through">{b.nome}</span></li>
@@ -417,7 +431,7 @@ export default async function Landing() {
                             Começar agora
                           </Link>
                         )}
-                      </div>
+                      </MotionCard>
                     );
                   })}
                 </div>
@@ -437,16 +451,16 @@ export default async function Landing() {
               Falar com vendas no WhatsApp
             </a>
           </div>
-        </div>
+        </SectionReveal>
       </section>
 
       {/* FAQ */}
       <section id="faq" className="bg-white py-24">
-        <div className="mx-auto max-w-3xl px-6">
-          <Reveal className="text-center">
+        <SectionReveal className="mx-auto max-w-3xl px-6">
+          <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight">Perguntas frequentes</h2>
             <p className="mt-3 text-[var(--muted)]">Ainda com dúvida? Fale com a gente.</p>
-          </Reveal>
+          </div>
           <div className="mt-10 space-y-3">
             {FAQ.map((f) => (
               <details key={f.p} className="group rounded-xl border border-[var(--border)] bg-white p-5 [&_summary]:list-none">
@@ -458,13 +472,13 @@ export default async function Landing() {
               </details>
             ))}
           </div>
-        </div>
+        </SectionReveal>
       </section>
 
       {/* CTA */}
       <section className="relative overflow-hidden bg-gradient-to-br from-[var(--primary)] to-[var(--primary-2)] py-20 text-center text-white">
         <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
-        <div className="relative mx-auto max-w-2xl px-6">
+        <SectionReveal className="relative mx-auto max-w-2xl px-6">
           <h2 className="text-3xl font-bold">Pronto para emitir sua primeira nota?</h2>
           <p className="mt-3 text-white/85">Teste grátis por 7 dias, sem cartão. Suporte humano de verdade.</p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -475,7 +489,7 @@ export default async function Landing() {
               Entrar
             </Link>
           </div>
-        </div>
+        </SectionReveal>
       </section>
 
       {/* Footer */}

@@ -32,6 +32,9 @@ export const FEATURES: Feature[] = [
   { chave: "multiempresa", nome: "Multiempresa (vários CNPJs)", categoria: "Gestão" },
   { chave: "multiusuario", nome: "Equipe / multiusuário", categoria: "Gestão" },
   { chave: "relatorios", nome: "Relatórios fiscais", categoria: "Gestão" },
+
+  // Suporte
+  { chave: "suporte_prioritario", nome: "Suporte prioritário via WhatsApp", categoria: "Suporte" },
 ];
 
 export const FEATURE_NOME: Record<string, string> = Object.fromEntries(

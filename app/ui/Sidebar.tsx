@@ -10,21 +10,15 @@ import { sair, papelAtual } from "@/app/auth/actions";
 import { obterMinhasFeatures } from "@/app/permissoes-actions";
 
 type Item = { href: string; label: string; icon: ReactNode; feature?: string };
-type Grupo = { titulo: string; itens: Item[] };
+// flat = grupo renderiza itens direto, sem header colapsável (corta ruído de
+// grupos pequenos). Ordem segue o fluxo de uso: início → emitir → cadastros → sistema.
+type Grupo = { titulo: string; itens: Item[]; flat?: boolean };
 
 const grupos: Grupo[] = [
   {
     titulo: "Geral",
+    flat: true,
     itens: [{ href: "/painel", label: "Dashboard", icon: <IconGrid />, feature: "dashboard" }],
-  },
-  {
-    titulo: "Cadastros",
-    itens: [
-      { href: "/produtos", label: "Produtos", icon: <IconBox />, feature: "produtos" },
-      { href: "/clientes", label: "Clientes", icon: <IconUser />, feature: "clientes" },
-      { href: "/fornecedores", label: "Fornecedores", icon: <IconFactory />, feature: "fornecedores" },
-      { href: "/transportadoras", label: "Transportadoras", icon: <IconTruck />, feature: "transportadoras" },
-    ],
   },
   {
     titulo: "Emissão de notas",
@@ -38,14 +32,27 @@ const grupos: Grupo[] = [
     ],
   },
   {
+    titulo: "Cadastros",
+    itens: [
+      { href: "/produtos", label: "Produtos", icon: <IconBox />, feature: "produtos" },
+      { href: "/clientes", label: "Clientes", icon: <IconUser />, feature: "clientes" },
+      { href: "/fornecedores", label: "Fornecedores", icon: <IconFactory />, feature: "fornecedores" },
+      { href: "/transportadoras", label: "Transportadoras", icon: <IconTruck />, feature: "transportadoras" },
+    ],
+  },
+  {
     titulo: "Recursos",
+    flat: true,
     itens: [{ href: "/integracao", label: "Integração", icon: <IconPlug /> }],
   },
   {
     titulo: "Sistema",
+    flat: true,
     itens: [{ href: "/configuracoes", label: "Configurações", icon: <IconGear /> }],
   },
 ];
+
+const COLAPSADOS_CACHE_KEY = "sidebar:colapsados";
 
 const FEATURES_CACHE_KEY = "sidebar:features";
 
@@ -87,11 +94,26 @@ export default function Sidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
+  // Semeia estado de colapso do localStorage (persiste entre F5).
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(COLAPSADOS_CACHE_KEY);
+      if (raw) setColapsados(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      // ignora (modo privado / quota)
+    }
+  }, []);
+
   const alternarGrupo = (titulo: string) =>
     setColapsados((prev) => {
       const next = new Set(prev);
       if (next.has(titulo)) next.delete(titulo);
       else next.add(titulo);
+      try {
+        window.localStorage.setItem(COLAPSADOS_CACHE_KEY, JSON.stringify([...next]));
+      } catch {
+        // ignora
+      }
       return next;
     });
 
@@ -119,6 +141,9 @@ export default function Sidebar({
   // item bloqueado no F5; é melhor aparecer depois do que sumir depois.
   const podeVer = (it: Item) =>
     acessoTotal || !it.feature || (features !== null && features.includes(it.feature));
+
+  // Suporte via WhatsApp: só planos com o benefício "suporte_prioritário".
+  const temSuportePrioritario = acessoTotal || (features?.includes("suporte_prioritario") ?? false);
 
   const gruposRender: Grupo[] = grupos
     .map((g) => {
@@ -183,76 +208,100 @@ export default function Sidebar({
 
       <SeletorEmpresa empresas={empresas} />
 
-      <nav className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-2">
-        {gruposRender.map((g) => {
-          const colapsado = colapsados.has(g.titulo);
-          return (
-          <div key={g.titulo}>
-            <button
-              onClick={() => alternarGrupo(g.titulo)}
-              className="flex w-full items-center justify-between rounded-md px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 transition hover:text-slate-300"
-            >
-              {g.titulo}
-              <motion.span animate={{ rotate: colapsado ? -90 : 0 }} transition={{ duration: 0.2 }} className="text-slate-600">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
-              </motion.span>
-            </button>
-            <AnimatePresence initial={false}>
-              {!colapsado && (
-                <motion.ul
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: "easeInOut" }}
-                  className="space-y-1 overflow-hidden"
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-2">
+        {gruposRender.map((g, gi) => {
+          const temAtivo = g.itens.some((i) => i.href === hrefAtivo);
+          // Grupo da rota atual sempre abre (não esconde onde o usuário está).
+          const colapsado = !g.flat && colapsados.has(g.titulo) && !temAtivo;
+          const itens = g.itens.map((item) => {
+            const ativo = item.href === hrefAtivo;
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium"
                 >
-              {g.itens.map((item) => {
-                const ativo = item.href === hrefAtivo;
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium"
-                    >
-                      {ativo && (
-                        <motion.span
-                          layoutId="sidebar-ativo"
-                          className="absolute inset-0 rounded-lg bg-gradient-to-r from-[var(--primary)]/90 to-[var(--primary-2)]/80 shadow-lg shadow-violet-900/30"
-                          transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                        />
-                      )}
-                      <span
-                        className={
-                          "relative z-10 shrink-0 transition-transform duration-200 group-hover:scale-110 " +
-                          (ativo ? "text-white" : "text-slate-400 group-hover:text-white")
-                        }
-                      >
-                        {item.icon}
-                      </span>
-                      <span
-                        className={
-                          "relative z-10 transition-colors " +
-                          (ativo ? "text-white" : "text-slate-300 group-hover:text-white")
-                        }
-                      >
-                        {item.label}
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
-                </motion.ul>
-              )}
-            </AnimatePresence>
-          </div>
+                  {ativo && (
+                    <motion.span
+                      layoutId="sidebar-ativo"
+                      className="absolute inset-0 rounded-lg bg-gradient-to-r from-[var(--primary)]/90 to-[var(--primary-2)]/80 shadow-lg shadow-violet-900/30"
+                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    />
+                  )}
+                  <span
+                    className={
+                      "relative z-10 shrink-0 transition-transform duration-200 group-hover:scale-110 " +
+                      (ativo ? "text-white" : "text-slate-400 group-hover:text-white")
+                    }
+                  >
+                    {item.icon}
+                  </span>
+                  <span
+                    className={
+                      "relative z-10 transition-colors " +
+                      (ativo ? "text-white" : "text-slate-300 group-hover:text-white")
+                    }
+                  >
+                    {item.label}
+                  </span>
+                </Link>
+              </li>
+            );
+          });
+
+          // Grupo flat (1 item / sistema): sem header, só um divisor sutil acima.
+          if (g.flat) {
+            return (
+              <div key={g.titulo} className={gi > 0 ? "mt-2 border-t border-white/5 pt-2" : ""}>
+                <ul className="space-y-1">{itens}</ul>
+              </div>
+            );
+          }
+
+          return (
+            <div key={g.titulo} className="pt-2">
+              <button
+                onClick={() => alternarGrupo(g.titulo)}
+                className="flex w-full items-center justify-between rounded-md px-3 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 transition hover:text-slate-300"
+              >
+                {g.titulo}
+                <motion.span animate={{ rotate: colapsado ? -90 : 0 }} transition={{ duration: 0.2 }} className="text-slate-600">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                </motion.span>
+              </button>
+              <AnimatePresence initial={false}>
+                {!colapsado && (
+                  <motion.ul
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: "easeInOut" }}
+                    className="space-y-1 overflow-hidden"
+                  >
+                    {itens}
+                  </motion.ul>
+                )}
+              </AnimatePresence>
+            </div>
           );
         })}
       </nav>
 
-      <div className="mx-3 mb-4">
+      <div className="mx-3 mb-4 mt-2 space-y-2 border-t border-white/5 pt-3">
+        {temSuportePrioritario && (
+          <a
+            href="https://wa.me/5562996183309"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500/15 px-3 py-2.5 text-sm font-semibold text-emerald-300 ring-1 ring-inset ring-emerald-500/20 transition hover:bg-emerald-500/25 hover:text-emerald-200"
+          >
+            <IconWhatsApp />
+            Suporte via WhatsApp
+          </a>
+        )}
         <form action={sair}>
-          <button type="submit" className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs text-slate-400 transition hover:bg-white/5 hover:text-white">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></svg>
+          <button type="submit" className="flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 ring-1 ring-inset ring-white/10 transition hover:bg-white/5 hover:text-white">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></svg>
             Sair
           </button>
         </form>
@@ -467,6 +516,13 @@ function IconShield() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z" />
+    </svg>
+  );
+}
+function IconWhatsApp() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.945C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 0 1 8.413 3.488 11.824 11.824 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
     </svg>
   );
 }

@@ -504,7 +504,9 @@ function PlanoModal({ inicial, catalogo, planos, categorias, onFechar, onSalvo }
   const ilimitadoUsuarios = p.limiteUsuarios < 0;
 
   const prevNome = nomePlanoAnterior(planos, p.ordem, p.id);
-  const noPlano = p.beneficioIds.map((id) => catalogo.find((b) => b.id === id)).filter(Boolean) as Beneficio[];
+  // Deriva do catálogo (já ordenado por `ordem`) p/ a lista ter a MESMA ordem em
+  // todos os planos, independente da ordem em que os benefícios foram adicionados.
+  const noPlano = catalogo.filter((b) => p.beneficioIds.includes(b.id));
   const temTudoAnterior = p.beneficioIds.some((id) => catalogo.find((b) => b.id === id)?.chave === "tudo_anterior");
   const herdados = temTudoAnterior ? idsHerdados(planos, catalogo, p.ordem, p.id) : new Set<string>();
   const disponiveis = catalogo.filter((b) => !p.beneficioIds.includes(b.id) && !herdados.has(b.id));
