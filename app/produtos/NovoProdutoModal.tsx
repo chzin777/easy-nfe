@@ -33,6 +33,7 @@ const vazio: ProdutoInput = {
   creditoPresumidoIcms: "",
   reguladoAnp: false,
   estoque: 0,
+  estoqueMinimo: 0,
   controlaEstoque: false,
 };
 
@@ -149,6 +150,16 @@ export default function NovoProdutoModal({
                   inputMode="decimal"
                   value={form.estoque ? String(form.estoque).replace(".", ",") : ""}
                   onChange={(e) => set("estoque", Number(e.target.value.replace(",", ".").replace(/[^\d.]/g, "")) || 0)}
+                  placeholder="0"
+                />
+              </Field>
+            )}
+            {form.controlaEstoque && (
+              <Field label="Estoque mínimo" hint="Alerta quando o saldo chegar nesse nível (0 = sem alerta)">
+                <Input
+                  inputMode="decimal"
+                  value={form.estoqueMinimo ? String(form.estoqueMinimo).replace(".", ",") : ""}
+                  onChange={(e) => set("estoqueMinimo", Number(e.target.value.replace(",", ".").replace(/[^\d.]/g, "")) || 0)}
                   placeholder="0"
                 />
               </Field>

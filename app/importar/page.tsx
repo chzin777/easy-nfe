@@ -14,7 +14,7 @@ import {
   type Coluna,
 } from "@/app/ui/primitives";
 import { parseNFe, type NfeItem, type ParsedNFe } from "@/lib/nfe-parser";
-import { listarProdutos, criarProduto } from "@/app/produtos/actions";
+import { listarProdutos, importarEntradaXml } from "@/app/produtos/actions";
 import type { Produto } from "@/lib/types";
 
 export default function ImportarPage() {
@@ -22,9 +22,12 @@ export default function ImportarPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [arquivo, setArquivo] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState(false);
-  const [importados, setImportados] = useState<NfeItem[]>([]);
   const [catalogo, setCatalogo] = useState<Produto[]>([]);
   const [importando, setImportando] = useState(false);
+  const [resultado, setResultado] = useState<
+    { criados: number; atualizados: number; ignorados: number } | null
+  >(null);
+  const [jaImportada, setJaImportada] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function recarregarCatalogo() {
@@ -47,7 +50,8 @@ export default function ImportarPage() {
   async function processarArquivo(file: File) {
     setErro(null);
     setNfe(null);
-    setImportados([]);
+    setResultado(null);
+    setJaImportada(false);
     setArquivo(file.name);
     try {
       const texto = await file.text();
@@ -64,43 +68,46 @@ export default function ImportarPage() {
     if (file) processarArquivo(file);
   }
 
-  async function importarNovos() {
+  // Dá entrada no estoque: casa por GTIN/nome, cria os que faltam, soma a qtd.
+  async function darEntrada() {
     if (!nfe) return;
-    const novos = nfe.itens.filter((it) => !existeNoCatalogo(it));
     setImportando(true);
-    for (const it of novos) {
-      await criarProduto({
-        codigoBarras: it.cEAN || "",
-        nome: it.xProd,
-        marca: "",
-        peso: 0,
-        unidade: it.uCom || "UN",
-        ncm: it.ncm || "",
-        origem: "0",
-        preco: it.vUnCom,
-        descricao: "",
-        categoriaId: "",
-        cst: "40",
-        aliquotaIcms: 0,
-        reducaoBaseIcms: 0,
-        cest: "",
-        codigoBeneficio: "",
-        creditoPresumidoIcms: "",
-        reguladoAnp: false,
-        estoque: 0,
-        controlaEstoque: false,
-      });
-    }
-    await recarregarCatalogo();
+    setErro(null);
+    const r = await importarEntradaXml({
+      chave: nfe.chave || "",
+      numero: nfe.numero ? String(nfe.numero) : undefined,
+      serie: nfe.serie ? String(nfe.serie) : undefined,
+      modelo: nfe.modelo || undefined,
+      fornecedorNome: nfe.emitente.nome || undefined,
+      fornecedorDoc: nfe.emitente.documento || undefined,
+      valorTotal: nfe.valorNota,
+      criarFaltantes: true,
+      itens: nfe.itens.map((it) => ({
+        cEAN: it.cEAN || undefined,
+        xProd: it.xProd,
+        ncm: it.ncm || undefined,
+        uCom: it.uCom || undefined,
+        qCom: it.qCom,
+        vUnCom: it.vUnCom,
+      })),
+    });
     setImportando(false);
-    setImportados(novos);
+    if (r.ok) {
+      setResultado({ criados: r.criados, atualizados: r.atualizados, ignorados: r.ignorados });
+      await recarregarCatalogo();
+    } else if (r.jaImportada) {
+      setJaImportada(true);
+    } else {
+      setErro(r.erro);
+    }
   }
 
   function limpar() {
     setNfe(null);
     setErro(null);
     setArquivo(null);
-    setImportados([]);
+    setResultado(null);
+    setJaImportada(false);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -222,8 +229,8 @@ export default function ImportarPage() {
                   · {novosCount} novo(s), {nfe.itens.length - novosCount} já cadastrado(s)
                 </span>
               </p>
-              <Button onClick={importarNovos} disabled={novosCount === 0 || importando}>
-                {importando ? "Importando…" : `Importar ${novosCount} produto(s) novo(s)`}
+              <Button onClick={darEntrada} disabled={importando || jaImportada}>
+                {importando ? "Lançando…" : jaImportada ? "Já lançada" : "Dar entrada no estoque"}
               </Button>
             </div>
             <Tabela
@@ -233,34 +240,31 @@ export default function ImportarPage() {
             />
           </Card>
 
-          {/* Resultado da importação */}
-          {importados.length > 0 && (
+          {/* Resultado da entrada */}
+          {resultado && (
             <Card className="border-[var(--success)]/30 bg-[var(--success-soft)] p-5">
               <p className="flex items-center gap-2 text-sm font-semibold text-[var(--success)]">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                {importados.length} produto(s) importado(s) para o catálogo
+                Entrada lançada no estoque
               </p>
-              <ul className="mt-2 list-inside list-disc text-sm text-slate-600">
-                {importados.map((it) => (
-                  <li key={it.nItem}>{it.xProd} · NCM {it.ncm || "—"} · {formatBRL(it.vUnCom)}</li>
-                ))}
-              </ul>
+              <p className="mt-1.5 text-sm text-slate-600">
+                {resultado.atualizados} produto(s) atualizado(s) · {resultado.criados} criado(s)
+                {resultado.ignorados > 0 && ` · ${resultado.ignorados} ignorado(s)`}
+              </p>
               <p className="mt-3 text-xs text-[var(--muted)]">
-                Produtos gravados no catálogo da empresa ativa.
+                Produtos sem cadastro foram criados com controle de estoque ativo. Reimportar esta
+                nota não duplica o estoque.
               </p>
             </Card>
           )}
 
-          {/* Próximos passos */}
-          <Card className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold">Gerar nota de entrada / devolução</p>
-              <p className="text-sm text-[var(--muted)]">
-                Cria uma nota a partir desta NF-e (entrada de mercadoria ou devolução ao fornecedor).
+          {jaImportada && (
+            <Card className="border-[var(--warning)]/30 bg-[var(--warning-soft)] p-5">
+              <p className="text-sm font-medium text-[var(--warning)]">
+                Esta nota já teve entrada lançada no estoque — não foi lançada de novo (evita duplicar).
               </p>
-            </div>
-            <Button variante="secondary" disabled>Gerar nota de entrada (em breve)</Button>
-          </Card>
+            </Card>
+          )}
         </>
       )}
     </div>

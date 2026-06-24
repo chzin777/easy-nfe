@@ -28,6 +28,7 @@ import {
   ajustarEstoque,
 } from "./actions";
 import NovoProdutoModal from "./NovoProdutoModal";
+import ExtratoEstoqueModal from "./ExtratoEstoqueModal";
 import ImportarPlanilhaModal from "@/app/ui/ImportarPlanilhaModal";
 import { COLUNAS_PRODUTO, validarLinhaProduto } from "@/lib/produtos-modelo";
 import NcmPicker from "./NcmPicker";
@@ -58,6 +59,7 @@ const formVazio: Form = {
   creditoPresumidoIcms: "",
   reguladoAnp: false,
   estoque: 0,
+  estoqueMinimo: 0,
   controlaEstoque: false,
 };
 
@@ -124,14 +126,19 @@ const COLUNAS_DISPONIVEIS: { chave: string; label: string; fixa?: boolean; col: 
   {
     chave: "estoque", label: "Estoque", col: {
       chave: "estoque", cabecalho: "Estoque", alinhar: "right",
-      render: (p) =>
-        p.controlaEstoque ? (
-          <span className={"font-medium " + (p.estoque <= 0 ? "text-[var(--danger)]" : "")}>
-            {p.estoque.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}
+      render: (p) => {
+        if (!p.controlaEstoque) return <span className="text-slate-300">—</span>;
+        const zerado = p.estoque <= 0;
+        const baixo = !zerado && p.estoqueMinimo > 0 && p.estoque <= p.estoqueMinimo;
+        return (
+          <span className="inline-flex items-center justify-end gap-1.5">
+            <span className={"font-medium " + (zerado ? "text-[var(--danger)]" : baixo ? "text-[var(--warning)]" : "")}>
+              {p.estoque.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}
+            </span>
+            {zerado ? <Badge tom="danger">zerado</Badge> : baixo ? <Badge tom="warning">baixo</Badge> : null}
           </span>
-        ) : (
-          <span className="text-slate-300">—</span>
-        ),
+        );
+      },
     },
   },
   {
@@ -155,6 +162,7 @@ export default function ProdutosPage() {
   const [gerenciarCat, setGerenciarCat] = useState(false);
   const [colunasModal, setColunasModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [extratoId, setExtratoId] = useState<string | null>(null);
   const [form, setForm] = useState<Form>(formVazio);
   const [salvando, setSalvando] = useState(false);
   const [carregando, setCarregando] = useState(true);
@@ -310,19 +318,36 @@ export default function ProdutosPage() {
         </label>
       </Field>
       {form.controlaEstoque && (
-        <Field label="Estoque atual" hint="Altere e clique em Ajustar p/ registrar o movimento">
-          <div className="flex gap-2">
+        <>
+          <Field label="Estoque atual" hint="Altere e clique em Ajustar p/ registrar o movimento">
+            <div className="flex gap-2">
+              <Input
+                inputMode="decimal"
+                value={String(form.estoque).replace(".", ",")}
+                onChange={(e) => set("estoque", Number(e.target.value.replace(",", ".").replace(/[^\d.-]/g, "")) || 0)}
+                placeholder="0"
+              />
+              <Button type="button" variante="secondary" onClick={salvarAjuste} disabled={ajustando || !editId}>
+                {ajustando ? "…" : "Ajustar"}
+              </Button>
+            </div>
+          </Field>
+          <Field label="Estoque mínimo" hint="Alerta quando o saldo chegar nesse nível (0 = sem alerta)">
             <Input
               inputMode="decimal"
-              value={String(form.estoque).replace(".", ",")}
-              onChange={(e) => set("estoque", Number(e.target.value.replace(",", ".").replace(/[^\d.-]/g, "")) || 0)}
+              value={form.estoqueMinimo ? String(form.estoqueMinimo).replace(".", ",") : ""}
+              onChange={(e) => set("estoqueMinimo", Number(e.target.value.replace(",", ".").replace(/[^\d.]/g, "")) || 0)}
               placeholder="0"
             />
-            <Button type="button" variante="secondary" onClick={salvarAjuste} disabled={ajustando || !editId}>
-              {ajustando ? "…" : "Ajustar"}
-            </Button>
-          </div>
-        </Field>
+          </Field>
+          {editId && (
+            <div className="sm:col-span-2">
+              <Button type="button" variante="ghost" onClick={() => setExtratoId(editId)}>
+                Ver extrato de movimentações →
+              </Button>
+            </div>
+          )}
+        </>
       )}
       <Field label="Descrição do produto" className="sm:col-span-2">
         <Textarea value={form.descricao} onChange={(e) => set("descricao", e.target.value)} />
@@ -506,6 +531,15 @@ export default function ProdutosPage() {
           ]}
         />
       </Modal>
+
+      {/* Extrato de movimentações de estoque */}
+      {extratoId && (
+        <ExtratoEstoqueModal
+          produtoId={extratoId}
+          nome={produtos.find((p) => p.id === extratoId)?.nome ?? "Produto"}
+          onFechar={() => setExtratoId(null)}
+        />
+      )}
     </div>
   );
 }

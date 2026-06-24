@@ -25,6 +25,7 @@ export type Produto = {
   reguladoAnp: boolean;
   // Estoque
   estoque: number; // saldo atual
+  estoqueMinimo: number; // alerta quando saldo <= mínimo (0 = sem alerta)
   controlaEstoque: boolean; // opt-in: baixa na emissão de NF-e
 };
 

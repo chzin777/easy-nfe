@@ -664,6 +664,103 @@ export async function cancelarNota(input: CancelarInput): Promise<CancelarResult
   }
 }
 
+// ----------------------------------------------------------------------------
+// Devolução de venda — itens de uma nota autorizada voltam ao estoque.
+// Não cancela a nota; apenas registra o retorno (movimento DEVOLUCAO).
+// ----------------------------------------------------------------------------
+export type DevolucaoItem = { produtoId: string; quantidade: number };
+
+export type ItemDevolvivel = {
+  produtoId: string;
+  nome: string;
+  unidade: string | null;
+  quantidadeVendida: number;
+  jaDevolvida: number;
+  disponivel: number;
+  controlaEstoque: boolean;
+};
+
+// Itens de uma nota com quanto ainda pode ser devolvido (vendido − já devolvido).
+export async function itensDevolviveis(notaId: string): Promise<ItemDevolvivel[]> {
+  const empresaId = await exigirEmpresa();
+  const nota = await prisma.nota.findFirst({ where: { id: notaId, emitenteId: empresaId } });
+  if (!nota) return [];
+  const itens = await prisma.itemNota.findMany({
+    where: { notaId, produtoId: { not: null } },
+    include: { produto: { select: { id: true, nome: true, unidade: true, controlaEstoque: true } } },
+  });
+  // Devoluções já feitas, somadas por produto.
+  const movs = await prisma.movimentoEstoque.findMany({
+    where: { notaId, tipo: "DEVOLUCAO" },
+    select: { produtoId: true, quantidade: true },
+  });
+  const devolvidoPorProd = new Map<string, number>();
+  for (const m of movs) devolvidoPorProd.set(m.produtoId, (devolvidoPorProd.get(m.produtoId) ?? 0) + Number(m.quantidade));
+
+  // Agrega itens por produto (a mesma nota pode ter linhas repetidas).
+  const agreg = new Map<string, ItemDevolvivel>();
+  for (const it of itens) {
+    if (!it.produto) continue;
+    const cur = agreg.get(it.produto.id);
+    const q = Number(it.quantidade);
+    if (cur) cur.quantidadeVendida += q;
+    else
+      agreg.set(it.produto.id, {
+        produtoId: it.produto.id, nome: it.produto.nome, unidade: it.produto.unidade,
+        quantidadeVendida: q, jaDevolvida: 0, disponivel: 0, controlaEstoque: it.produto.controlaEstoque,
+      });
+  }
+  for (const v of agreg.values()) {
+    v.jaDevolvida = devolvidoPorProd.get(v.produtoId) ?? 0;
+    v.disponivel = Math.max(0, v.quantidadeVendida - v.jaDevolvida);
+  }
+  return [...agreg.values()];
+}
+
+export async function registrarDevolucao(
+  notaId: string, itens: DevolucaoItem[], motivo?: string,
+): Promise<{ ok: true; devolvidos: number } | { ok: false; erro: string }> {
+  try {
+    const empresaId = await exigirEmpresa();
+    const nota = await prisma.nota.findFirst({ where: { id: notaId, emitenteId: empresaId } });
+    if (!nota) return { ok: false, erro: "Nota não encontrada." };
+    if (nota.status !== "AUTORIZADA") return { ok: false, erro: "Só notas autorizadas podem ter devolução." };
+
+    const devolviveis = await itensDevolviveis(notaId);
+    const porId = new Map(devolviveis.map((d) => [d.produtoId, d]));
+
+    // Valida quantidades contra o disponível; ignora produtos sem controle.
+    const aplicar: DevolucaoItem[] = [];
+    for (const it of itens) {
+      const d = porId.get(it.produtoId);
+      if (!d || !d.controlaEstoque) continue;
+      const q = Number(it.quantidade);
+      if (!(q > 0)) continue;
+      if (q > d.disponivel + 1e-9) {
+        return { ok: false, erro: `Devolução de "${d.nome}" excede o disponível (${d.disponivel}).` };
+      }
+      aplicar.push({ produtoId: it.produtoId, quantidade: q });
+    }
+    if (!aplicar.length) return { ok: false, erro: "Nenhum item válido para devolução." };
+
+    await prisma.$transaction(async (tx) => {
+      for (const it of aplicar) {
+        const upd = await tx.produto.update({ where: { id: it.produtoId }, data: { estoque: { increment: it.quantidade } } });
+        await tx.movimentoEstoque.create({
+          data: {
+            empresaId, produtoId: it.produtoId, notaId, tipo: "DEVOLUCAO",
+            quantidade: it.quantidade, saldoApos: Number(upd.estoque),
+            motivo: motivo?.trim() || `Devolução NF ${nota.numero}`,
+          },
+        });
+      }
+    });
+    return { ok: true, devolvidos: aplicar.length };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 // XML autorizado (nfeProc) de uma nota, para download. Escopado à empresa ativa.
 export async function obterXmlNota(notaId: string): Promise<{ ok: true; xml: string; nome: string } | { ok: false; erro: string }> {
   try {

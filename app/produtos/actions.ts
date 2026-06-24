@@ -28,6 +28,7 @@ type ProdutoRow = {
   creditoPresumidoIcms: string | null;
   reguladoAnp: boolean;
   estoque: unknown;
+  estoqueMinimo: unknown;
   controlaEstoque: boolean;
 };
 
@@ -54,6 +55,7 @@ function paraUI(p: ProdutoRow): Produto {
     creditoPresumidoIcms: p.creditoPresumidoIcms ?? "",
     reguladoAnp: p.reguladoAnp,
     estoque: p.estoque == null ? 0 : Number(p.estoque),
+    estoqueMinimo: p.estoqueMinimo == null ? 0 : Number(p.estoqueMinimo),
     controlaEstoque: p.controlaEstoque,
   };
 }
@@ -81,6 +83,7 @@ function paraDados(input: ProdutoInput) {
     creditoPresumidoIcms: input.creditoPresumidoIcms || null,
     reguladoAnp: input.reguladoAnp,
     controlaEstoque: input.controlaEstoque,
+    estoqueMinimo: input.estoqueMinimo >= 0 ? input.estoqueMinimo : 0,
   };
 }
 
@@ -214,7 +217,7 @@ export async function ajustarEstoque(
 
 export type MovimentoEstoqueRow = {
   id: string;
-  tipo: "ENTRADA" | "SAIDA" | "AJUSTE";
+  tipo: "ENTRADA" | "SAIDA" | "AJUSTE" | "DEVOLUCAO";
   quantidade: number;
   saldoApos: number;
   motivo: string | null;
@@ -239,6 +242,133 @@ export async function listarMovimentosEstoque(produtoId: string): Promise<Movime
     notaId: m.notaId,
     createdAt: m.createdAt.toISOString(),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Entrada de estoque a partir do XML de uma NF-e de compra/recebida.
+// Casa por GTIN, senão por nome; produto não encontrado é criado (opcional).
+// Idempotente por (empresa, chave): reimportar a mesma nota não duplica.
+// ---------------------------------------------------------------------------
+export type ItemEntradaXml = {
+  cEAN?: string;
+  xProd: string;
+  ncm?: string;
+  uCom?: string;
+  qCom: number;
+  vUnCom: number;
+};
+
+export type EntradaXmlInput = {
+  chave: string;
+  numero?: string;
+  serie?: string;
+  modelo?: string;
+  fornecedorNome?: string;
+  fornecedorDoc?: string;
+  valorTotal?: number;
+  itens: ItemEntradaXml[];
+  criarFaltantes: boolean; // cria produto p/ item sem correspondência no catálogo
+};
+
+export type EntradaXmlResultado =
+  | { ok: true; criados: number; atualizados: number; ignorados: number; entradaId: string }
+  | { ok: false; erro: string; jaImportada?: boolean };
+
+export async function importarEntradaXml(input: EntradaXmlInput): Promise<EntradaXmlResultado> {
+  try {
+    await exigirFeature("importar_xml");
+    const empresaId = await exigirEmpresa();
+
+    const chave = (input.chave ?? "").replace(/\D/g, "");
+    if (chave.length !== 44) return { ok: false, erro: "XML sem chave de acesso válida (44 dígitos)." };
+    if (!input.itens.length) return { ok: false, erro: "A nota não tem itens." };
+
+    // Dedup: mesma nota já dá entrada uma vez só.
+    const existente = await prisma.entradaEstoque.findUnique({
+      where: { empresaId_chave: { empresaId, chave } },
+    });
+    if (existente) {
+      return { ok: false, jaImportada: true, erro: "Esta nota já teve entrada lançada no estoque." };
+    }
+
+    // Catálogo atual p/ casar itens (GTIN tem prioridade, senão nome).
+    const catalogo = await prisma.produto.findMany({
+      where: { empresaId },
+      select: { id: true, nome: true, codigoBarras: true },
+    });
+    const porGtin = new Map(catalogo.filter((p) => p.codigoBarras).map((p) => [p.codigoBarras!, p.id]));
+    const porNome = new Map(catalogo.map((p) => [p.nome.toLowerCase(), p.id]));
+
+    let criados = 0, atualizados = 0, ignorados = 0;
+
+    const entrada = await prisma.$transaction(async (tx) => {
+      const ent = await tx.entradaEstoque.create({
+        data: {
+          empresaId, chave,
+          numero: input.numero || null,
+          serie: input.serie || null,
+          modelo: input.modelo || null,
+          fornecedorNome: input.fornecedorNome || null,
+          fornecedorDoc: input.fornecedorDoc || null,
+          valorTotal: input.valorTotal && input.valorTotal > 0 ? input.valorTotal : null,
+        },
+      });
+
+      for (const it of input.itens) {
+        const qtd = Number(it.qCom);
+        if (!(qtd > 0)) { ignorados++; continue; }
+
+        let produtoId = (it.cEAN && porGtin.get(it.cEAN)) || porNome.get(it.xProd.toLowerCase());
+
+        if (!produtoId) {
+          if (!input.criarFaltantes) { ignorados++; continue; }
+          const novo = await tx.produto.create({
+            data: {
+              empresaId,
+              codigoBarras: it.cEAN || null,
+              nome: it.xProd,
+              unidade: it.uCom || "UN",
+              ncm: (it.ncm || "").replace(/\D/g, ""),
+              origem: "0",
+              preco: it.vUnCom > 0 ? it.vUnCom : 0,
+              controlaEstoque: true,
+              estoque: 0,
+            },
+          });
+          produtoId = novo.id;
+          porNome.set(it.xProd.toLowerCase(), novo.id);
+          if (it.cEAN) porGtin.set(it.cEAN, novo.id);
+          criados++;
+        } else {
+          atualizados++;
+        }
+
+        // Entrada habilita o controle de estoque do produto e soma a quantidade.
+        const upd = await tx.produto.update({
+          where: { id: produtoId },
+          data: { controlaEstoque: true, estoque: { increment: qtd } },
+        });
+        await tx.movimentoEstoque.create({
+          data: {
+            empresaId, produtoId, entradaId: ent.id, tipo: "ENTRADA",
+            quantidade: qtd, saldoApos: Number(upd.estoque),
+            custoUnitario: it.vUnCom > 0 ? it.vUnCom : null,
+            motivo: `Entrada NF ${input.numero ?? ""}`.trim(),
+          },
+        });
+      }
+      return ent;
+    });
+
+    return { ok: true, criados, atualizados, ignorados, entradaId: entrada.id };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // corrida na unique (empresa, chave)
+    if (/Unique constraint|P2002/i.test(msg)) {
+      return { ok: false, jaImportada: true, erro: "Esta nota já teve entrada lançada no estoque." };
+    }
+    return { ok: false, erro: msg };
+  }
 }
 
 // codigo = só dígitos. completo = true quando tem 8 dígitos (válido p/ NF-e);

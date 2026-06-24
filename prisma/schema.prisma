@@ -298,6 +298,7 @@ model Emitente {
   acessos       AcessoEmpresa[]
   whatsapp      ConfigWhatsApp?
   movimentosEstoque MovimentoEstoque[]
+  entradasEstoque   EntradaEstoque[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -368,6 +369,7 @@ model Produto {
 
   // Estoque. controlaEstoque = opt-in; só produtos marcados têm baixa na emissão.
   estoque             Decimal  @default(0) @db.Decimal(15, 4)
+  estoqueMinimo       Decimal  @default(0) @db.Decimal(15, 4) // alerta quando saldo <= mínimo
   controlaEstoque     Boolean  @default(false)
 
   itens               ItemNota[]
@@ -386,9 +388,10 @@ model Produto {
 // quantidade é sempre positiva; o sinal vem do tipo. saldoApos = saldo após.
 // ----------------------------------------------------------------------------
 enum TipoMovimentoEstoque {
-  ENTRADA // compra/ajuste positivo
-  SAIDA   // emissão de NF-e
-  AJUSTE  // ajuste manual (pode ser + ou -, ver quantidade vs saldoApos)
+  ENTRADA   // compra/entrada por XML/ajuste positivo
+  SAIDA     // emissão de NF-e
+  AJUSTE    // ajuste manual (pode ser + ou -, ver quantidade vs saldoApos)
+  DEVOLUCAO // devolução de venda — itens voltam ao estoque
 }
 
 model MovimentoEstoque {
@@ -403,16 +406,46 @@ model MovimentoEstoque {
   tipo       TipoMovimentoEstoque
   quantidade Decimal  @db.Decimal(15, 4) // delta absoluto (sempre > 0)
   saldoApos  Decimal  @db.Decimal(15, 4)
+  custoUnitario Decimal? @db.Decimal(15, 10) // custo de entrada (p/ custo médio futuro)
   motivo     String?
 
   notaId     String?
   nota       Nota?    @relation(fields: [notaId], references: [id], onDelete: SetNull)
 
+  entradaId  String?
+  entrada    EntradaEstoque? @relation(fields: [entradaId], references: [id], onDelete: SetNull)
+
   createdAt  DateTime @default(now())
 
   @@index([empresaId, produtoId])
   @@index([notaId])
+  @@index([entradaId])
   @@map("movimentos_estoque")
+}
+
+// Entrada de mercadoria a partir do XML de uma NF-e de compra/recebida.
+// Única por (empresa, chave) — reimportar a mesma nota não duplica estoque.
+model EntradaEstoque {
+  id             String   @id @default(uuid())
+
+  empresaId      String
+  empresa        Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  chave          String   // chave de acesso da NF-e de origem
+  numero         String?
+  serie          String?
+  modelo         String?
+  fornecedorNome String?
+  fornecedorDoc  String?
+  valorTotal     Decimal? @db.Decimal(15, 2)
+
+  movimentos     MovimentoEstoque[]
+
+  createdAt      DateTime @default(now())
+
+  @@unique([empresaId, chave])
+  @@index([empresaId])
+  @@map("entradas_estoque")
 }
 
 // ----------------------------------------------------------------------------

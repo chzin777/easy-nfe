@@ -24,6 +24,7 @@ import { baixarDanfePdf } from "@/app/ui/danfePdf";
 import { STATUS_NOTA, TIPOS_NOTA, rotulo, rotuloTipoCurto } from "@/lib/mock-data";
 import type { StatusNota } from "@/lib/types";
 import { listarNotas, cancelarNota, obterXmlNota, type NotaCompleta } from "./actions";
+import DevolucaoModal from "./DevolucaoModal";
 
 const tomStatus: Record<StatusNota, "success" | "danger" | "warning" | "neutral" | "primary"> = {
   autorizada: "success",
@@ -44,6 +45,7 @@ export default function NotasEmitidasPage() {
   const [evento, setEvento] = useState<AcaoEvento | null>(null);
   const [justificativa, setJustificativa] = useState("");
   const [visualizar, setVisualizar] = useState<NotaCompleta | null>(null);
+  const [devolver, setDevolver] = useState<NotaCompleta | null>(null);
   const [processando, setProcessando] = useState(false);
   const [erroEvento, setErroEvento] = useState<string | null>(null);
   const [gerandoPdf, setGerandoPdf] = useState(false);
@@ -245,6 +247,13 @@ export default function NotasEmitidasPage() {
             CC-e
           </Button>
           <Button
+            variante="secondary"
+            disabled={n.status !== "autorizada"}
+            onClick={(e) => { e.stopPropagation(); setDevolver(n); }}
+          >
+            Devolução
+          </Button>
+          <Button
             variante="dangerSoft"
             disabled={n.status !== "autorizada"}
             onClick={(e) => { e.stopPropagation(); abrirEvento(n, "cancelamento"); }}
@@ -398,6 +407,15 @@ export default function NotasEmitidasPage() {
           </div>
         )}
       </Modal>
+
+      {devolver && (
+        <DevolucaoModal
+          notaId={devolver.id}
+          numero={devolver.numero}
+          onFechar={() => setDevolver(null)}
+          onConcluido={() => { setDevolver(null); setToast("Devolução registrada — itens devolvidos ao estoque."); }}
+        />
+      )}
     </div>
   );
 }
