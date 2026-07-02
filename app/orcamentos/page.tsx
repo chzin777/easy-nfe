@@ -9,8 +9,10 @@ import type { Cliente, Produto, Transportadora } from "@/lib/types";
 import { listarClientes } from "@/app/clientes/actions";
 import { listarProdutos } from "@/app/produtos/actions";
 import { listarTransportadoras } from "@/app/transportadoras/actions";
-import { obterCasasDecimaisQtd } from "@/app/configuracoes/actions";
+import { obterCasasDecimaisQtd, obterEmpresaAtiva, type EmpresaDados } from "@/app/configuracoes/actions";
+import { baixarElementoPdf } from "@/app/ui/danfePdf";
 import OrcamentoModal from "./OrcamentoModal";
+import OrcamentoPdf from "./OrcamentoPdf";
 import Kanban from "./Kanban";
 import {
   listarOrcamentos, moverStatus, cancelarOrcamento, marcarPerdido, excluirOrcamento, converterEmNota,
@@ -33,6 +35,7 @@ export default function OrcamentosPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [transportadoras, setTransportadoras] = useState<Transportadora[]>([]);
   const [casas, setCasas] = useState(2);
+  const [empresa, setEmpresa] = useState<EmpresaDados | null>(null);
   const [view, setView] = useState<"lista" | "kanban">("lista");
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<string>("");
@@ -47,8 +50,8 @@ export default function OrcamentosPage() {
   }
   useEffect(() => {
     (async () => {
-      const [o, c, p, t, cd] = await Promise.all([listarOrcamentos(), listarClientes(), listarProdutos(), listarTransportadoras(), obterCasasDecimaisQtd()]);
-      setOrcamentos(o); setClientes(c); setProdutos(p); setTransportadoras(t); setCasas(cd);
+      const [o, c, p, t, cd, emp] = await Promise.all([listarOrcamentos(), listarClientes(), listarProdutos(), listarTransportadoras(), obterCasasDecimaisQtd(), obterEmpresaAtiva()]);
+      setOrcamentos(o); setClientes(c); setProdutos(p); setTransportadoras(t); setCasas(cd); setEmpresa(emp);
     })();
   }, []);
 
@@ -158,6 +161,7 @@ export default function OrcamentosPage() {
       {detalhe && (
         <DetalheOrcamento
           orc={detalhe}
+          empresa={empresa}
           onFechar={() => setDetalhe(null)}
           onEditar={() => { setEditar(detalhe); setDetalhe(null); }}
           onMudou={() => { recarregar(); setDetalhe(null); }}
@@ -179,14 +183,16 @@ function Kpi({ titulo, valor }: { titulo: string; valor: string }) {
 // ---- Detalhe + ações -------------------------------------------------------
 
 function DetalheOrcamento({
-  orc, onFechar, onEditar, onMudou,
+  orc, empresa, onFechar, onEditar, onMudou,
 }: {
   orc: OrcamentoCompleto;
+  empresa: EmpresaDados | null;
   onFechar: () => void;
   onEditar: () => void;
   onMudou: () => void;
 }) {
   const [proc, setProc] = useState(false);
+  const [gerandoPdf, setGerandoPdf] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [dialog, setDialog] = useState<null | "fechar" | "cancelar" | "perdido" | "excluir">(null);
   const [motivo, setMotivo] = useState("");
@@ -205,10 +211,21 @@ function DetalheOrcamento({
     setProc(true); setDialog(null);
     try { await fn(); onMudou(); } catch (e) { setMsg({ tipo: "erro", texto: e instanceof Error ? e.message : String(e) }); setProc(false); }
   }
+  async function salvarPdf() {
+    setGerandoPdf(true); setMsg(null);
+    try {
+      await baixarElementoPdf(`orc-pdf-${orc.id}`, `orcamento-${orc.numero}`);
+    } catch (e) {
+      setMsg({ tipo: "erro", texto: e instanceof Error ? e.message : String(e) });
+    } finally { setGerandoPdf(false); }
+  }
 
   const rodape = (
     <div className="flex w-full flex-wrap items-center justify-between gap-2">
       <div className="flex flex-wrap gap-2">
+        <Button variante="secondary" onClick={salvarPdf} disabled={proc || gerandoPdf}>
+          <IconPdf /> {gerandoPdf ? "Gerando…" : "Salvar PDF"}
+        </Button>
         {!terminal && (
           <Button variante="secondary" onClick={onEditar} disabled={proc}>
             <IconLapis /> Editar
@@ -358,6 +375,9 @@ function DetalheOrcamento({
         )}
       </Modal>
     )}
+
+    {/* Layout imprimível (fora da tela) capturado pelo botão Salvar PDF */}
+    <OrcamentoPdf id={`orc-pdf-${orc.id}`} orc={orc} empresa={empresa} />
     </>
   );
 }
@@ -379,6 +399,9 @@ function IconLapis() {
 }
 function IconLixeira() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="-ml-0.5"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>;
+}
+function IconPdf() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="-ml-0.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M9 15h6" /><path d="M9 18h6" /></svg>;
 }
 function IconCheck() {
   return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>;

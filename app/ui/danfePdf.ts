@@ -1,8 +1,14 @@
 // Gera o PDF do DANFE a partir de um elemento já renderizado no DOM e baixa o
 // arquivo. Compartilhado entre a lista de notas e o fluxo de emissão.
 export async function baixarDanfePdf(elId: string, numero: number | string): Promise<void> {
+  await baixarElementoPdf(elId, `DANFE-${numero}`);
+}
+
+// Gera um PDF (A4, multipágina) a partir de um elemento já renderizado no DOM e
+// baixa o arquivo com o nome informado. Base reaproveitada pelo DANFE e outros.
+export async function baixarElementoPdf(elId: string, nomeArquivo: string): Promise<void> {
   const el = document.getElementById(elId);
-  if (!el) throw new Error("DANFE não encontrado para gerar o PDF.");
+  if (!el) throw new Error("Elemento não encontrado para gerar o PDF.");
 
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
     import("html2canvas-pro"),
@@ -39,5 +45,5 @@ export async function baixarDanfePdf(elId: string, numero: number | string): Pro
       if (sy < canvas.height) pdf.addPage();
     }
   }
-  pdf.save(`DANFE-${numero}.pdf`);
+  pdf.save(`${nomeArquivo}.pdf`);
 }
