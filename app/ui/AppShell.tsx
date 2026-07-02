@@ -15,7 +15,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const publica =
     pathname === "/" || pathname === "/login" || pathname === "/cadastro" ||
-    pathname === "/termos" || pathname === "/privacidade" || pathname.startsWith("/pagar");
+    pathname === "/termos" || pathname === "/privacidade" || pathname.startsWith("/pagar") ||
+    pathname === "/recuperar-senha" || pathname === "/redefinir-senha";
   const [estado, setEstado] = useState<EstadoLicenca | null>(null);
   const [menuAberto, setMenuAberto] = useState(false);
 
