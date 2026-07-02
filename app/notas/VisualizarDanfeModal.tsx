@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Modal from "@/app/ui/Modal";
 import Danfe from "@/app/ui/Danfe";
 import DanfeNFCe from "@/app/ui/DanfeNFCe";
@@ -15,11 +15,15 @@ export default function VisualizarDanfeModal({
   onFechar,
   banner,
   onEmitirOutra,
+  autoEnviarEmail = false,
 }: {
   nota: NotaCompleta;
   onFechar: () => void;
   banner?: { cStat: string | null; nProt: string | null };
   onEmitirOutra?: () => void;
+  // Quando true (fluxo de emissão + envio automático ligado), dispara o envio do
+  // e-mail assim que o DANFE renderiza — usando o MESMO PDF do site.
+  autoEnviarEmail?: boolean;
 }) {
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -51,6 +55,18 @@ export default function VisualizarDanfeModal({
       setEnviando(false);
     }
   }
+
+  // Envio automático ao abrir (fluxo de emissão): dispara uma única vez, após o
+  // DANFE existir no DOM, reaproveitando o mesmo PDF gerado no navegador.
+  const autoFeito = useRef(false);
+  useEffect(() => {
+    if (!autoEnviarEmail || autoFeito.current) return;
+    autoFeito.current = true;
+    // pequeno atraso p/ garantir que o elemento do DANFE já renderizou.
+    const t = setTimeout(() => { void enviarEmail(); }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoEnviarEmail]);
 
   async function pdf() {
     setGerando(true); setErro(null);

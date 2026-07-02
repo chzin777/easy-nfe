@@ -15,7 +15,7 @@ import { decriptar } from "@/lib/crypto";
 import { estadoLicencaUsuario } from "@/lib/licenca";
 import { exigirFeature } from "@/lib/permissoes";
 import { dispararNotaWhatsApp } from "@/lib/whatsapp";
-import { dispararNotaEmail, enviarNotaEmail, carregarNotaParaEmail } from "@/lib/email-nota";
+import { enviarNotaEmail, carregarNotaParaEmail, preferenciaAutoEmailNota } from "@/lib/email-nota";
 import { after } from "next/server";
 
 // Carrega o certificado A1 (PFX+senha) armazenado criptografado na empresa.
@@ -411,8 +411,8 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       if (r.ok) {
         const id = notaId;
         after(() => dispararNotaWhatsApp(empresa.id, id));
-        // Envio automático por e-mail (best-effort; anexa só o XML no automático).
-        after(() => dispararNotaEmail(empresa.id, id));
+        // Envio automático por e-mail é disparado no CLIENTE após renderizar o
+        // DANFE (usa o MESMO PDF do site). Ver preferenciaAutoEmail + o modal.
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -791,6 +791,17 @@ export async function enviarNotaPorEmail(
     const msg = e instanceof Error ? e.message : String(e);
     if (/RESEND_API_KEY/.test(msg)) return { ok: false, erro: "Envio de e-mail não configurado no servidor." };
     return { ok: false, erro: msg };
+  }
+}
+
+// Preferência de envio automático por e-mail (config da empresa + e-mail do
+// cliente). O cliente consulta após emitir p/ decidir se dispara o envio.
+export async function envioAutoEmail(notaId: string): Promise<{ ativo: boolean; para: string | null }> {
+  try {
+    const empresaId = await exigirEmpresa();
+    return await preferenciaAutoEmailNota(empresaId, notaId);
+  } catch {
+    return { ativo: false, para: null };
   }
 }
 

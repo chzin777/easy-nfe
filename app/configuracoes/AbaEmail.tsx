@@ -75,8 +75,8 @@ export default function AbaEmail() {
             <span className="text-sm font-medium">Anexar o XML autorizado</span>
           </label>
           <p className="text-xs text-[var(--muted)]">
-            Usa o e-mail cadastrado no cliente. No envio automático, o DANFE em PDF não é anexado (só no envio
-            manual pela tela da nota); o e-mail já leva número, valor e chave de acesso.
+            Usa o e-mail cadastrado no cliente. O DANFE em PDF anexado é o mesmo do site (gerado ao emitir).
+            Sem e-mail no cliente, a nota não é enviada automaticamente.
           </p>
         </div>
       </section>

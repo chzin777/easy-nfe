@@ -25,7 +25,7 @@ function calcDesc(base: number, tipo: DescontoTipo, valor: number): number {
   const v = tipo === "percent" ? (base * valor) / 100 : valor;
   return Math.min(Math.max(v, 0), base);
 }
-import { emitirNota, obterNota, type EmitirInput, type EmitirResultado, type NotaCompleta, type DescontoTipo } from "../actions";
+import { emitirNota, obterNota, envioAutoEmail, type EmitirInput, type EmitirResultado, type NotaCompleta, type DescontoTipo } from "../actions";
 import VisualizarDanfeModal from "../VisualizarDanfeModal";
 import { explicarRejeicao } from "@/lib/nfe/mensagens";
 import { listarClientes } from "@/app/clientes/actions";
@@ -75,6 +75,7 @@ export default function NovaNotaPage() {
   const [resultado, setResultado] = useState<EmitirResultado | null>(null);
   // Nota recém-autorizada: abre o DANFE p/ baixar PDF/XML logo após emitir.
   const [notaEmitida, setNotaEmitida] = useState<NotaCompleta | null>(null);
+  const [autoEnviarEmail, setAutoEnviarEmail] = useState(false);
   const [corrigirCliente, setCorrigirCliente] = useState<Cliente | null>(null);
   const [corrigirProduto, setCorrigirProduto] = useState<Produto | null>(null);
   // Muda a key do Stepper p/ remontá-lo ao recomeçar/voltar a um passo.
@@ -207,6 +208,10 @@ export default function NovaNotaPage() {
     if (r.ok && r.autorizada && r.notaId) {
       const nota = await obterNota(r.notaId);
       if (nota) setNotaEmitida(nota);
+      // Envio automático por e-mail (se ligado + cliente tem e-mail): o modal
+      // dispara usando o mesmo PDF do site.
+      const pref = await envioAutoEmail(r.notaId);
+      setAutoEnviarEmail(pref.ativo);
     }
     setEmitindo(false);
     setResultado(r);
@@ -215,6 +220,7 @@ export default function NovaNotaPage() {
   // Fecha a visualização do DANFE e recomeça uma nova emissão do zero.
   function novaEmissao() {
     setNotaEmitida(null);
+    setAutoEnviarEmail(false);
     setResultado(null);
     resetarFormulario();
   }
@@ -683,6 +689,7 @@ export default function NovaNotaPage() {
           banner={{ cStat: resultado.cStat, nProt: resultado.nProt }}
           onFechar={novaEmissao}
           onEmitirOutra={novaEmissao}
+          autoEnviarEmail={autoEnviarEmail}
         />
       )}
 
