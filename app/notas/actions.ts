@@ -15,6 +15,7 @@ import { decriptar } from "@/lib/crypto";
 import { estadoLicencaUsuario } from "@/lib/licenca";
 import { exigirFeature } from "@/lib/permissoes";
 import { dispararNotaWhatsApp } from "@/lib/whatsapp";
+import { dispararNotaEmail, enviarNotaEmail, carregarNotaParaEmail } from "@/lib/email-nota";
 import { after } from "next/server";
 
 // Carrega o certificado A1 (PFX+senha) armazenado criptografado na empresa.
@@ -410,6 +411,8 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       if (r.ok) {
         const id = notaId;
         after(() => dispararNotaWhatsApp(empresa.id, id));
+        // Envio automático por e-mail (best-effort; anexa só o XML no automático).
+        after(() => dispararNotaEmail(empresa.id, id));
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -758,6 +761,36 @@ export async function registrarDevolucao(
     return { ok: true, devolvidos: aplicar.length };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Envio da NF-e por e-mail ao cliente (manual, pela tela do DANFE). O DANFE em
+// PDF é gerado no navegador e chega aqui como base64; o XML é anexado do banco.
+// ----------------------------------------------------------------------------
+export type EnviarEmailResultado = { ok: true; para: string } | { ok: false; erro: string };
+
+export async function enviarNotaPorEmail(
+  notaId: string,
+  opts: { pdfBase64?: string | null; paraOverride?: string | null } = {},
+): Promise<EnviarEmailResultado> {
+  try {
+    const empresaId = await exigirEmpresa();
+    const nota = await carregarNotaParaEmail(empresaId, notaId);
+    if (!nota) return { ok: false, erro: "Nota não encontrada." };
+
+    const para = (opts.paraOverride?.trim() || nota.cliente.email?.trim() || "");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(para)) {
+      return { ok: false, erro: "Informe um e-mail válido — o cliente não tem e-mail cadastrado." };
+    }
+
+    const cfg = await prisma.configEmailNota.findUnique({ where: { empresaId } });
+    await enviarNotaEmail({ nota, cfg, para, pdfBase64: opts.pdfBase64 ?? undefined });
+    return { ok: true, para };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/RESEND_API_KEY/.test(msg)) return { ok: false, erro: "Envio de e-mail não configurado no servidor." };
+    return { ok: false, erro: msg };
   }
 }
 

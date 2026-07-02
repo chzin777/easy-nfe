@@ -7,6 +7,20 @@ export async function baixarDanfePdf(elId: string, numero: number | string): Pro
 // Gera um PDF (A4, multipágina) a partir de um elemento já renderizado no DOM e
 // baixa o arquivo com o nome informado. Base reaproveitada pelo DANFE e outros.
 export async function baixarElementoPdf(elId: string, nomeArquivo: string): Promise<void> {
+  const pdf = await montarPdf(elId);
+  pdf.save(`${nomeArquivo}.pdf`);
+}
+
+// Gera o PDF do elemento e devolve como base64 (sem prefixo data:) — usado para
+// anexar o DANFE em e-mails sem baixar o arquivo.
+export async function gerarElementoPdfBase64(elId: string): Promise<string> {
+  const pdf = await montarPdf(elId);
+  const dataUri = pdf.output("datauristring"); // "data:application/pdf;...;base64,XXXX"
+  return dataUri.split(",")[1] ?? "";
+}
+
+// Monta o documento jsPDF (A4, multipágina) a partir de um elemento do DOM.
+async function montarPdf(elId: string) {
   const el = document.getElementById(elId);
   if (!el) throw new Error("Elemento não encontrado para gerar o PDF.");
 
@@ -45,5 +59,5 @@ export async function baixarElementoPdf(elId: string, nomeArquivo: string): Prom
       if (sy < canvas.height) pdf.addPage();
     }
   }
-  pdf.save(`${nomeArquivo}.pdf`);
+  return pdf;
 }

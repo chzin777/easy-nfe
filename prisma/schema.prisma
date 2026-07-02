@@ -78,15 +78,33 @@ model User {
   // por usuário (não por navegador) — não reaparece em outro dispositivo.
   toursVistos String[] @default([])
 
-  empresas Emitente[] // empresas criadas por este usuário (dono original)
-  acessos  AcessoEmpresa[]
-  licenca  Licenca?
-  faturas  Fatura[]
+  empresas     Emitente[] // empresas criadas por este usuário (dono original)
+  acessos      AcessoEmpresa[]
+  licenca      Licenca?
+  faturas      Fatura[]
+  redefinicoes RedefinicaoSenha[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("usuarios")
+}
+
+// ----------------------------------------------------------------------------
+// Redefinição de senha ("Esqueceu a senha?"). Guarda apenas o HASH do token
+// (SHA-256) — o valor bruto vai só no link do e-mail. Expira e é uso único.
+// ----------------------------------------------------------------------------
+model RedefinicaoSenha {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiraEm  DateTime
+  usadoEm   DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("redefinicoes_senha")
 }
 
 // ----------------------------------------------------------------------------
@@ -153,6 +171,11 @@ model Licenca {
   status     StatusLicenca @default(TRIAL)
   inicioEm   DateTime      @default(now())
   validadeEm DateTime?
+
+  // Desconto especial concedido a este usuário (aplicado nas faturas geradas do
+  // plano). "valor" = R$ fixo por fatura; "percent" = % sobre o preço do plano.
+  descontoTipo  String  @default("valor") // "valor" | "percent"
+  descontoValor Decimal @default(0) @db.Decimal(10, 2)
 
   // Assinatura recorrente no cartão (Asaas Subscriptions)
   asaasSubscriptionId String?
@@ -318,6 +341,7 @@ model Emitente {
   categorias        Categoria[]
   acessos           AcessoEmpresa[]
   whatsapp          ConfigWhatsApp?
+  emailNota         ConfigEmailNota?
   movimentosEstoque MovimentoEstoque[]
   entradasEstoque   EntradaEstoque[]
 
@@ -835,6 +859,29 @@ model ConfigWhatsApp {
   updatedAt DateTime @updatedAt
 
   @@map("config_whatsapp")
+}
+
+// ----------------------------------------------------------------------------
+// Envio da NF-e por E-MAIL ao cliente (via Resend). Preferências por empresa.
+// O assunto/corpo são editáveis (placeholders {cliente} {numero} {chave}
+// {empresa} {valor} {serie}); null = usa o padrão do sistema. O DANFE (PDF) é
+// anexado no envio manual (gerado no navegador) e o XML sempre que disponível.
+// ----------------------------------------------------------------------------
+model ConfigEmailNota {
+  id String @id @default(uuid())
+
+  empresaId String   @unique
+  empresa   Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  ativaEmissao Boolean @default(false) // envia automaticamente ao autorizar a nota
+  enviarXml    Boolean @default(true) // anexa o XML autorizado
+  assunto      String? // assunto; null = padrão
+  corpo        String? @db.Text // corpo (texto editável); null = padrão
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("config_email_nota")
 }
 
 // ----------------------------------------------------------------------------

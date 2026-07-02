@@ -21,6 +21,7 @@ import LightningLoader from "@/app/ui/LightningLoader";
 import { EnderecoFields } from "@/app/ui/PessoaFields";
 import NovaEmpresaModal from "./NovaEmpresaModal";
 import AbaWhatsApp from "./AbaWhatsApp";
+import AbaEmail from "./AbaEmail";
 import {
   listarEmpresas,
   obterEmpresaAtiva,
@@ -176,6 +177,7 @@ export default function ConfiguracoesPage() {
                 { id: "cobranca", label: "Cobrança", content: <AbaCobranca /> },
                 { id: "equipe", label: "Equipe", content: <AbaEquipe /> },
                 { id: "whatsapp", label: "WhatsApp", content: <AbaWhatsApp /> },
+                { id: "email", label: "E-mail", content: <AbaEmail /> },
                 { id: "padroes", label: "Padrões de emissão", content: <AbaPadroes form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
                 { id: "amb", label: "Ambiente & numeração", content: <AbaAmbiente form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
               ]}

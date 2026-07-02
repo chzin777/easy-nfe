@@ -50,6 +50,12 @@ export default function LoginPage() {
               <Input name="senha" type="password" placeholder="••••••••" autoComplete="current-password" required value={senha} onChange={(e) => setSenha(e.target.value)} />
             </Field>
 
+            <div className="-mt-1 text-right">
+              <Link href="/recuperar-senha" className="text-sm font-medium text-[var(--primary)] hover:underline">
+                Esqueceu a senha?
+              </Link>
+            </div>
+
             {erro && (
               <p className="flex items-center gap-2 rounded-lg bg-[var(--danger-soft,#fee2e2)] px-3 py-2 text-sm font-medium text-[var(--danger)]">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" /></svg>

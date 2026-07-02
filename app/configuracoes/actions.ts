@@ -23,6 +23,7 @@ import {
   desconectarSessao,
   type WhatsAppStatus,
 } from "@/lib/whatsapp";
+import { ASSUNTO_EMAIL_PADRAO, CORPO_EMAIL_PADRAO } from "@/lib/email-nota";
 
 const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
@@ -736,6 +737,60 @@ export async function desconectarWhatsApp(): Promise<{ ok: true } | { ok: false;
     await prisma.configWhatsApp.updateMany({
       where: { empresaId },
       data: { conectado: false, telefone: null },
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ----------------------------------------------------------------------------
+// E-mail — envio da NF-e ao cliente (via Resend, pelo Easy-NFe). Assunto/corpo
+// editáveis por empresa; envio automático opcional ao autorizar a nota.
+// ----------------------------------------------------------------------------
+
+export type ConfigEmailNotaView = {
+  ativaEmissao: boolean;
+  enviarXml: boolean;
+  assunto: string;
+  corpo: string;
+  assuntoPadrao: string;
+  corpoPadrao: string;
+  emailConfigurado: boolean; // RESEND_API_KEY presente no servidor
+};
+
+export async function obterConfigEmailNota(): Promise<ConfigEmailNotaView> {
+  const empresaId = await exigirEmpresa();
+  const cfg = await prisma.configEmailNota.findUnique({ where: { empresaId } });
+  return {
+    ativaEmissao: cfg?.ativaEmissao ?? false,
+    enviarXml: cfg?.enviarXml ?? true,
+    assunto: cfg?.assunto ?? "",
+    corpo: cfg?.corpo ?? "",
+    assuntoPadrao: ASSUNTO_EMAIL_PADRAO,
+    corpoPadrao: CORPO_EMAIL_PADRAO,
+    emailConfigurado: Boolean(process.env.RESEND_API_KEY),
+  };
+}
+
+export async function salvarConfigEmailNota(input: {
+  ativaEmissao: boolean;
+  enviarXml: boolean;
+  assunto: string;
+  corpo: string;
+}): Promise<{ ok: true } | { ok: false; erro: string }> {
+  try {
+    const { uid, role } = await exigirSessao();
+    const empresaId = await exigirEmpresa();
+    if (!(await ehDono(uid, role, empresaId))) {
+      return { ok: false, erro: "Apenas o dono da empresa pode configurar o e-mail." };
+    }
+    const assunto = input.assunto.trim() || null;
+    const corpo = input.corpo.trim() || null;
+    await prisma.configEmailNota.upsert({
+      where: { empresaId },
+      update: { ativaEmissao: input.ativaEmissao, enviarXml: input.enviarXml, assunto, corpo },
+      create: { empresaId, ativaEmissao: input.ativaEmissao, enviarXml: input.enviarXml, assunto, corpo },
     });
     return { ok: true };
   } catch (e) {

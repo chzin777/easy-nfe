@@ -1,9 +1,20 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { exigirAdmin, exigirAdminMaster } from "@/lib/admin";
 import { hashSenha, lerSessaoCompleta } from "@/lib/auth";
 import { codigoMunicipio } from "@/lib/nfe/municipios";
+import { enviarEmail, htmlCobranca } from "@/lib/email";
+import { baseUrlServidor } from "@/lib/base-url";
+import { logoBase64, LOGO_CID } from "@/lib/logo-email";
+
+// Preço da fatura após o desconto especial da licença. tipo: "percent" | "valor".
+function precoComDesconto(preco: number, tipo: string, valor: number): number {
+  if (!valor || valor <= 0) return preco;
+  const d = tipo === "percent" ? (preco * valor) / 100 : valor;
+  return Math.max(0, Math.round((preco - d) * 100) / 100);
+}
 import {
   statusConfigAsaas,
   salvarConfigAsaas as salvarConfigAsaasStore,
@@ -58,7 +69,7 @@ export type UsuarioDetalhe = {
   cpfCnpj: string | null;
   telefone: string | null;
   criadoEm: string;
-  licenca: { planoId: string | null; plano: string | null; status: string; validadeEm: string | null } | null;
+  licenca: { planoId: string | null; plano: string | null; status: string; validadeEm: string | null; descontoTipo: string; descontoValor: number } | null;
   empresas: { id: string; razaoSocial: string; cnpj: string; papel: string }[];
   faturas: { id: string; planoNome: string; competencia: string; valor: number; vencimento: string; status: string; pagaEm: string | null; metodo: string | null; bankSlipUrl: string | null; linhaDigitavel: string | null; invoiceUrl: string | null }[];
 };
@@ -89,6 +100,8 @@ export async function detalheUsuario(userId: string): Promise<UsuarioDetalhe | n
           plano: u.licenca.plano?.nome ?? null,
           status: u.licenca.status,
           validadeEm: u.licenca.validadeEm?.toISOString() ?? null,
+          descontoTipo: u.licenca.descontoTipo,
+          descontoValor: Number(u.licenca.descontoValor),
         }
       : null,
     empresas: u.acessos.map((a) => ({
@@ -631,17 +644,23 @@ export async function definirLicenca(input: {
   planoId: string | null;
   status: "TRIAL" | "ATIVA" | "EXPIRADA" | "SUSPENSA" | "CANCELADA";
   validadeEm: string | null; // ISO date (yyyy-mm-dd) ou null
+  descontoTipo?: "valor" | "percent";
+  descontoValor?: number;
 }): Promise<Resultado> {
   try {
     await exigirAdmin();
     const validade = input.validadeEm ? new Date(input.validadeEm) : null;
+    const descontoTipo = input.descontoTipo ?? "valor";
+    const descontoValor = Math.max(0, input.descontoValor ?? 0);
     await prisma.licenca.upsert({
       where: { userId: input.userId },
-      update: { planoId: input.planoId, status: input.status, validadeEm: validade },
-      create: { userId: input.userId, planoId: input.planoId, status: input.status, validadeEm: validade },
+      update: { planoId: input.planoId, status: input.status, validadeEm: validade, descontoTipo, descontoValor },
+      create: { userId: input.userId, planoId: input.planoId, status: input.status, validadeEm: validade, descontoTipo, descontoValor },
     });
-    // Gera as faturas dos períodos cobertos pelo plano/validade.
+    // Gera as faturas dos períodos cobertos pelo plano/validade (já com desconto).
     await gerarFaturasInterno(input.userId);
+    // Reflete o desconto nas faturas ainda EM ABERTO (não mexe em pagas/canceladas).
+    await sincronizarDescontoFaturas(input.userId);
     return { ok: true };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
@@ -660,7 +679,7 @@ async function gerarFaturasInterno(userId: string): Promise<void> {
   // TRIAL é gratuito — período de avaliação não gera cobrança.
   if (lic.status === "TRIAL") return;
 
-  const preco = Number(lic.plano.preco);
+  const preco = precoComDesconto(Number(lic.plano.preco), lic.descontoTipo, Number(lic.descontoValor));
   const fim = lic.validadeEm;
   const hoje = new Date();
   const diaVenc = Math.min(lic.inicioEm.getDate(), 28);
@@ -688,6 +707,18 @@ async function gerarFaturasInterno(userId: string): Promise<void> {
   }
 }
 
+// Aplica o preço com desconto às faturas ainda em aberto (PENDENTE/ATRASADA).
+// Faturas pagas/canceladas ficam intactas. Chamado ao salvar a licença.
+async function sincronizarDescontoFaturas(userId: string): Promise<void> {
+  const lic = await prisma.licenca.findUnique({ where: { userId }, include: { plano: true } });
+  if (!lic?.plano) return;
+  const preco = precoComDesconto(Number(lic.plano.preco), lic.descontoTipo, Number(lic.descontoValor));
+  await prisma.fatura.updateMany({
+    where: { userId, status: { in: ["PENDENTE", "ATRASADA"] } },
+    data: { valor: preco },
+  });
+}
+
 export async function gerarFaturas(userId: string): Promise<Resultado> {
   try {
     await exigirAdmin();
@@ -695,6 +726,57 @@ export async function gerarFaturas(userId: string): Promise<Resultado> {
     return { ok: true };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Reenvia (ou envia) o e-mail de cobrança de uma fatura ao assinante. Garante um
+// tokenPublico p/ o link de pagamento (/pagar/[token]). Não altera a fatura fora
+// isso. Retorna o e-mail de destino em `id` p/ feedback na UI.
+export async function reenviarEmailFatura(faturaId: string): Promise<Resultado> {
+  try {
+    await exigirAdmin();
+    const fatura = await prisma.fatura.findUnique({
+      where: { id: faturaId },
+      include: { user: { select: { nome: true, email: true } } },
+    });
+    if (!fatura) return { ok: false, erro: "Fatura não encontrada." };
+    if (fatura.status === "PAGA" || fatura.status === "CANCELADA") {
+      return { ok: false, erro: "Fatura já paga/cancelada — não há cobrança a enviar." };
+    }
+    const para = fatura.user.email?.trim();
+    if (!para) return { ok: false, erro: "O assinante não tem e-mail cadastrado." };
+
+    // Garante token público p/ o link de pagamento.
+    let token = fatura.tokenPublico;
+    if (!token) {
+      token = randomUUID().replace(/-/g, "");
+      await prisma.fatura.update({ where: { id: fatura.id }, data: { tokenPublico: token } });
+    }
+
+    const pagarUrl = `${await baseUrlServidor()}/pagar/${token}`;
+    const logo = await logoBase64().catch(() => null);
+    const html = htmlCobranca({
+      nome: fatura.user.nome ?? para,
+      plano: fatura.planoNome,
+      valor: Number(fatura.valor),
+      vencimento: fatura.vencimento,
+      pagarUrl,
+      atrasada: fatura.status === "ATRASADA",
+      logoCid: logo ? LOGO_CID : undefined,
+    });
+    await enviarEmail({
+      para,
+      assunto: fatura.status === "ATRASADA"
+        ? "Sua mensalidade Easy-NFe está em atraso"
+        : "Sua mensalidade Easy-NFe está a vencer",
+      html,
+      anexos: logo ? [{ filename: "easy-nfe.png", content: logo, contentId: LOGO_CID }] : undefined,
+    });
+    return { ok: true, id: para };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/RESEND_API_KEY/.test(msg)) return { ok: false, erro: "Envio de e-mail não configurado no servidor." };
+    return { ok: false, erro: msg };
   }
 }
 

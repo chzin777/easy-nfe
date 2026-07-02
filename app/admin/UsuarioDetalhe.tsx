@@ -13,7 +13,7 @@ import {
   listarEmpresasAdmin, type EmpresaAdmin,
   criarEmpresaParaUsuario, vincularUsuarioEmpresa, desvincularUsuarioEmpresa,
   gerarFaturas, marcarFaturaPaga, marcarFaturaPendente, excluirFatura,
-  gerarBoletoAssinatura,
+  gerarBoletoAssinatura, reenviarEmailFatura,
 } from "./actions";
 
 const ROLES = [
@@ -179,6 +179,10 @@ function Licenca({ d, planos, onMudou, flash, registrar }: Sub & ComSalvar & { p
   const [validade, setValidade] = useState(
     d.licenca?.validadeEm ? d.licenca.validadeEm.slice(0, 10) : isoEmDias(7),
   );
+  const [descontoTipo, setDescontoTipo] = useState<"valor" | "percent">(
+    (d.licenca?.descontoTipo as "valor" | "percent") ?? "valor",
+  );
+  const [descontoValor, setDescontoValor] = useState(d.licenca?.descontoValor ?? 0);
   const [erro, setErro] = useState<string | null>(null);
 
   // sem opção "Sem plano": seleciona o primeiro plano automaticamente quando carregar.
@@ -195,7 +199,7 @@ function Licenca({ d, planos, onMudou, flash, registrar }: Sub & ComSalvar & { p
   async function salvar() {
     setErro(null);
     if (!planoId) { setErro("Selecione um plano para aplicar as permissões."); return; }
-    const r = await definirLicenca({ userId: d.id, planoId, status: status as "TRIAL" | "ATIVA" | "EXPIRADA" | "SUSPENSA" | "CANCELADA", validadeEm: validade || null });
+    const r = await definirLicenca({ userId: d.id, planoId, status: status as "TRIAL" | "ATIVA" | "EXPIRADA" | "SUSPENSA" | "CANCELADA", validadeEm: validade || null, descontoTipo, descontoValor: Math.max(0, descontoValor) });
     if (!r.ok) { setErro(r.erro); return; }
     flash("Licença atualizada."); onMudou();
   }
@@ -246,6 +250,44 @@ function Licenca({ d, planos, onMudou, flash, registrar }: Sub & ComSalvar & { p
             <Field label="Validade"><Input type="date" value={validade} onChange={(e) => setValidade(e.target.value)} /></Field>
           )}
         </div>
+
+        {/* Desconto especial deste usuário — aplicado nas faturas geradas. */}
+        <div className="rounded-xl border border-[var(--border)] p-3">
+          <p className="mb-2 text-xs font-medium text-[var(--muted)]">Desconto especial (aplicado nas faturas)</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Tipo de desconto">
+              <Select
+                opcoes={[{ value: "valor", label: "R$ fixo por fatura" }, { value: "percent", label: "% sobre o plano" }]}
+                value={descontoTipo}
+                onChange={(e) => setDescontoTipo(e.target.value as "valor" | "percent")}
+              />
+            </Field>
+            <Field label={descontoTipo === "percent" ? "Percentual (%)" : "Valor (R$)"} hint="0 = sem desconto">
+              <Input
+                type="number"
+                min="0"
+                step={descontoTipo === "percent" ? "1" : "0.01"}
+                value={descontoValor}
+                onChange={(e) => setDescontoValor(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </Field>
+          </div>
+          {(() => {
+            const plano = opcoesPlano.find((p) => p.id === planoId);
+            const preco = plano?.preco ?? 0;
+            if (!(descontoValor > 0) || !preco) return null;
+            const abate = descontoTipo === "percent" ? (preco * descontoValor) / 100 : descontoValor;
+            const final = Math.max(0, Math.round((preco - abate) * 100) / 100);
+            return (
+              <p className="mt-2 text-xs text-[var(--muted)]">
+                Fatura: <span className="line-through">{formatBRL(preco)}</span>{" "}
+                → <span className="font-semibold text-[var(--success)]">{formatBRL(final)}</span>{" "}
+                <span className="text-[var(--muted)]">(−{formatBRL(abate)})</span>
+              </p>
+            );
+          })()}
+        </div>
+
         {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
       </Card>
     </Secao>
@@ -378,6 +420,7 @@ function Faturas({ d, onMudou, flash }: Sub) {
   const [boletoFor, setBoletoFor] = useState<string | null>(null);
   const [cpf, setCpf] = useState(d.cpfCnpj ?? "");
   const [gerandoBoleto, setGerandoBoleto] = useState(false);
+  const [enviandoId, setEnviandoId] = useState<string | null>(null);
 
   async function gerarBoleto(f: Detalhe["faturas"][number]) {
     setErro(null);
@@ -419,6 +462,14 @@ function Faturas({ d, onMudou, flash }: Sub) {
     if (!r.ok) { setErro(r.erro); return; }
     flash("Fatura reaberta."); onMudou();
   }
+  async function reenviar(id: string) {
+    setErro(null);
+    setEnviandoId(id);
+    const r = await reenviarEmailFatura(id);
+    setEnviandoId(null);
+    if (!r.ok) { setErro(r.erro); return; }
+    flash(`Cobrança enviada para ${r.id}.`); onMudou();
+  }
   async function remover(id: string) {
     const r = await excluirFatura(id);
     if (!r.ok) { setErro(r.erro); return; }
@@ -452,6 +503,17 @@ function Faturas({ d, onMudou, flash }: Sub) {
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <Badge tom={tomFatura[f.status] ?? "neutral"}>{f.status}</Badge>
+                    {f.status !== "PAGA" && f.status !== "CANCELADA" && (
+                      <button
+                        onClick={() => reenviar(f.id)}
+                        disabled={enviandoId === f.id}
+                        title="Reenviar cobrança por e-mail"
+                        className="flex items-center gap-1 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
+                        {enviandoId === f.id ? "Enviando…" : "Reenviar e-mail"}
+                      </button>
+                    )}
                     {f.status === "PAGA" ? (
                       <button onClick={() => reabrir(f.id)} className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50">
                         Reabrir
