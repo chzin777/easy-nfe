@@ -41,6 +41,7 @@ const vazia: EmpresaDados = {
   definirTransporte: true,
   modFretePadrao: "9",
   infoComplementarPadrao: "",
+  clientePadraoId: "",
 };
 
 const soDigitos = (s: string) => s.replace(/\D/g, "");

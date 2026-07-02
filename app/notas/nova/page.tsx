@@ -65,7 +65,7 @@ export default function NovaNotaPage() {
   const [transportadoras, setTransportadoras] = useState<Transportadora[]>([]);
   const [casas, setCasas] = useState(2);
   // Padrões de emissão (configurados em Configurações → Padrões de emissão).
-  const PADRAO_INICIAL: PadroesEmissao = { tipoNotaPadrao: "55-saida", travarTipoNota: false, definirTransporte: true, modFretePadrao: "9", infoComplementarPadrao: "" };
+  const PADRAO_INICIAL: PadroesEmissao = { tipoNotaPadrao: "55-saida", travarTipoNota: false, definirTransporte: true, modFretePadrao: "9", infoComplementarPadrao: "", clientePadraoId: "" };
   const [padroes, setPadroes] = useState<PadroesEmissao>(PADRAO_INICIAL);
 
   const [emitindo, setEmitindo] = useState(false);
@@ -82,7 +82,7 @@ export default function NovaNotaPage() {
   // Limpa todos os campos e volta ao passo 1 (mantém listas já carregadas).
   function resetarFormulario() {
     setTipoNota(padroes.tipoNotaPadrao);
-    setClienteId("");
+    setClienteId(padroes.clientePadraoId);
     setTransportadoraId("");
     setModFrete(padroes.modFretePadrao);
     setInfo(padroes.infoComplementarPadrao);
@@ -112,6 +112,7 @@ export default function NovaNotaPage() {
       setTipoNota(pad.tipoNotaPadrao);
       setModFrete(pad.modFretePadrao);
       setInfo(pad.infoComplementarPadrao);
+      if (pad.clientePadraoId) setClienteId(pad.clientePadraoId);
     })();
   }, []);
 
@@ -222,8 +223,10 @@ export default function NovaNotaPage() {
   // Com o passo oculto, confiamos na modalidade padrão (sem transportadora).
   const transporteOk = !mostrarTransporte || transpOpcional || transportadoraId !== "";
 
-  // Passos efetivamente renderizados (o de transporte pode ser pulado).
-  const passos = ["dest", "produtos", ...(mostrarTransporte ? ["transporte"] : []), "revisao"];
+  // Passo 1 (destinatário) é pulado quando tipo travado + cliente padrão definido.
+  const pularDest = padroes.travarTipoNota && !!padroes.clientePadraoId;
+  // Passos efetivamente renderizados (destinatário e transporte podem ser pulados).
+  const passos = [...(pularDest ? [] : ["dest"]), "produtos", ...(mostrarTransporte ? ["transporte"] : []), "revisao"];
   function canProceed(step: number) {
     const kind = passos[step - 1];
     if (kind === "dest") return clienteId !== "";
@@ -259,7 +262,8 @@ export default function NovaNotaPage() {
           </>
         }
       >
-        {/* Etapa 1 */}
+        {/* Etapa 1 — oculta quando tipo travado + cliente padrão definido */}
+        {!pularDest && (
         <Step>
           <SectionTitle>{padroes.travarTipoNota ? "Destinatário" : "Tipo e destinatário"}</SectionTitle>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -292,6 +296,7 @@ export default function NovaNotaPage() {
             </div>
           )}
         </Step>
+        )}
 
         {/* Etapa 2 */}
         <Step>
@@ -685,7 +690,7 @@ export default function NovaNotaPage() {
             setClientes((lista) => lista.map((x) => (x.id === c.id ? c : x)));
             setCorrigirCliente(null);
             // Volta o Stepper p/ a Conferência (passo 4) — dados preservados — p/ reemitir.
-            setPassoEmissao(4);
+            setPassoEmissao(passos.length); // último passo (Conferência)
             setFormKey((k) => k + 1);
           }}
         />
@@ -706,7 +711,7 @@ export default function NovaNotaPage() {
             setProdutos((lista) => lista.map((x) => (x.id === p.id ? p : x)));
             setCorrigirProduto(null);
             // Volta o Stepper p/ a Conferência (passo 4) — dados preservados — p/ reemitir.
-            setPassoEmissao(4);
+            setPassoEmissao(passos.length); // último passo (Conferência)
             setFormKey((k) => k + 1);
           }}
         />

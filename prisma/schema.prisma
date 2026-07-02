@@ -276,6 +276,7 @@ model Emitente {
   definirTransporte      Boolean @default(true) // false = pula o passo de transporte
   modFretePadrao         String  @default("9") // modalidade de frete padrão (modFrete)
   infoComplementarPadrao String? // texto padrão em "informações complementares"
+  clientePadraoId        String? // cliente pré-selecionado ao emitir (opcional)
 
   // NFC-e (modelo 65) — série/numeração próprias + CSC (Código de Segurança do
   // Contribuinte) emitido pela SEFAZ, usado no hash do QR Code.

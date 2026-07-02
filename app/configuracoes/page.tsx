@@ -14,6 +14,8 @@ import {
   formatData,
 } from "@/app/ui/primitives";
 import { TIPOS_NOTA, MODALIDADES_FRETE } from "@/lib/mock-data";
+import { listarClientes } from "@/app/clientes/actions";
+import type { Cliente } from "@/lib/types";
 import Tabs from "@/app/ui/Tabs";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { EnderecoFields } from "@/app/ui/PessoaFields";
@@ -68,6 +70,7 @@ const empresaVazia: EmpresaDados = {
   definirTransporte: true,
   modFretePadrao: "9",
   infoComplementarPadrao: "",
+  clientePadraoId: "",
 };
 
 export default function ConfiguracoesPage() {
@@ -531,6 +534,14 @@ function AbaPadroes({
   salvando: boolean;
   salvo: boolean;
 }) {
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    listarClientes().then(setClientes).catch(() => {});
+  }, []);
+  // Passo 1 é pulado na emissão quando tipo está travado e há cliente padrão.
+  const pulaPasso1 = form.travarTipoNota && !!form.clientePadraoId;
+
   return (
     <div className="space-y-6">
       <p className="text-sm text-[var(--muted)]">
@@ -556,6 +567,25 @@ function AbaPadroes({
             </label>
           </Field>
         </div>
+      </section>
+
+      <section>
+        <SectionTitle>Cliente</SectionTitle>
+        <Field
+          label="Cliente padrão"
+          hint="Pré-selecionado ao emitir. Deixe em branco para escolher sempre."
+        >
+          <Select
+            opcoes={[{ value: "", label: "— Nenhum (escolher na emissão) —" }, ...clientes.map((c) => ({ value: c.id, label: c.nome }))]}
+            value={form.clientePadraoId}
+            onChange={(e) => setE("clientePadraoId", e.target.value)}
+          />
+        </Field>
+        <p className="mt-2 text-sm text-[var(--muted)]">
+          {pulaPasso1
+            ? "✓ Tipo travado + cliente padrão: o passo de destinatário será pulado na emissão."
+            : "Trave o tipo de nota e defina um cliente padrão para pular o passo de destinatário na emissão."}
+        </p>
       </section>
 
       <section>

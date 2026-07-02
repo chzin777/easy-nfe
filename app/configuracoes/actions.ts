@@ -165,6 +165,7 @@ export type EmpresaDados = {
   definirTransporte: boolean;
   modFretePadrao: string;
   infoComplementarPadrao: string;
+  clientePadraoId: string; // "" = nenhum
 };
 
 // Padrões de emissão consumidos pela tela de emitir nota (subconjunto leve).
@@ -174,6 +175,7 @@ export type PadroesEmissao = {
   definirTransporte: boolean;
   modFretePadrao: string;
   infoComplementarPadrao: string;
+  clientePadraoId: string;
 };
 
 export type EmpresaResumo = { id: string; razaoSocial: string; cnpj: string; ativa: boolean };
@@ -241,6 +243,7 @@ export async function obterEmpresaAtiva(): Promise<EmpresaDados | null> {
     definirTransporte: e.definirTransporte,
     modFretePadrao: e.modFretePadrao,
     infoComplementarPadrao: e.infoComplementarPadrao ?? "",
+    clientePadraoId: e.clientePadraoId ?? "",
   };
 }
 
@@ -248,19 +251,25 @@ export async function obterEmpresaAtiva(): Promise<EmpresaDados | null> {
 export async function obterPadroesEmissao(): Promise<PadroesEmissao> {
   const padrao: PadroesEmissao = {
     tipoNotaPadrao: "55-saida", travarTipoNota: false, definirTransporte: true,
-    modFretePadrao: "9", infoComplementarPadrao: "",
+    modFretePadrao: "9", infoComplementarPadrao: "", clientePadraoId: "",
   };
   const id = await empresaAtivaId();
   if (!id) return padrao;
   const e = await prisma.emitente.findUnique({
     where: { id },
-    select: { tipoNotaPadrao: true, travarTipoNota: true, definirTransporte: true, modFretePadrao: true, infoComplementarPadrao: true },
+    select: { tipoNotaPadrao: true, travarTipoNota: true, definirTransporte: true, modFretePadrao: true, infoComplementarPadrao: true, clientePadraoId: true },
   });
   if (!e) return padrao;
+  // Se o cliente padrão foi apagado, ignora (evita pré-seleção quebrada).
+  let clientePadraoId = e.clientePadraoId ?? "";
+  if (clientePadraoId) {
+    const existe = await prisma.cliente.findFirst({ where: { id: clientePadraoId, empresaId: id }, select: { id: true } });
+    if (!existe) clientePadraoId = "";
+  }
   return {
     tipoNotaPadrao: e.tipoNotaPadrao, travarTipoNota: e.travarTipoNota,
     definirTransporte: e.definirTransporte, modFretePadrao: e.modFretePadrao,
-    infoComplementarPadrao: e.infoComplementarPadrao ?? "",
+    infoComplementarPadrao: e.infoComplementarPadrao ?? "", clientePadraoId,
   };
 }
 
@@ -311,6 +320,7 @@ export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id
       definirTransporte: dados.definirTransporte !== false,
       modFretePadrao: dados.modFretePadrao || "9",
       infoComplementarPadrao: dados.infoComplementarPadrao?.trim() || null,
+      clientePadraoId: dados.clientePadraoId?.trim() || null,
     };
 
     const { role } = await exigirSessao();
