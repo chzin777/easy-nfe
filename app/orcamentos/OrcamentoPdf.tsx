@@ -52,7 +52,7 @@ export default function OrcamentoPdf({
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "#64748b" }}>Orçamento</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: "#2563eb" }}>#{orc.numero}</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: "#5227ff" }}>#{orc.numero}</div>
         </div>
       </div>
 
@@ -87,7 +87,7 @@ export default function OrcamentoPdf({
         <tfoot>
           <tr style={{ background: "#f1f5f9", fontWeight: 700 }}>
             <td style={tdStyle} colSpan={3}>Total</td>
-            <td style={{ ...tdStyle, textAlign: "right", color: "#2563eb", fontSize: 14 }}>{formatBRL(orc.valorTotal)}</td>
+            <td style={{ ...tdStyle, textAlign: "right", color: "#5227ff", fontSize: 14 }}>{formatBRL(orc.valorTotal)}</td>
           </tr>
         </tfoot>
       </table>

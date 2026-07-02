@@ -12,6 +12,7 @@ import {
 import { formatBRL } from "@/lib/format";
 import Modal from "@/app/ui/Modal";
 import Stepper, { Step } from "@/app/ui/Stepper";
+import LightningLoader from "@/app/ui/LightningLoader";
 import { TIPOS_NOTA, MODALIDADES_FRETE, rotulo } from "@/lib/mock-data";
 import type { ItemNota, Cliente, Produto, Transportadora } from "@/lib/types";
 
@@ -67,6 +68,8 @@ export default function NovaNotaPage() {
   // Padrões de emissão (configurados em Configurações → Padrões de emissão).
   const PADRAO_INICIAL: PadroesEmissao = { tipoNotaPadrao: "55-saida", travarTipoNota: false, definirTransporte: true, modFretePadrao: "9", infoComplementarPadrao: "", clientePadraoId: "" };
   const [padroes, setPadroes] = useState<PadroesEmissao>(PADRAO_INICIAL);
+  // Segura o Stepper até os padrões chegarem (evita o passo 1 piscar antes de ser pulado).
+  const [carregando, setCarregando] = useState(true);
 
   const [emitindo, setEmitindo] = useState(false);
   const [resultado, setResultado] = useState<EmitirResultado | null>(null);
@@ -113,6 +116,7 @@ export default function NovaNotaPage() {
       setModFrete(pad.modFretePadrao);
       setInfo(pad.infoComplementarPadrao);
       if (pad.clientePadraoId) setClienteId(pad.clientePadraoId);
+      setCarregando(false);
     })();
   }, []);
 
@@ -243,6 +247,11 @@ export default function NovaNotaPage() {
         subtitulo="Monte a nota em etapas: tipo, produtos, transporte e finalização."
       />
 
+      {carregando ? (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-10">
+          <LightningLoader texto="Carregando…" />
+        </div>
+      ) : (
       <Stepper
         key={formKey}
         initialStep={passoEmissao}
@@ -556,6 +565,7 @@ export default function NovaNotaPage() {
           </div>
         </Step>
       </Stepper>
+      )}
 
       <Modal
         aberto={emitindo || (resultado !== null && !notaEmitida)}
