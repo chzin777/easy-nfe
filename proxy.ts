@@ -4,8 +4,10 @@ import { jwtVerify } from "jose";
 const COOKIE_SESSAO = "easy-nfe-sessao";
 // Públicas que redirecionam pro painel quando já logado (landing/login/cadastro).
 const REDIR_SE_LOGADO = ["/", "/login", "/cadastro"];
-// Públicas acessíveis por qualquer um (logado ou não), sem redirect: pagamento e legais.
-const PUBLICAS_ABERTAS = ["/pagar", "/termos", "/privacidade"];
+// Públicas acessíveis por qualquer um (logado ou não), sem redirect: pagamento,
+// legais e recuperação de senha (o usuário está deslogado justamente por não
+// lembrar a senha).
+const PUBLICAS_ABERTAS = ["/pagar", "/termos", "/privacidade", "/recuperar-senha", "/redefinir-senha"];
 
 async function lerSessao(req: NextRequest): Promise<{ role: string } | null> {
   const token = req.cookies.get(COOKIE_SESSAO)?.value;
