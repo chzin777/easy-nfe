@@ -7,7 +7,6 @@ import { Card, Button } from "./primitives";
 import Modal from "./Modal";
 import { estadoOnboarding } from "@/app/onboarding-actions";
 
-const CHAVE_PULAR = "easy-nfe:onboarding-pulado"; // esconde o card inline
 const CHAVE_MODAL = "easy-nfe:onboarding-modal-visto"; // não reabre o popup sozinho
 
 type Estado = { role: string; temEmpresa: boolean; produtos: number; clientes: number; transportadoras: number };
@@ -31,23 +30,19 @@ type Passo = {
  */
 export default function Onboarding() {
   const [montado, setMontado] = useState(false);
-  const [pulado, setPulado] = useState(false);
-  const [modalVisto, setModalVisto] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
   const [estado, setEstado] = useState<Estado | null>(null);
   const [i, setI] = useState(0);
 
   useEffect(() => {
-    const pul = localStorage.getItem(CHAVE_PULAR) === "1";
     const visto = localStorage.getItem(CHAVE_MODAL) === "1";
-    setPulado(pul);
-    setModalVisto(visto);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMontado(true);
     estadoOnboarding()
       .then((s) => {
         setEstado(s);
         const completo = s.temEmpresa && s.produtos > 0 && s.clientes > 0 && s.transportadoras > 0;
-        if (s.role === "USER" && !completo && !pul && !visto) setModalAberto(true);
+        if (s.role === "USER" && !completo && !visto) setModalAberto(true);
       })
       .catch(() => setEstado(null));
   }, []);
@@ -125,19 +120,7 @@ export default function Onboarding() {
 
   function fecharModal() {
     localStorage.setItem(CHAVE_MODAL, "1");
-    setModalVisto(true);
     setModalAberto(false);
-  }
-  function pularTudo() {
-    localStorage.setItem(CHAVE_MODAL, "1");
-    localStorage.setItem(CHAVE_PULAR, "1");
-    setModalVisto(true);
-    setPulado(true);
-    setModalAberto(false);
-  }
-  function pularCard() {
-    localStorage.setItem(CHAVE_PULAR, "1");
-    setPulado(true);
   }
   function abrirModal(passo = 0) {
     setI(passo);
@@ -149,9 +132,8 @@ export default function Onboarding() {
 
   return (
     <>
-      {/* Card inline (lembrete persistente) */}
-      {!pulado && (
-        <AnimatePresence>
+      {/* Card inline (lembrete persistente até concluir tudo) */}
+      <AnimatePresence>
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -175,12 +157,6 @@ export default function Onboarding() {
                   <Button variante="secondary" onClick={() => abrirModal(passos.indexOf(proximo ?? passos[0]))} className="!px-3 !py-1.5 !text-xs">
                     Ver guia
                   </Button>
-                  <button
-                    onClick={pularCard}
-                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition hover:bg-slate-100 hover:text-[var(--foreground)]"
-                  >
-                    Pular
-                  </button>
                 </div>
               </div>
 
@@ -230,8 +206,7 @@ export default function Onboarding() {
               </div>
             </Card>
           </motion.div>
-        </AnimatePresence>
-      )}
+      </AnimatePresence>
 
       {/* Popup central (modal com blur) */}
       <Modal
@@ -241,8 +216,8 @@ export default function Onboarding() {
         largura="max-w-xl"
         rodape={
           <div className="flex w-full items-center justify-between gap-3">
-            <button onClick={pularTudo} className="rounded-lg px-3 py-2 text-sm font-medium text-[var(--muted)] transition hover:bg-slate-100">
-              Pular primeiros passos
+            <button onClick={fecharModal} className="rounded-lg px-3 py-2 text-sm font-medium text-[var(--muted)] transition hover:bg-slate-100">
+              Fechar guia
             </button>
             <div className="flex gap-2">
               {i > 0 && <Button variante="secondary" onClick={() => setI((v) => v - 1)}>Voltar</Button>}
