@@ -159,6 +159,21 @@ export type EmpresaDados = {
   casasDecimaisQtd: string;
   // estoque: bloquear emissão quando item controlado não tem saldo
   bloquearSemEstoque: boolean;
+  // padrões de emissão (parametrizam a tela de emitir nota)
+  tipoNotaPadrao: string;
+  travarTipoNota: boolean;
+  definirTransporte: boolean;
+  modFretePadrao: string;
+  infoComplementarPadrao: string;
+};
+
+// Padrões de emissão consumidos pela tela de emitir nota (subconjunto leve).
+export type PadroesEmissao = {
+  tipoNotaPadrao: string;
+  travarTipoNota: boolean;
+  definirTransporte: boolean;
+  modFretePadrao: string;
+  infoComplementarPadrao: string;
 };
 
 export type EmpresaResumo = { id: string; razaoSocial: string; cnpj: string; ativa: boolean };
@@ -221,6 +236,31 @@ export async function obterEmpresaAtiva(): Promise<EmpresaDados | null> {
     idCscNFCe: e.idCscNFCe ?? "",
     casasDecimaisQtd: String(e.casasDecimaisQtd),
     bloquearSemEstoque: e.bloquearSemEstoque,
+    tipoNotaPadrao: e.tipoNotaPadrao,
+    travarTipoNota: e.travarTipoNota,
+    definirTransporte: e.definirTransporte,
+    modFretePadrao: e.modFretePadrao,
+    infoComplementarPadrao: e.infoComplementarPadrao ?? "",
+  };
+}
+
+// Padrões de emissão da empresa ativa — leve, p/ a tela de emitir nota.
+export async function obterPadroesEmissao(): Promise<PadroesEmissao> {
+  const padrao: PadroesEmissao = {
+    tipoNotaPadrao: "55-saida", travarTipoNota: false, definirTransporte: true,
+    modFretePadrao: "9", infoComplementarPadrao: "",
+  };
+  const id = await empresaAtivaId();
+  if (!id) return padrao;
+  const e = await prisma.emitente.findUnique({
+    where: { id },
+    select: { tipoNotaPadrao: true, travarTipoNota: true, definirTransporte: true, modFretePadrao: true, infoComplementarPadrao: true },
+  });
+  if (!e) return padrao;
+  return {
+    tipoNotaPadrao: e.tipoNotaPadrao, travarTipoNota: e.travarTipoNota,
+    definirTransporte: e.definirTransporte, modFretePadrao: e.modFretePadrao,
+    infoComplementarPadrao: e.infoComplementarPadrao ?? "",
   };
 }
 
@@ -266,6 +306,11 @@ export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id
       idCscNFCe: dados.idCscNFCe?.replace(/\D/g, "") || null,
       casasDecimaisQtd: Math.min(4, Math.max(0, Number(dados.casasDecimaisQtd) || 0)),
       bloquearSemEstoque: !!dados.bloquearSemEstoque,
+      tipoNotaPadrao: dados.tipoNotaPadrao || "55-saida",
+      travarTipoNota: !!dados.travarTipoNota,
+      definirTransporte: dados.definirTransporte !== false,
+      modFretePadrao: dados.modFretePadrao || "9",
+      infoComplementarPadrao: dados.infoComplementarPadrao?.trim() || null,
     };
 
     const { role } = await exigirSessao();

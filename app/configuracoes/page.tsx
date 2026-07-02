@@ -10,8 +10,10 @@ import {
   PageHeader,
   SectionTitle,
   Select,
+  Textarea,
   formatData,
 } from "@/app/ui/primitives";
+import { TIPOS_NOTA, MODALIDADES_FRETE } from "@/lib/mock-data";
 import Tabs from "@/app/ui/Tabs";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { EnderecoFields } from "@/app/ui/PessoaFields";
@@ -61,6 +63,11 @@ const empresaVazia: EmpresaDados = {
   idCscNFCe: "",
   casasDecimaisQtd: "2",
   bloquearSemEstoque: false,
+  tipoNotaPadrao: "55-saida",
+  travarTipoNota: false,
+  definirTransporte: true,
+  modFretePadrao: "9",
+  infoComplementarPadrao: "",
 };
 
 export default function ConfiguracoesPage() {
@@ -166,6 +173,7 @@ export default function ConfiguracoesPage() {
                 { id: "cobranca", label: "Cobrança", content: <AbaCobranca /> },
                 { id: "equipe", label: "Equipe", content: <AbaEquipe /> },
                 { id: "whatsapp", label: "WhatsApp", content: <AbaWhatsApp /> },
+                { id: "padroes", label: "Padrões de emissão", content: <AbaPadroes form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
                 { id: "amb", label: "Ambiente & numeração", content: <AbaAmbiente form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
               ]}
             />
@@ -505,6 +513,90 @@ function AbaEmitente({
         </div>
       </section>
       <EnderecoFields value={form.endereco} onChange={(endereco) => setForm((s) => ({ ...s, endereco }))} />
+      <BarraSalvar onSalvar={onSalvar} salvando={salvando} salvo={salvo} rotuloNovo={form.id ? "Salvar alterações" : "Cadastrar empresa"} />
+    </div>
+  );
+}
+
+function AbaPadroes({
+  form,
+  setE,
+  onSalvar,
+  salvando,
+  salvo,
+}: {
+  form: EmpresaDados;
+  setE: <K extends keyof EmpresaDados>(k: K, v: EmpresaDados[K]) => void;
+  onSalvar: () => void;
+  salvando: boolean;
+  salvo: boolean;
+}) {
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-[var(--muted)]">
+        Parametrize a tela de <b>emitir nota</b> para agilizar o dia a dia. Os padrões abaixo
+        pré-preenchem os campos e podem esconder passos que você não usa.
+      </p>
+
+      <section>
+        <SectionTitle>Tipo de nota</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Tipo de nota padrão" hint="Já vem selecionado ao emitir">
+            <Select opcoes={TIPOS_NOTA} value={form.tipoNotaPadrao} onChange={(e) => setE("tipoNotaPadrao", e.target.value)} />
+          </Field>
+          <Field label="Travar o tipo" hint="Esconde o seletor — só emite o tipo padrão">
+            <label className="flex h-[46px] items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={form.travarTipoNota}
+                onChange={(e) => setE("travarTipoNota", e.target.checked)}
+                className="h-4 w-4 accent-[var(--primary)]"
+              />
+              Não exibir outros tipos na emissão
+            </label>
+          </Field>
+        </div>
+      </section>
+
+      <section>
+        <SectionTitle>Transporte</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Definir transporte na emissão?" hint="Não → pula o passo de transporte">
+            <label className="flex h-[46px] items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={form.definirTransporte}
+                onChange={(e) => setE("definirTransporte", e.target.checked)}
+                className="h-4 w-4 accent-[var(--primary)]"
+              />
+              Mostrar o passo de transporte ao emitir
+            </label>
+          </Field>
+          <Field
+            label="Modalidade de frete padrão"
+            hint={form.definirTransporte ? "Já vem selecionada no passo de transporte" : "Usada automaticamente (passo pulado)"}
+          >
+            <Select opcoes={MODALIDADES_FRETE} value={form.modFretePadrao} onChange={(e) => setE("modFretePadrao", e.target.value)} />
+          </Field>
+        </div>
+        {!form.definirTransporte && !["0", "1", "9"].includes(form.modFretePadrao) && (
+          <p className="mt-3 text-sm font-medium text-[var(--warning)]">
+            ⚠ A modalidade padrão exige transportadora, mas o passo de transporte está oculto — a emissão vai falhar. Escolha 0, 1 ou 9, ou mantenha o passo visível.
+          </p>
+        )}
+      </section>
+
+      <section>
+        <SectionTitle>Informações complementares</SectionTitle>
+        <Field label="Texto padrão" hint="Pré-preenche o campo de observações no passo final">
+          <Textarea
+            value={form.infoComplementarPadrao}
+            onChange={(e) => setE("infoComplementarPadrao", e.target.value)}
+            placeholder="Ex.: Documento emitido por ME optante pelo Simples Nacional…"
+          />
+        </Field>
+      </section>
+
       <BarraSalvar onSalvar={onSalvar} salvando={salvando} salvo={salvo} rotuloNovo={form.id ? "Salvar alterações" : "Cadastrar empresa"} />
     </div>
   );

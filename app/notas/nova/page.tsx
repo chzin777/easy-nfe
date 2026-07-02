@@ -36,7 +36,7 @@ import TransportadoraPicker from "./TransportadoraPicker";
 import TourEmissao from "./TourEmissao";
 import { listarProdutos } from "@/app/produtos/actions";
 import { listarTransportadoras } from "@/app/transportadoras/actions";
-import { obterCasasDecimaisQtd } from "@/app/configuracoes/actions";
+import { obterCasasDecimaisQtd, obterPadroesEmissao, type PadroesEmissao } from "@/app/configuracoes/actions";
 import { QtyStepper, DescInput } from "@/app/ui/ItensFields";
 
 // Arredonda para N casas decimais (evita lixo de ponto flutuante).
@@ -64,6 +64,9 @@ export default function NovaNotaPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [transportadoras, setTransportadoras] = useState<Transportadora[]>([]);
   const [casas, setCasas] = useState(2);
+  // Padrões de emissão (configurados em Configurações → Padrões de emissão).
+  const PADRAO_INICIAL: PadroesEmissao = { tipoNotaPadrao: "55-saida", travarTipoNota: false, definirTransporte: true, modFretePadrao: "9", infoComplementarPadrao: "" };
+  const [padroes, setPadroes] = useState<PadroesEmissao>(PADRAO_INICIAL);
 
   const [emitindo, setEmitindo] = useState(false);
   const [resultado, setResultado] = useState<EmitirResultado | null>(null);
@@ -78,11 +81,11 @@ export default function NovaNotaPage() {
 
   // Limpa todos os campos e volta ao passo 1 (mantém listas já carregadas).
   function resetarFormulario() {
-    setTipoNota("55-saida");
+    setTipoNota(padroes.tipoNotaPadrao);
     setClienteId("");
     setTransportadoraId("");
-    setModFrete("9");
-    setInfo("");
+    setModFrete(padroes.modFretePadrao);
+    setInfo(padroes.infoComplementarPadrao);
     setItens([]);
     setDescNota({ tipo: "valor", valor: 0 });
     setProdutoSel("");
@@ -93,16 +96,22 @@ export default function NovaNotaPage() {
 
   useEffect(() => {
     (async () => {
-      const [c, p, t, cd] = await Promise.all([
+      const [c, p, t, cd, pad] = await Promise.all([
         listarClientes(),
         listarProdutos(),
         listarTransportadoras(),
         obterCasasDecimaisQtd(),
+        obterPadroesEmissao(),
       ]);
       setClientes(c);
       setProdutos(p);
       setTransportadoras(t);
       setCasas(cd);
+      setPadroes(pad);
+      // Aplica os padrões aos campos iniciais da emissão.
+      setTipoNota(pad.tipoNotaPadrao);
+      setModFrete(pad.modFretePadrao);
+      setInfo(pad.infoComplementarPadrao);
     })();
   }, []);
 
@@ -205,15 +214,21 @@ export default function NovaNotaPage() {
     resetarFormulario();
   }
 
+  // Padrão pode ocultar o passo de transporte (usa a modalidade padrão direto).
+  const mostrarTransporte = padroes.definirTransporte;
   // CIF (0), FOB (1) e "9 - Sem ocorrência" não exigem transportadora.
   // Só modalidades 2/3/4 (terceiros / transporte próprio) obrigam.
   const transpOpcional = ["0", "1", "9"].includes(modFrete);
-  const transporteOk = transpOpcional || transportadoraId !== "";
+  // Com o passo oculto, confiamos na modalidade padrão (sem transportadora).
+  const transporteOk = !mostrarTransporte || transpOpcional || transportadoraId !== "";
 
+  // Passos efetivamente renderizados (o de transporte pode ser pulado).
+  const passos = ["dest", "produtos", ...(mostrarTransporte ? ["transporte"] : []), "revisao"];
   function canProceed(step: number) {
-    if (step === 1) return clienteId !== "";
-    if (step === 2) return itens.length > 0;
-    if (step === 3) return transporteOk;
+    const kind = passos[step - 1];
+    if (kind === "dest") return clienteId !== "";
+    if (kind === "produtos") return itens.length > 0;
+    if (kind === "transporte") return transporteOk;
     return true;
   }
 
@@ -246,11 +261,19 @@ export default function NovaNotaPage() {
       >
         {/* Etapa 1 */}
         <Step>
-          <SectionTitle>Tipo e destinatário</SectionTitle>
+          <SectionTitle>{padroes.travarTipoNota ? "Destinatário" : "Tipo e destinatário"}</SectionTitle>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Tipo de nota" required>
-              <Select opcoes={TIPOS_NOTA} value={tipoNota} onChange={(e) => setTipoNota(e.target.value)} />
-            </Field>
+            {padroes.travarTipoNota ? (
+              <Field label="Tipo de nota" hint="Fixado nas configurações">
+                <div className="flex h-[46px] items-center rounded-lg border border-[var(--border)] bg-slate-50 px-3 text-sm font-medium text-[var(--muted)]">
+                  {rotulo(TIPOS_NOTA, tipoNota)}
+                </div>
+              </Field>
+            ) : (
+              <Field label="Tipo de nota" required>
+                <Select opcoes={TIPOS_NOTA} value={tipoNota} onChange={(e) => setTipoNota(e.target.value)} />
+              </Field>
+            )}
             <Field label="Cliente" required>
               <ClientePicker
                 clientes={clientes}
@@ -424,7 +447,8 @@ export default function NovaNotaPage() {
           </div>
         </Step>
 
-        {/* Etapa 3 */}
+        {/* Etapa 3 — oculta quando o padrão dispensa definir transporte */}
+        {mostrarTransporte && (
         <Step>
           <SectionTitle>Transporte</SectionTitle>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -455,6 +479,7 @@ export default function NovaNotaPage() {
             </p>
           )}
         </Step>
+        )}
 
         {/* Etapa 4 */}
         <Step>

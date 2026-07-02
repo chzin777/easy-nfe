@@ -36,6 +36,11 @@ const vazia: EmpresaDados = {
   idCscNFCe: "",
   casasDecimaisQtd: "2",
   bloquearSemEstoque: false,
+  tipoNotaPadrao: "55-saida",
+  travarTipoNota: false,
+  definirTransporte: true,
+  modFretePadrao: "9",
+  infoComplementarPadrao: "",
 };
 
 const soDigitos = (s: string) => s.replace(/\D/g, "");
