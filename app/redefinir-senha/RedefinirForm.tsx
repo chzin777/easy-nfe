@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button, Field, Input } from "@/app/ui/primitives";
 import { redefinirSenha, type RedefinirResultado } from "../recuperar-senha/actions";
 
-export default function RedefinirForm({ token }: { token: string }) {
+export default function RedefinirForm({ token, valido = true }: { token: string; valido?: boolean }) {
   const [estado, formAction, pendente] = useActionState<RedefinirResultado | null, FormData>(
     redefinirSenha,
     null,
@@ -13,13 +13,18 @@ export default function RedefinirForm({ token }: { token: string }) {
   const erro = estado && "erro" in estado ? estado.erro : null;
   const ok = estado && "ok" in estado;
 
-  // Token ausente na URL — link malformado.
-  if (!token) {
+  // Token ausente, expirado ou já usado — validado no servidor. Não mostra o form.
+  if (!token || !valido) {
     return (
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Link inválido</h1>
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[var(--danger-soft,#fee2e2)] text-[var(--danger)]">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" /></svg>
+        </div>
+        <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900">Link inválido ou expirado</h1>
         <p className="mt-1.5 text-sm text-[var(--muted)]">
-          Este link de redefinição está incompleto. Solicite um novo.
+          {token
+            ? "Este link já foi usado ou expirou. Cada link vale uma única vez e por 1 hora. Solicite um novo."
+            : "Este link de redefinição está incompleto. Solicite um novo."}
         </p>
         <Link href="/recuperar-senha" className="mt-6 inline-block text-sm font-medium text-[var(--primary)] hover:underline">
           Solicitar novo link →

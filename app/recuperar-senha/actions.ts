@@ -72,6 +72,22 @@ export async function solicitarRedefinicao(
   }
 }
 
+// Valida o token SEM consumi-lo — usado no carregamento da página p/ já mostrar
+// "link inválido/expirado" quando o token não existe, expirou ou já foi usado.
+export async function tokenRedefinicaoValido(token: string): Promise<boolean> {
+  const t = token.trim();
+  if (!t) return false;
+  try {
+    const registro = await prisma.redefinicaoSenha.findUnique({
+      where: { tokenHash: sha256(t) },
+      select: { usadoEm: true, expiraEm: true },
+    });
+    return Boolean(registro && !registro.usadoEm && registro.expiraEm >= new Date());
+  } catch {
+    return false;
+  }
+}
+
 // Passo 2: usuário abre o link e define a nova senha.
 export async function redefinirSenha(
   _prev: RedefinirResultado | null,

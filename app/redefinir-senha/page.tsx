@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import RedefinirForm from "./RedefinirForm";
+import { tokenRedefinicaoValido } from "../recuperar-senha/actions";
 
 // Next 16: searchParams é assíncrono.
 export default async function RedefinirSenhaPage({
@@ -9,6 +10,9 @@ export default async function RedefinirSenhaPage({
   searchParams: Promise<{ token?: string }>;
 }) {
   const { token = "" } = await searchParams;
+  // Valida (sem consumir) no servidor: token ausente, expirado ou já usado → o
+  // form nem aparece; mostra "link inválido".
+  const valido = token ? await tokenRedefinicaoValido(token) : false;
 
   return (
     <div className="relative grid min-h-screen lg:grid-cols-2">
@@ -25,7 +29,7 @@ export default async function RedefinirSenhaPage({
 
       <div className="flex items-center justify-center bg-white px-6 py-12">
         <div className="w-full max-w-sm">
-          <RedefinirForm token={token} />
+          <RedefinirForm token={token} valido={valido} />
         </div>
       </div>
 
