@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { lerSessaoCompleta } from "@/lib/auth";
 import { exigirUsuario } from "@/lib/empresa";
+import { precoComDesconto } from "@/lib/assinatura";
 
 export type EstadoTrial = {
   mostrar: boolean;
@@ -26,8 +27,8 @@ export async function estadoTrial(): Promise<EstadoTrial> {
   const lic = await prisma.licenca.findUnique({ where: { userId: s.uid }, include: { plano: true } });
   if (!lic || !lic.validadeEm) return vazio;
 
-  const preco = Number(lic.plano?.preco ?? 0);
-  if (!(preco > 0)) return vazio; // sem preço não há como cobrar
+  const preco = precoComDesconto(Number(lic.plano?.preco ?? 0), lic.descontoTipo, Number(lic.descontoValor));
+  if (!(preco > 0)) return vazio; // sem preço (ou 100% descontado) não há como cobrar
 
   const ms = lic.validadeEm.getTime() - Date.now();
   const dias = Math.ceil(ms / 86_400_000);
@@ -75,10 +76,11 @@ export async function iniciarPagamentoAssinatura(): Promise<{ token: string } | 
   try {
     const uid = await exigirUsuario();
     const user = await prisma.user.findUnique({ where: { id: uid }, include: { licenca: { include: { plano: true } } } });
-    const plano = user?.licenca?.plano;
+    const lic = user?.licenca;
+    const plano = lic?.plano;
     if (!plano) return { erro: "Você ainda não tem um plano definido. Fale com o suporte." };
-    const preco = Number(plano.preco);
-    if (!(preco > 0)) return { erro: "Seu plano não tem preço definido. Fale com o suporte." };
+    const preco = precoComDesconto(Number(plano.preco), lic.descontoTipo, Number(lic.descontoValor));
+    if (!(preco > 0)) return { erro: "Seu plano não tem valor a cobrar. Fale com o suporte." };
 
     // Reaproveita uma fatura aberta com token.
     const aberta = await prisma.fatura.findFirst({

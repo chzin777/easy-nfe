@@ -1,6 +1,15 @@
 import "server-only";
 import { prisma } from "./prisma";
 
+// Preço da fatura após o desconto especial da licença. tipo: "percent" | "valor".
+// "valor" = R$ fixo abatido por fatura; "percent" = % sobre o preço do plano.
+// Usado tanto na geração admin quanto nos fluxos self-serve (trial/renovação).
+export function precoComDesconto(preco: number, tipo: string, valor: number): number {
+  if (!valor || valor <= 0) return preco;
+  const d = tipo === "percent" ? (preco * valor) / 100 : valor;
+  return Math.max(0, Math.round((preco - d) * 100) / 100);
+}
+
 // Marca a fatura como paga e ativa/estende a licença do usuário conforme a
 // periodicidade do plano. Idempotente (chamar 2x não duplica validade além do
 // período já concedido para faturas já pagas).

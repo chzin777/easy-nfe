@@ -8,13 +8,7 @@ import { codigoMunicipio } from "@/lib/nfe/municipios";
 import { enviarEmail, htmlCobranca } from "@/lib/email";
 import { baseUrlServidor } from "@/lib/base-url";
 import { logoBase64, LOGO_CID } from "@/lib/logo-email";
-
-// Preço da fatura após o desconto especial da licença. tipo: "percent" | "valor".
-function precoComDesconto(preco: number, tipo: string, valor: number): number {
-  if (!valor || valor <= 0) return preco;
-  const d = tipo === "percent" ? (preco * valor) / 100 : valor;
-  return Math.max(0, Math.round((preco - d) * 100) / 100);
-}
+import { precoComDesconto } from "@/lib/assinatura";
 import {
   statusConfigAsaas,
   salvarConfigAsaas as salvarConfigAsaasStore,
