@@ -40,6 +40,11 @@ export type ParsedNFe = {
   itens: NfeItem[];
   valorProdutos: number;
   valorNota: number;
+  // Dados de autorização (protNFe) — presentes em XML já autorizado (procNFe).
+  protocolo: string; // nProt
+  autorizadaEm: string; // dhRecbto
+  autorizada: boolean; // cStat 100/150
+  xml: string; // XML original, guardado p/ importar como nota emitida
 };
 
 function el(parent: Element | Document, tag: string): Element | null {
@@ -102,6 +107,10 @@ export function parseNFe(xml: string): ParsedNFe {
   const dest = el(infNFe, "dest");
   const total = el(infNFe, "total");
 
+  // Autorização (só existe em procNFe — XML já autorizado pela SEFAZ).
+  const infProt = el(doc, "infProt");
+  const cStat = txt(infProt, "cStat");
+
   const dets = Array.from(infNFe.getElementsByTagName("det"));
   const itens: NfeItem[] = dets.map((det, i) => {
     const prod = el(det, "prod");
@@ -133,5 +142,9 @@ export function parseNFe(xml: string): ParsedNFe {
     itens,
     valorProdutos: num(total, "vProd"),
     valorNota: num(total, "vNF"),
+    protocolo: txt(infProt, "nProt"),
+    autorizadaEm: txt(infProt, "dhRecbto"),
+    autorizada: cStat === "100" || cStat === "150",
+    xml,
   };
 }

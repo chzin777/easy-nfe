@@ -272,7 +272,61 @@ export type EntradaXmlInput = {
 
 export type EntradaXmlResultado =
   | { ok: true; criados: number; atualizados: number; ignorados: number; entradaId: string }
-  | { ok: false; erro: string; jaImportada?: boolean };
+  | { ok: false; erro: string; jaImportada?: boolean; propria?: boolean };
+
+// Classificação automática de um XML na importação.
+//  - tipo "entrada" → NF-e recebida (emitente ≠ empresa): dá entrada no estoque
+//  - tipo "saida"   → NF-e emitida pela empresa em outro sistema: vira Nota
+//  - jaImportada    → já registrada antes (dedup na tabela do respectivo tipo)
+export type TipoImport = "entrada" | "saida";
+export type AnaliseChave = { tipo: TipoImport; jaImportada: boolean };
+
+// Recebe (chave, CNPJ do emitente) de cada XML e devolve, por chave, o tipo
+// (comparando o emitente com o CNPJ da própria empresa) e se já foi importada.
+export async function analisarChavesImport(
+  itens: { chave: string; emitenteDoc: string }[],
+): Promise<Record<string, AnaliseChave>> {
+  await exigirFeature("importar_xml");
+  const empresaId = await exigirEmpresa();
+  const empresa = await prisma.emitente.findUniqueOrThrow({
+    where: { id: empresaId },
+    select: { cnpj: true },
+  });
+  const ownCnpj = empresa.cnpj.replace(/\D/g, "");
+
+  const out: Record<string, AnaliseChave> = {};
+  const entradaChaves: string[] = [];
+  const saidaChaves: string[] = [];
+
+  for (const it of itens) {
+    const chave = (it.chave ?? "").replace(/\D/g, "");
+    if (chave.length !== 44) continue;
+    const emit = (it.emitenteDoc ?? "").replace(/\D/g, "");
+    const tipo: TipoImport = emit && emit === ownCnpj ? "saida" : "entrada";
+    out[chave] = { tipo, jaImportada: false };
+    (tipo === "saida" ? saidaChaves : entradaChaves).push(chave);
+  }
+  if (!entradaChaves.length && !saidaChaves.length) return out;
+
+  const [entradas, saidas] = await Promise.all([
+    entradaChaves.length
+      ? prisma.entradaEstoque.findMany({
+          where: { empresaId, chave: { in: entradaChaves } },
+          select: { chave: true },
+        })
+      : Promise.resolve([]),
+    saidaChaves.length
+      ? prisma.nota.findMany({
+          where: { emitenteId: empresaId, chaveAcesso: { in: saidaChaves } },
+          select: { chaveAcesso: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  for (const e of entradas) if (out[e.chave]) out[e.chave].jaImportada = true;
+  for (const n of saidas) if (n.chaveAcesso && out[n.chaveAcesso]) out[n.chaveAcesso].jaImportada = true;
+
+  return out;
+}
 
 export async function importarEntradaXml(input: EntradaXmlInput): Promise<EntradaXmlResultado> {
   try {
@@ -282,6 +336,19 @@ export async function importarEntradaXml(input: EntradaXmlInput): Promise<Entrad
     const chave = (input.chave ?? "").replace(/\D/g, "");
     if (chave.length !== 44) return { ok: false, erro: "XML sem chave de acesso válida (44 dígitos)." };
     if (!input.itens.length) return { ok: false, erro: "A nota não tem itens." };
+
+    // NF emitida dentro do próprio easy-nfe não é entrada de compra.
+    const propria = await prisma.nota.findFirst({
+      where: { emitenteId: empresaId, chaveAcesso: chave },
+      select: { id: true },
+    });
+    if (propria) {
+      return {
+        ok: false,
+        propria: true,
+        erro: "Esta NF-e foi emitida pela sua empresa no easy-nfe — não pode ser importada como entrada.",
+      };
+    }
 
     // Dedup: mesma nota já dá entrada uma vez só.
     const existente = await prisma.entradaEstoque.findUnique({
@@ -366,6 +433,162 @@ export async function importarEntradaXml(input: EntradaXmlInput): Promise<Entrad
     // corrida na unique (empresa, chave)
     if (/Unique constraint|P2002/i.test(msg)) {
       return { ok: false, jaImportada: true, erro: "Esta nota já teve entrada lançada no estoque." };
+    }
+    return { ok: false, erro: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Importar NF-e de SAÍDA emitida em outro sistema — traz a nota (já autorizada)
+// para dentro do easy-nfe como Nota AUTORIZADA (histórico/consulta). Não emite
+// nada na SEFAZ nem baixa estoque; apenas registra o documento existente.
+// Idempotente pela chave de acesso (unique global em Nota.chaveAcesso).
+// ---------------------------------------------------------------------------
+export type ItemNotaSaida = {
+  xProd: string;
+  ncm?: string;
+  cfop?: string;
+  uCom?: string;
+  qCom: number;
+  vUnCom: number;
+  vProd: number;
+};
+
+export type NotaSaidaInput = {
+  chave: string;
+  numero: string;
+  serie: string;
+  modelo: string;
+  natOp?: string;
+  emitenteDoc: string; // CNPJ do emitente no XML — deve ser a própria empresa
+  autorizada: boolean;
+  protocolo?: string;
+  autorizadaEm?: string; // ISO/dhRecbto do XML
+  xml: string;
+  valorTotal: number;
+  destinatario: {
+    documento: string;
+    nome: string;
+    ie?: string;
+    telefone?: string;
+    cep?: string;
+    logradouro?: string;
+    numero?: string;
+    bairro?: string;
+    municipio?: string;
+    uf?: string;
+  };
+  itens: ItemNotaSaida[];
+};
+
+export type NotaSaidaResultado =
+  | { ok: true; notaId: string; clienteCriado: boolean }
+  | { ok: false; erro: string; jaImportada?: boolean; naoPropria?: boolean };
+
+export async function importarNotaSaida(input: NotaSaidaInput): Promise<NotaSaidaResultado> {
+  try {
+    await exigirFeature("importar_xml");
+    const empresaId = await exigirEmpresa();
+    const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
+
+    const chave = (input.chave ?? "").replace(/\D/g, "");
+    if (chave.length !== 44) return { ok: false, erro: "XML sem chave de acesso válida (44 dígitos)." };
+    if (!input.itens.length) return { ok: false, erro: "A nota não tem itens." };
+    if (!input.autorizada) {
+      return { ok: false, erro: "XML não está autorizado (sem protocolo de autorização) — só é possível importar notas já autorizadas pela SEFAZ." };
+    }
+
+    // Só importa notas emitidas pela PRÓPRIA empresa (mesmo CNPJ do emitente).
+    const docEmit = (input.emitenteDoc ?? "").replace(/\D/g, "");
+    if (docEmit && docEmit !== empresa.cnpj.replace(/\D/g, "")) {
+      return {
+        ok: false,
+        naoPropria: true,
+        erro: "Esta NF-e foi emitida por outro CNPJ — não é uma nota de saída da sua empresa. Para lançar mercadoria recebida, use a importação de Entrada.",
+      };
+    }
+
+    // Dedup: a mesma nota (chave) já foi trazida antes.
+    const existente = await prisma.nota.findUnique({ where: { chaveAcesso: chave } });
+    if (existente) {
+      return { ok: false, jaImportada: true, erro: "Esta nota já foi importada." };
+    }
+
+    // Casa o destinatário como cliente (por documento); cria se não existir.
+    const destDoc = (input.destinatario.documento ?? "").replace(/\D/g, "");
+    let clienteId: string;
+    let clienteCriado = false;
+    const clienteExistente = destDoc
+      ? await prisma.cliente.findFirst({ where: { empresaId, documento: destDoc } })
+      : await prisma.cliente.findFirst({ where: { empresaId, padrao: true } });
+
+    if (clienteExistente) {
+      clienteId = clienteExistente.id;
+    } else if (destDoc) {
+      const ie = (input.destinatario.ie ?? "").trim();
+      const tipoContribuinte = /^ISENTO$/i.test(ie) ? "2" : ie ? "1" : "9";
+      const novoCli = await prisma.cliente.create({
+        data: {
+          empresaId,
+          tipoContribuinte,
+          documento: destDoc,
+          nome: input.destinatario.nome || "Cliente importado",
+          inscricaoEstadual: ie || null,
+          telefone: input.destinatario.telefone || null,
+          cep: input.destinatario.cep || null,
+          logradouro: input.destinatario.logradouro || null,
+          numero: input.destinatario.numero || null,
+          bairro: input.destinatario.bairro || null,
+          municipio: input.destinatario.municipio || null,
+          uf: input.destinatario.uf || null,
+        },
+      });
+      clienteId = novoCli.id;
+      clienteCriado = true;
+    } else {
+      return { ok: false, erro: "A nota não tem destinatário e não há cliente padrão configurado." };
+    }
+
+    const numero = parseInt((input.numero ?? "").replace(/\D/g, ""), 10) || 0;
+    const serie = parseInt((input.serie ?? "").replace(/\D/g, ""), 10) || 1;
+    const modelo = input.modelo || "55";
+
+    const nota = await prisma.nota.create({
+      data: {
+        numero,
+        serie,
+        modelo,
+        naturezaOperacao: input.natOp || "VENDA DE MERCADORIA",
+        tipoNota: `${modelo}-saida`,
+        emitenteId: empresaId,
+        clienteId,
+        status: "AUTORIZADA",
+        ambiente: empresa.ambiente,
+        valorTotal: input.valorTotal > 0 ? input.valorTotal : 0,
+        chaveAcesso: chave,
+        protocolo: input.protocolo || null,
+        autorizadaEm: input.autorizadaEm ? new Date(input.autorizadaEm) : new Date(),
+        xmlAutorizado: input.xml,
+        informacoesAdicionais: "Importada de outro sistema.",
+        itens: {
+          create: input.itens.map((it) => ({
+            nome: it.xProd,
+            ncm: it.ncm || null,
+            cfop: it.cfop || null,
+            unidade: it.uCom || null,
+            quantidade: it.qCom,
+            precoUnitario: it.vUnCom,
+            valorTotal: it.vProd > 0 ? it.vProd : it.qCom * it.vUnCom,
+          })),
+        },
+      },
+    });
+
+    return { ok: true, notaId: nota.id, clienteCriado };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/Unique constraint|P2002/i.test(msg)) {
+      return { ok: false, jaImportada: true, erro: "Esta nota já foi importada." };
     }
     return { ok: false, erro: msg };
   }
