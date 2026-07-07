@@ -12,6 +12,15 @@ function esc(s: string): string {
     .replace(/'/g, "&apos;");
 }
 
+// Escapa E trunca ao maxLength do schema NF-e 4.00. Campos de texto (xNome, xProd,
+// endereço...) têm limite rígido; nomes/razões sociais reais passam de 60 e estouram
+// o schema (rejeição 225 — ex.: razão social de associação com 105 chars em dest/xNome).
+// Trunca no limite (a SEFAZ aceita o nome cortado) em vez de deixar a nota ser recusada.
+function escLim(s: string, max: number): string {
+  const t = s.trim();
+  return esc(t.length > max ? t.slice(0, max) : t);
+}
+
 const n2 = (v: number) => v.toFixed(2);
 const n4 = (v: number) => v.toFixed(4);
 const n10 = (v: number) => v.toFixed(10);
@@ -27,10 +36,10 @@ function enderXml(tag: string, e: EnderecoNFe): string {
   const cep = e.cep.replace(/\D/g, "");
   return (
     `<${tag}>` +
-    `<xLgr>${esc(e.xLgr)}</xLgr><nro>${esc(e.nro)}</nro>` +
-    (e.xCpl ? `<xCpl>${esc(e.xCpl)}</xCpl>` : "") +
-    `<xBairro>${esc(e.xBairro)}</xBairro>` +
-    `<cMun>${cMun}</cMun><xMun>${esc(e.municipio)}</xMun><UF>${e.uf}</UF>` +
+    `<xLgr>${escLim(e.xLgr, 60)}</xLgr><nro>${escLim(e.nro, 60)}</nro>` +
+    (e.xCpl ? `<xCpl>${escLim(e.xCpl, 60)}</xCpl>` : "") +
+    `<xBairro>${escLim(e.xBairro, 60)}</xBairro>` +
+    `<cMun>${cMun}</cMun><xMun>${escLim(e.municipio, 60)}</xMun><UF>${e.uf}</UF>` +
     `<CEP>${cep}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais>` +
     (e.fone ? `<fone>${e.fone.replace(/\D/g, "")}</fone>` : "") +
     `</${tag}>`
@@ -92,8 +101,8 @@ function detXml(item: ItemNFe, nItem: number, crt: string): { xml: string; vBC: 
   const xml =
     `<det nItem="${nItem}">` +
     `<prod>` +
-    `<cProd>${esc(item.cProd)}</cProd><cEAN>${esc(item.cEAN)}</cEAN>` +
-    `<xProd>${esc(item.xProd)}</xProd><NCM>${item.ncm}</NCM>` +
+    `<cProd>${escLim(item.cProd, 60)}</cProd><cEAN>${esc(item.cEAN)}</cEAN>` +
+    `<xProd>${escLim(item.xProd, 120)}</xProd><NCM>${item.ncm}</NCM>` +
     cestTag +
     cBenefTag(item.cBenef) + // schema: cBenef em <prod>, após CEST e antes do CFOP
     `<CFOP>${item.cfop}</CFOP><uCom>${esc(item.uCom)}</uCom>` +
@@ -172,8 +181,8 @@ export function montarNFe(
 
   const emit =
     `<emit>` +
-    `<CNPJ>${cnpj}</CNPJ><xNome>${esc(dados.emit.xNome)}</xNome>` +
-    (dados.emit.xFant ? `<xFant>${esc(dados.emit.xFant)}</xFant>` : "") +
+    `<CNPJ>${cnpj}</CNPJ><xNome>${escLim(dados.emit.xNome, 60)}</xNome>` +
+    (dados.emit.xFant ? `<xFant>${escLim(dados.emit.xFant, 60)}</xFant>` : "") +
     enderXml("enderEmit", dados.emit.ender) +
     `<IE>${dados.emit.ie.replace(/\D/g, "")}</IE><CRT>${dados.emit.crt}</CRT>` +
     `</emit>`;
@@ -184,7 +193,7 @@ export function montarNFe(
   const dest = d
     ? `<dest>` +
       tagDoc(d.doc) +
-      `<xNome>${esc(d.xNome)}</xNome>` +
+      `<xNome>${escLim(d.xNome, 60)}</xNome>` +
       // enderDest é opcional no schema; só inclui se houver logradouro (evita tags vazias = rejeição 225).
       (d.ender?.xLgr?.trim() ? enderXml("enderDest", d.ender) : "") +
       // Schema NFe 4.00: indIEDest precede IE. Inverter gera rejeição 225 (falha de schema).
