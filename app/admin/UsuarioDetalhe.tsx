@@ -500,6 +500,24 @@ function Faturas({ d, onMudou, flash }: Sub) {
                       {f.planoNome} · vence {formatData(f.vencimento)}
                       {f.status === "PAGA" && f.pagaEm && ` · pago em ${formatData(f.pagaEm)}${f.metodo ? ` (${f.metodo})` : ""}`}
                     </p>
+                    {f.emailStatus && (
+                      <span
+                        title={f.emailStatus === "FALHA" ? (f.emailErro ?? "Falha ao enviar o e-mail.") : f.emailEm ? `em ${formatData(f.emailEm)}` : undefined}
+                        className={
+                          "mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium " +
+                          (f.emailStatus === "FALHA"
+                            ? "bg-red-50 text-[var(--danger)]"
+                            : "bg-emerald-50 text-emerald-700")
+                        }
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          {f.emailStatus === "FALHA"
+                            ? <><circle cx="12" cy="12" r="10" /><path d="m15 9-6 6" /><path d="m9 9 6 6" /></>
+                            : <path d="M20 6 9 17l-5-5" />}
+                        </svg>
+                        {f.emailStatus === "FALHA" ? "Falha ao enviar" : f.emailStatus === "REENVIADO" ? "E-mail reenviado" : "E-mail enviado"}
+                      </span>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <Badge tom={tomFatura[f.status] ?? "neutral"}>{f.status}</Badge>

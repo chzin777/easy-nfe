@@ -210,6 +210,11 @@ model Fatura {
   // Pagamento público (sem login): /pagar/[token]
   tokenPublico String? @unique
 
+  // Status do e-mail de cobrança enviado ao assinante (badge no admin).
+  emailStatus String?   // ENVIADO | REENVIADO | FALHA
+  emailEm     DateTime? // quando o último envio/tentativa ocorreu
+  emailErro   String?   // mensagem da falha (quando FALHA)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

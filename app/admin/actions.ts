@@ -65,7 +65,7 @@ export type UsuarioDetalhe = {
   criadoEm: string;
   licenca: { planoId: string | null; plano: string | null; status: string; validadeEm: string | null; descontoTipo: string; descontoValor: number } | null;
   empresas: { id: string; razaoSocial: string; cnpj: string; papel: string }[];
-  faturas: { id: string; planoNome: string; competencia: string; valor: number; vencimento: string; status: string; pagaEm: string | null; metodo: string | null; bankSlipUrl: string | null; linhaDigitavel: string | null; invoiceUrl: string | null }[];
+  faturas: { id: string; planoNome: string; competencia: string; valor: number; vencimento: string; status: string; pagaEm: string | null; metodo: string | null; bankSlipUrl: string | null; linhaDigitavel: string | null; invoiceUrl: string | null; emailStatus: string | null; emailEm: string | null; emailErro: string | null }[];
 };
 
 export async function detalheUsuario(userId: string): Promise<UsuarioDetalhe | null> {
@@ -116,6 +116,9 @@ export async function detalheUsuario(userId: string): Promise<UsuarioDetalhe | n
       bankSlipUrl: f.bankSlipUrl,
       linhaDigitavel: f.linhaDigitavel,
       invoiceUrl: f.invoiceUrl,
+      emailStatus: f.emailStatus,
+      emailEm: f.emailEm?.toISOString() ?? null,
+      emailErro: f.emailErro,
     })),
   };
 }
@@ -717,29 +720,48 @@ export async function gerarFaturas(userId: string): Promise<Resultado> {
   try {
     await exigirAdmin();
     await gerarFaturasInterno(userId);
+
+    // Auto-envia o e-mail de cobrança APENAS das faturas do mês atual ou vencidas
+    // (não das futuras — evita disparar 3 e-mails de uma vez) e só das que ainda
+    // não tiveram envio bem-sucedido (emailStatus null/FALHA) — não reenvia em cada clique.
+    const fimMes = new Date();
+    fimMes.setMonth(fimMes.getMonth() + 1, 0);
+    fimMes.setHours(23, 59, 59, 999);
+    const aEnviar = await prisma.fatura.findMany({
+      where: {
+        userId,
+        status: { in: ["PENDENTE", "ATRASADA"] },
+        vencimento: { lte: fimMes },
+        OR: [{ emailStatus: null }, { emailStatus: "FALHA" }],
+      },
+      select: { id: true },
+    });
+    for (const f of aEnviar) await enviarCobrancaFatura(f.id, false);
+
     return { ok: true };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
   }
 }
 
-// Reenvia (ou envia) o e-mail de cobrança de uma fatura ao assinante. Garante um
-// tokenPublico p/ o link de pagamento (/pagar/[token]). Não altera a fatura fora
-// isso. Retorna o e-mail de destino em `id` p/ feedback na UI.
-export async function reenviarEmailFatura(faturaId: string): Promise<Resultado> {
-  try {
-    await exigirAdmin();
-    const fatura = await prisma.fatura.findUnique({
-      where: { id: faturaId },
-      include: { user: { select: { nome: true, email: true } } },
-    });
-    if (!fatura) return { ok: false, erro: "Fatura não encontrada." };
-    if (fatura.status === "PAGA" || fatura.status === "CANCELADA") {
-      return { ok: false, erro: "Fatura já paga/cancelada — não há cobrança a enviar." };
-    }
-    const para = fatura.user.email?.trim();
-    if (!para) return { ok: false, erro: "O assinante não tem e-mail cadastrado." };
+// Envia o e-mail de cobrança de uma fatura ao assinante e GRAVA o status do envio
+// na própria fatura (emailStatus/emailEm/emailErro) p/ o badge no admin. Garante um
+// tokenPublico p/ o link de pagamento (/pagar/[token]). `reenvio` diferencia o rótulo
+// ENVIADO (1º envio, ao gerar) de REENVIADO (botão reenviar). Não lança: registra a
+// falha na fatura e devolve o erro. Usado por gerarFaturas (auto) e reenviarEmailFatura.
+async function enviarCobrancaFatura(faturaId: string, reenvio: boolean): Promise<Resultado> {
+  const fatura = await prisma.fatura.findUnique({
+    where: { id: faturaId },
+    include: { user: { select: { nome: true, email: true } } },
+  });
+  if (!fatura) return { ok: false, erro: "Fatura não encontrada." };
+  if (fatura.status === "PAGA" || fatura.status === "CANCELADA") {
+    return { ok: false, erro: "Fatura já paga/cancelada — não há cobrança a enviar." };
+  }
+  const para = fatura.user.email?.trim();
+  if (!para) return { ok: false, erro: "O assinante não tem e-mail cadastrado." };
 
+  try {
     // Garante token público p/ o link de pagamento.
     let token = fatura.tokenPublico;
     if (!token) {
@@ -766,12 +788,27 @@ export async function reenviarEmailFatura(faturaId: string): Promise<Resultado> 
       html,
       anexos: logo ? [{ filename: "easy-nfe.png", content: logo, contentId: LOGO_CID }] : undefined,
     });
+    await prisma.fatura.update({
+      where: { id: fatura.id },
+      data: { emailStatus: reenvio ? "REENVIADO" : "ENVIADO", emailEm: new Date(), emailErro: null },
+    });
     return { ok: true, id: para };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (/RESEND_API_KEY/.test(msg)) return { ok: false, erro: "Envio de e-mail não configurado no servidor." };
+    let msg = e instanceof Error ? e.message : String(e);
+    if (/RESEND_API_KEY/.test(msg)) msg = "Envio de e-mail não configurado no servidor.";
+    await prisma.fatura.update({
+      where: { id: fatura.id },
+      data: { emailStatus: "FALHA", emailEm: new Date(), emailErro: msg.slice(0, 300) },
+    }).catch(() => {});
     return { ok: false, erro: msg };
   }
+}
+
+// Reenvia manualmente (botão no admin) o e-mail de cobrança. Retorna o e-mail de
+// destino em `id` p/ feedback na UI. Marca a fatura como REENVIADO/FALHA.
+export async function reenviarEmailFatura(faturaId: string): Promise<Resultado> {
+  await exigirAdmin();
+  return enviarCobrancaFatura(faturaId, true);
 }
 
 export async function marcarFaturaPaga(input: {
