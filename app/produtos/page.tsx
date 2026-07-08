@@ -504,7 +504,7 @@ export default function ProdutosPage() {
           titulo="Importar produtos"
           nomeModelo="modelo-produtos"
           nomePlanilha="Produtos"
-          modeloUrl="/modelo.xlsx"
+          modeloUrl="/models/produtos.xlsx"
           colunas={COLUNAS_PRODUTO}
           headerObrigatorio="nome"
           validar={validarLinhaProduto}

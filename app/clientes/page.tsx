@@ -247,6 +247,7 @@ export default function ClientesPage() {
           titulo="Importar clientes"
           nomeModelo="modelo-clientes"
           nomePlanilha="Clientes"
+          modeloUrl="/models/cliente.xlsx"
           colunas={COLUNAS_CLIENTE}
           headerObrigatorio="nome"
           validar={validarLinhaCliente}
