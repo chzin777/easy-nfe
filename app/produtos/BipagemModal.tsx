@@ -211,6 +211,9 @@ export default function BipagemModal({
                 ))}
               </tbody>
             </table>
+            <p className="mt-2 text-xs text-[var(--muted)]">
+              NCM é opcional aqui. Se o produto não se aplica/não tem NCM, preencha com <span className="font-mono">00000000</span>.
+            </p>
           </div>
         )}
       </div>

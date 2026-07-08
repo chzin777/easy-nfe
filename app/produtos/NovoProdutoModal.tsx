@@ -189,7 +189,7 @@ export default function NovoProdutoModal({
               />
             </Field>
             <Field label="Unidade de medida" required><Select opcoes={UNIDADES} value={form.unidade} onChange={(e) => set("unidade", e.target.value)} /></Field>
-            <Field label="NCM" required hint="8 dígitos · busque pelo nome do produto">
+            <Field label="NCM" required hint="8 dígitos · busque pelo nome do produto. Se não se aplica/não tem NCM, preencha com 00000000.">
               <NcmPicker value={form.ncm} onChange={(v) => set("ncm", v)} nomeProduto={form.nome} />
             </Field>
           </div>
