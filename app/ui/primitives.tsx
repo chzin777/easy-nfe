@@ -7,6 +7,7 @@ import type {
   TextareaHTMLAttributes,
   ButtonHTMLAttributes,
 } from "react";
+import { useState } from "react";
 import { motion } from "motion/react";
 import type { Opcao } from "@/lib/types";
 
@@ -97,6 +98,56 @@ export function Field({
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   const { className = "", ...rest } = props;
   return <input className={inputBase + " " + className} {...rest} />;
+}
+
+// Campo de data no padrão brasileiro (dd/mm/aaaa). Mantém o value em ISO
+// (YYYY-MM-DD) por fora, então substitui <Input type="date"> sem mudar o
+// contrato de onChange. Evita o formato mm/dd/aaaa do date picker nativo (locale US).
+export function DateBR({
+  value,
+  onChange,
+  className = "",
+  ...rest
+}: {
+  value: string;
+  onChange: (e: { target: { value: string } }) => void;
+  className?: string;
+} & Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type">) {
+  const toBR = (iso: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+  };
+  const [text, setText] = useState(() => toBR(value));
+  const [ultimoValue, setUltimoValue] = useState(value);
+  // Ressincroniza o texto quando o value externo muda (ex.: troca de fatura).
+  if (value !== ultimoValue) {
+    setUltimoValue(value);
+    setText(toBR(value));
+  }
+
+  function handleChange(raw: string) {
+    const d = raw.replace(/\D/g, "").slice(0, 8);
+    let masked = d;
+    if (d.length > 4) masked = `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+    else if (d.length > 2) masked = `${d.slice(0, 2)}/${d.slice(2)}`;
+    setText(masked);
+    if (d.length === 8) {
+      onChange({ target: { value: `${d.slice(4)}-${d.slice(2, 4)}-${d.slice(0, 2)}` } });
+    } else if (d.length === 0) {
+      onChange({ target: { value: "" } });
+    }
+  }
+
+  return (
+    <input
+      inputMode="numeric"
+      placeholder="dd/mm/aaaa"
+      className={inputBase + " " + className}
+      value={text}
+      onChange={(e) => handleChange(e.target.value)}
+      {...rest}
+    />
+  );
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {

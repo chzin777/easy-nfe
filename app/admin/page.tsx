@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence, type Variants } from "motion/react";
-import { Badge, Button, Card, Field, Input, Select } from "@/app/ui/primitives";
+import { Badge, Button, Card, DateBR, Field, Input, Select } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import StepperModal from "@/app/ui/StepperModal";
@@ -277,7 +277,7 @@ function NovoUsuarioModal({ aberto, onFechar, onCriado }: { aberto: boolean; onF
             <Input type="number" min="1" value={diasTrial} onChange={(e) => aplicarTrial(Number(e.target.value))} />
           </Field>
         ) : (
-          <Field label="Validade"><Input type="date" value={validade} onChange={(e) => setValidade(e.target.value)} /></Field>
+          <Field label="Validade"><DateBR value={validade} onChange={(e) => setValidade(e.target.value)} /></Field>
         )}
       </div>
       {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}

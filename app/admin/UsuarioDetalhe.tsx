@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Badge, Button, Card, Field, Input, Select } from "@/app/ui/primitives";
+import { Badge, Button, Card, DateBR, Field, Input, Select } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Tabs from "@/app/ui/Tabs";
 import LightningLoader from "@/app/ui/LightningLoader";
@@ -247,7 +247,7 @@ function Licenca({ d, planos, onMudou, flash, registrar }: Sub & ComSalvar & { p
               <Input type="number" min="1" value={diasTrial} onChange={(e) => aplicarTrial(Math.max(1, Number(e.target.value) || 0))} />
             </Field>
           ) : (
-            <Field label="Validade"><Input type="date" value={validade} onChange={(e) => setValidade(e.target.value)} /></Field>
+            <Field label="Validade"><DateBR value={validade} onChange={(e) => setValidade(e.target.value)} /></Field>
           )}
         </div>
 
@@ -550,7 +550,7 @@ function Faturas({ d, onMudou, flash }: Sub) {
 
                 {pagandoId === f.id && (
                   <div className="mt-2 flex items-end gap-2 rounded-lg border border-[var(--border)] bg-slate-50 p-3">
-                    <Field label="Data do pagamento" className="flex-1"><Input type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
+                    <Field label="Data do pagamento" className="flex-1"><DateBR value={data} onChange={(e) => setData(e.target.value)} /></Field>
                     <Field label="Método" className="flex-1"><Select opcoes={METODOS} value={metodo} onChange={(e) => setMetodo(e.target.value)} /></Field>
                     <Button variante="secondary" onClick={() => setPagandoId(null)}>Cancelar</Button>
                     <Button onClick={() => confirmarPaga(f.id)}>Confirmar</Button>

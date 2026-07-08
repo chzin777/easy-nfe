@@ -1,5 +1,7 @@
 import "server-only";
 import { prisma } from "./prisma";
+import { enviarEmail, htmlPagamentoConfirmado } from "./email";
+import { logoBase64, LOGO_CID } from "./logo-email";
 
 // Preço da fatura após o desconto especial da licença. tipo: "percent" | "valor".
 // "valor" = R$ fixo abatido por fatura; "percent" = % sobre o preço do plano.
@@ -36,6 +38,42 @@ export async function ativarPorPagamento(
       ? [prisma.licenca.update({ where: { userId: fatura.userId }, data: { status: "ATIVA", validadeEm: base } })]
       : []),
   ]);
+
+  // Confirmação de pagamento ao assinante (best-effort — não quebra o webhook).
+  await enviarConfirmacaoPagamento(fatura.userId, {
+    plano: fatura.planoNome,
+    valor: Number(fatura.valor),
+    pagaEm,
+    metodo,
+    validadeEm: lic ? base : undefined,
+  }).catch(() => {});
+}
+
+// Dispara o e-mail de confirmação de pagamento. Isolado e tolerante a falha:
+// qualquer erro (e-mail ausente, Resend não configurado) é engolido pelo chamador.
+export async function enviarConfirmacaoPagamento(
+  userId: string,
+  dados: { plano: string; valor: number; pagaEm: Date; metodo?: string; validadeEm?: Date },
+): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { nome: true, email: true } });
+  const para = user?.email?.trim();
+  if (!para) return;
+  const logo = await logoBase64().catch(() => null);
+  const html = htmlPagamentoConfirmado({
+    nome: user?.nome ?? para,
+    plano: dados.plano,
+    valor: dados.valor,
+    pagaEm: dados.pagaEm,
+    metodo: dados.metodo,
+    validadeEm: dados.validadeEm,
+    logoCid: logo ? LOGO_CID : undefined,
+  });
+  await enviarEmail({
+    para,
+    assunto: "Pagamento confirmado — sua assinatura Easy-NFe está ativa",
+    html,
+    anexos: logo ? [{ filename: "easy-nfe.png", content: logo, contentId: LOGO_CID }] : undefined,
+  });
 }
 
 // Normaliza o billingType do Asaas para o nosso rótulo de método.

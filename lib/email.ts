@@ -185,6 +185,57 @@ export function htmlCobranca(vars: {
   });
 }
 
+// ----------------------------------------------------------------------------
+// E-mail de confirmação de pagamento — enviado automaticamente ao assinante
+// quando o pagamento do plano é confirmado (webhook Asaas). Marca roxa no header,
+// selo verde de sucesso. `validadeEm` = nova data de validade da licença (opcional).
+// ----------------------------------------------------------------------------
+export function htmlPagamentoConfirmado(vars: {
+  nome: string;
+  plano: string;
+  valor: number;
+  pagaEm: Date;
+  metodo?: string;
+  validadeEm?: Date;
+  logoCid?: string;
+}): string {
+  const dataPag = vars.pagaEm.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+  const rotuloMetodo: Record<string, string> = { pix: "Pix", boleto: "Boleto", cartao: "Cartão de crédito", asaas: "Asaas" };
+  const metodo = vars.metodo ? (rotuloMetodo[vars.metodo] ?? vars.metodo) : null;
+  const validade = vars.validadeEm
+    ? vars.validadeEm.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
+    : null;
+  const corpo = `
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 18px"><tr><td>
+      <span style="display:inline-block;padding:5px 14px;border-radius:999px;background:#e7f8ef;color:#059669;font-size:12px;font-weight:700">✓ Pagamento confirmado</span>
+    </td></tr></table>
+    <h1 style="margin:4px 0 8px;font-size:22px;color:#161b26">Obrigado, ${escapar(vars.nome.split(" ")[0] || vars.nome)}!</h1>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.65;color:#344054">
+      Recebemos o pagamento da sua mensalidade do Easy-NFe. Sua assinatura está
+      <strong style="color:#059669">ativa</strong> e a emissão de notas segue liberada.${
+        validade ? ` Seu acesso está garantido até <strong>${validade}</strong>.` : ""
+      }
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eceaf6;border-radius:12px;overflow:hidden;margin:0 0 8px">
+      <tr><td style="padding:14px 18px;background:#faf9ff;border-bottom:1px solid #eceaf6">
+        <span style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#98a2b3;font-weight:700">Comprovante</span>
+      </td></tr>
+      ${linhaInfo("Plano", escapar(vars.plano))}
+      ${linhaInfo("Valor pago", `<strong style="color:#059669;font-size:16px">${fmtBRL(vars.valor)}</strong>`)}
+      ${linhaInfo("Data do pagamento", dataPag)}
+      ${metodo ? linhaInfo("Forma de pagamento", escapar(metodo), !validade) : ""}
+      ${validade ? linhaInfo("Válido até", validade, true) : ""}
+    </table>
+    <p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:#98a2b3">
+      Guarde este e-mail como comprovante. Dúvidas? É só responder esta mensagem.
+    </p>`;
+  return emailShell({
+    preheader: "Pagamento confirmado — sua assinatura Easy-NFe está ativa",
+    corpo,
+    logoCid: vars.logoCid,
+  });
+}
+
 // Template do e-mail de redefinição de senha. Marca #5227ff (roxo).
 export function htmlRedefinicaoSenha(link: string): string {
   return `
