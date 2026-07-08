@@ -6,7 +6,8 @@ import StepperModal from "@/app/ui/StepperModal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import { ORIGENS, UNIDADES } from "@/lib/mock-data";
 import type { Produto } from "@/lib/types";
-import { criarProduto, atualizarProduto, type ProdutoInput } from "./actions";
+import { criarProduto, atualizarProduto, buscarPorGtin, type ProdutoInput } from "./actions";
+import BarcodeScanner from "@/app/ui/BarcodeScanner";
 import NcmPicker from "./NcmPicker";
 import BeneficioPicker from "./BeneficioPicker";
 import TributacaoFields from "./TributacaoFields";
@@ -67,7 +68,40 @@ export default function NovoProdutoModal({
   const [form, setForm] = useState<ProdutoInput>(produtoInicial ? paraInput(produtoInicial) : vazio);
   const [erro, setErro] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>(categoriasIniciais ?? []);
+  const [buscandoGtin, setBuscandoGtin] = useState(false);
+  const [avisoGtin, setAvisoGtin] = useState<{ tom: "ok" | "erro"; texto: string } | null>(null);
+  const [scannerAberto, setScannerAberto] = useState(false);
   function set<K extends keyof ProdutoInput>(k: K, v: ProdutoInput[K]) { setForm((f) => ({ ...f, [k]: v })); }
+
+  // Consulta o GTIN na base da SEFAZ e pré-preenche nome/NCM/CEST. Não sobrescreve
+  // um nome já digitado. `codigo` opcional vem do scanner; senão usa o campo.
+  async function buscarGtin(codigo?: string) {
+    const gtin = (codigo ?? form.codigoBarras).replace(/\D/g, "");
+    if (!gtin) { setAvisoGtin({ tom: "erro", texto: "Digite ou escaneie um código de barras primeiro." }); return; }
+    setBuscandoGtin(true);
+    setAvisoGtin(null);
+    try {
+      const r = await buscarPorGtin(gtin);
+      if (r.ok) {
+        setForm((f) => ({
+          ...f,
+          codigoBarras: r.gtin,
+          nome: f.nome.trim() ? f.nome : r.nome,
+          marca: f.marca.trim() ? f.marca : r.marca,
+          ncm: r.ncm || f.ncm,
+          cest: r.cest || f.cest,
+        }));
+        setAvisoGtin({ tom: "ok", texto: r.nome ? `Encontrado: ${r.nome}` : "Código encontrado na SEFAZ." });
+      } else {
+        if (codigo) set("codigoBarras", gtin); // do scanner: ao menos preenche o código
+        setAvisoGtin({ tom: "erro", texto: r.erro });
+      }
+    } catch (e) {
+      setAvisoGtin({ tom: "erro", texto: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBuscandoGtin(false);
+    }
+  }
 
   useEffect(() => {
     if (categoriasIniciais) return; // já veio pronto da página
@@ -99,6 +133,7 @@ export default function NovoProdutoModal({
         </div>
       )}
       <Stepper
+        reservarFechar
         initialStep={passoInicial}
         completeButtonText={edicao ? "Salvar correções" : "Cadastrar produto"}
         onFinalStepCompleted={salvar}
@@ -107,7 +142,41 @@ export default function NovoProdutoModal({
         <Step>
           <SectionTitle>Identificação do produto</SectionTitle>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Código de barras (GTIN/EAN)"><Input value={form.codigoBarras} onChange={(e) => set("codigoBarras", e.target.value)} placeholder="Sem GTIN" /></Field>
+            <Field label="Código de barras (GTIN/EAN)" hint="Bipe, escaneie ou digite e busque na SEFAZ">
+              <div className="flex gap-2">
+                <Input
+                  value={form.codigoBarras}
+                  onChange={(e) => set("codigoBarras", e.target.value.replace(/\D/g, ""))}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void buscarGtin(); } }}
+                  inputMode="numeric"
+                  placeholder="Sem GTIN"
+                />
+                <button
+                  type="button"
+                  onClick={() => setScannerAberto(true)}
+                  title="Escanear com a câmera"
+                  aria-label="Escanear com a câmera"
+                  className="flex h-[46px] w-11 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-white text-[var(--muted)] hover:bg-slate-50 hover:text-[var(--foreground)]"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><path d="M7 8v8" /><path d="M11 8v8" /><path d="M15 8v8" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void buscarGtin()}
+                  disabled={buscandoGtin}
+                  className="h-[46px] shrink-0 rounded-lg border border-transparent bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-3 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {buscandoGtin ? "..." : "Buscar"}
+                </button>
+              </div>
+              {avisoGtin && (
+                <p className={"mt-1 text-xs " + (avisoGtin.tom === "ok" ? "text-[var(--success)]" : "text-[var(--danger)]")}>
+                  {avisoGtin.texto}
+                </p>
+              )}
+            </Field>
             <Field label="Nome do produto" required><Input value={form.nome} onChange={(e) => set("nome", e.target.value)} /></Field>
             <Field label="Marca"><Input value={form.marca} onChange={(e) => set("marca", e.target.value)} placeholder="Ex.: Nestlé" /></Field>
             <Field label="Categoria">
@@ -189,6 +258,11 @@ export default function NovoProdutoModal({
         </Step>
       </Stepper>
       {erro && <p className="mt-2 text-sm font-medium text-[var(--danger)]">{erro}</p>}
+      <BarcodeScanner
+        aberto={scannerAberto}
+        onFechar={() => setScannerAberto(false)}
+        onDetect={(codigo) => { setScannerAberto(false); void buscarGtin(codigo); }}
+      />
     </StepperModal>
   );
 }

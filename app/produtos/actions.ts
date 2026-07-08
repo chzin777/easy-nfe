@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
 import { exigirFeature } from "@/lib/permissoes";
+import { consultarGtin } from "@/lib/gtin";
 import type { Produto } from "@/lib/types";
 import type { ProdutoImport } from "@/lib/produtos-modelo";
 
@@ -591,6 +592,26 @@ export async function importarNotaSaida(input: NotaSaidaInput): Promise<NotaSaid
       return { ok: false, jaImportada: true, erro: "Esta nota já foi importada." };
     }
     return { ok: false, erro: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Consulta por código de barras (GTIN) via API Cosmos. Preenche nome/marca/NCM/
+// CEST a partir do código — pra quem só tem o produto físico na mão, sem nota
+// nem planilha. Ver lib/gtin.ts.
+// ---------------------------------------------------------------------------
+export type BuscaGtin =
+  | { ok: true; gtin: string; nome: string; marca: string; ncm: string; cest: string }
+  | { ok: false; erro: string; naoEncontrado?: boolean };
+
+export async function buscarPorGtin(gtin: string): Promise<BuscaGtin> {
+  try {
+    await exigirFeature("produtos");
+    const r = await consultarGtin(gtin);
+    if (!r.ok) return { ok: false, erro: r.erro, naoEncontrado: r.naoEncontrado };
+    return { ok: true, gtin: r.gtin, nome: r.nome, marca: r.marca, ncm: r.ncm, cest: r.cest };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
   }
 }
 

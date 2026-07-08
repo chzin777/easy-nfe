@@ -24,6 +24,8 @@ interface StepperProps extends HTMLAttributes<HTMLDivElement> {
   resumoMobile?: ReactNode;
   /** Cabeçalho opcional dentro do card, acima dos indicadores (ex.: título + total). */
   cabecalho?: ReactNode;
+  /** Reserva folga à direita na linha dos indicadores p/ não colidir com o X do modal. */
+  reservarFechar?: boolean;
 }
 
 export default function Stepper({
@@ -38,6 +40,7 @@ export default function Stepper({
   canProceed,
   resumoMobile,
   cabecalho,
+  reservarFechar = false,
   ...rest
 }: StepperProps) {
   const [currentStep, setCurrentStep] = useState<number>(initialStep);
@@ -84,7 +87,7 @@ export default function Stepper({
         {cabecalho && (
           <div className="border-b border-[var(--border)] px-4 py-3 sm:px-8">{cabecalho}</div>
         )}
-        <div className="flex w-full items-center gap-2 bg-gradient-to-r from-slate-50 to-white px-4 py-5 sm:px-8 sm:py-6">
+        <div className={"flex w-full items-center gap-2 bg-gradient-to-r from-slate-50 to-white px-4 py-5 sm:px-8 sm:py-6 " + (reservarFechar ? "pr-14 sm:pr-14" : "")}>
           {stepsArray.map((_, index) => {
             const stepNumber = index + 1;
             const isNotLastStep = index < totalSteps - 1;
