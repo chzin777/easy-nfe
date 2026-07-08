@@ -194,7 +194,9 @@ export async function criarProdutosBipagem(
   await exigirFeature("produtos");
   const empresaId = await exigirEmpresa();
 
-  const validos = itens.filter((i) => i.nome.trim() && i.ncm.replace(/\D/g, "").length === 8);
+  // NCM é opcional aqui (produto sem GTIN/NCM na base): pode ser preenchido
+  // depois, antes de emitir. Exige só nome.
+  const validos = itens.filter((i) => i.nome.trim());
 
   for (const i of validos) {
     const qtd = controlarEstoque && i.quantidade > 0 ? i.quantidade : 0;

@@ -80,7 +80,9 @@ export default function BipagemModal({
     setLinhas((ls) => ls.filter((l) => l.gtin !== gtin));
   }
 
-  const prontas = linhas.filter((l) => l.nome.trim() && l.ncm.replace(/\D/g, "").length === 8);
+  // Obrigatórios p/ cadastrar: nome e preço (e quantidade, se controlar estoque).
+  // NCM é opcional — nem todo produto tem na base; pode ser preenchido depois.
+  const prontas = linhas.filter((l) => l.nome.trim() && l.preco > 0 && (!controlar || l.quantidade > 0));
 
   async function salvar() {
     if (!prontas.length) return;
@@ -162,11 +164,11 @@ export default function BipagemModal({
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted)]">
                   <th className="py-2 pr-2 font-medium">GTIN</th>
-                  <th className="px-2 py-2 font-medium">Nome</th>
+                  <th className="px-2 py-2 font-medium">Nome <span className="text-[var(--danger)]">*</span></th>
                   <th className="px-2 py-2 font-medium">NCM</th>
                   <th className="px-2 py-2 font-medium">Un.</th>
-                  {controlar && <th className="px-2 py-2 text-right font-medium">Qtd</th>}
-                  <th className="px-2 py-2 text-right font-medium">Preço</th>
+                  {controlar && <th className="px-2 py-2 text-right font-medium">Qtd <span className="text-[var(--danger)]">*</span></th>}
+                  <th className="px-2 py-2 text-right font-medium">Preço <span className="text-[var(--danger)]">*</span></th>
                   <th className="py-2 pl-2" />
                 </tr>
               </thead>
