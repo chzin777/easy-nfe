@@ -174,6 +174,59 @@ export async function importarProdutos(
   return { criados: validos.length, ignorados: itens.length - validos.length, erros };
 }
 
+// Cadastro por bipagem: cria os produtos e, se controlarEstoque, já dá entrada
+// com a quantidade contada (registra o movimento ENTRADA como estoque inicial).
+// Só cria linhas com nome + NCM de 8 dígitos.
+export type ProdutoBipagem = {
+  codigoBarras: string;
+  nome: string;
+  unidade: string;
+  ncm: string;
+  preco: number;
+  cest: string;
+  quantidade: number;
+};
+
+export async function criarProdutosBipagem(
+  itens: ProdutoBipagem[],
+  controlarEstoque: boolean,
+): Promise<{ criados: number; ignorados: number }> {
+  await exigirFeature("produtos");
+  const empresaId = await exigirEmpresa();
+
+  const validos = itens.filter((i) => i.nome.trim() && i.ncm.replace(/\D/g, "").length === 8);
+
+  for (const i of validos) {
+    const qtd = controlarEstoque && i.quantidade > 0 ? i.quantidade : 0;
+    await prisma.$transaction(async (tx) => {
+      const p = await tx.produto.create({
+        data: {
+          empresaId,
+          codigoBarras: i.codigoBarras || null,
+          nome: i.nome.trim(),
+          unidade: i.unidade,
+          ncm: i.ncm.replace(/\D/g, ""),
+          origem: "0",
+          preco: Number(i.preco) || 0,
+          cest: i.cest || null,
+          controlaEstoque: controlarEstoque,
+          estoque: qtd,
+        },
+      });
+      if (qtd > 0) {
+        await tx.movimentoEstoque.create({
+          data: {
+            empresaId, produtoId: p.id, tipo: "ENTRADA",
+            quantidade: qtd, saldoApos: qtd, motivo: "Bipagem — estoque inicial",
+          },
+        });
+      }
+    });
+  }
+
+  return { criados: validos.length, ignorados: itens.length - validos.length };
+}
+
 export async function excluirProduto(id: string): Promise<void> {
   await exigirFeature("produtos");
   const empresaId = await exigirEmpresa();

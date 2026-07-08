@@ -6,11 +6,10 @@ import BarcodeScanner from "@/app/ui/BarcodeScanner";
 import { Button, Input, Select } from "@/app/ui/primitives";
 import MoneyInput from "@/app/ui/MoneyInput";
 import { UNIDADES } from "@/lib/mock-data";
-import type { ProdutoImport } from "@/lib/produtos-modelo";
-import { buscarPorGtin, importarProdutos } from "./actions";
+import { buscarPorGtin, criarProdutosBipagem, type ProdutoBipagem } from "./actions";
 
 // Cada linha da fila de bipagem. `status` guia o feedback visual enquanto o
-// auto-fill da SEFAZ roda. Só linhas com nome+NCM são salvas.
+// auto-fill roda. Só linhas com nome + NCM (8 díg.) são salvas.
 type Linha = {
   gtin: string;
   nome: string;
@@ -18,6 +17,7 @@ type Linha = {
   cest: string;
   unidade: string;
   preco: number;
+  quantidade: number;
   status: "buscando" | "ok" | "manual" | "erro";
   aviso?: string;
 };
@@ -35,6 +35,7 @@ export default function BipagemModal({
   const [entrada, setEntrada] = useState("");
   const [scannerAberto, setScannerAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [controlar, setControlar] = useState(true);
   // Dedup síncrono: garante que só disparamos a consulta uma vez por GTIN, sem
   // depender do efeito colateral do updater do setLinhas (que pode rodar depois).
   const vistosRef = useRef<Set<string>>(new Set());
@@ -43,14 +44,18 @@ export default function BipagemModal({
     setLinhas((ls) => ls.map((l) => (l.gtin === gtin ? { ...l, ...patch } : l)));
   }, []);
 
-  // Adiciona um código à fila (se novo) e dispara a consulta ao GTIN.
+  // Bipa um código: novo → adiciona à fila e consulta o GTIN; repetido → soma +1
+  // na quantidade (contagem física de estoque bipando várias vezes).
   const bipar = useCallback((codigoBruto: string) => {
     const gtin = (codigoBruto || "").replace(/\D/g, "");
     if (![8, 12, 13, 14].includes(gtin.length)) return;
-    if (vistosRef.current.has(gtin)) return; // já bipado
+    if (vistosRef.current.has(gtin)) {
+      setLinhas((ls) => ls.map((l) => (l.gtin === gtin ? { ...l, quantidade: l.quantidade + 1 } : l)));
+      return;
+    }
     vistosRef.current.add(gtin);
 
-    setLinhas((ls) => [{ gtin, nome: "", ncm: "", cest: "", unidade: "UN", preco: 0, status: "buscando" }, ...ls]);
+    setLinhas((ls) => [{ gtin, nome: "", ncm: "", cest: "", unidade: "UN", preco: 0, quantidade: 1, status: "buscando" }, ...ls]);
 
     void buscarPorGtin(gtin)
       .then((r) => {
@@ -81,20 +86,16 @@ export default function BipagemModal({
     if (!prontas.length) return;
     setSalvando(true);
     try {
-      const itens: ProdutoImport[] = prontas.map((l) => ({
+      const itens: ProdutoBipagem[] = prontas.map((l) => ({
         codigoBarras: l.gtin,
         nome: l.nome.trim(),
         unidade: l.unidade,
         ncm: l.ncm.replace(/\D/g, ""),
-        origem: "0",
         preco: l.preco,
-        descricao: "",
         cest: l.cest,
-        codigoBeneficio: "",
-        creditoPresumidoIcms: "",
-        reguladoAnp: false,
+        quantidade: l.quantidade,
       }));
-      await importarProdutos(itens);
+      await criarProdutosBipagem(itens, controlar);
       onImportado();
       onFechar();
     } finally {
@@ -141,9 +142,15 @@ export default function BipagemModal({
           </Button>
         </div>
 
-        <p className="text-xs text-[var(--muted)]">
-          Um leitor USB/bluetooth funciona direto no campo acima (bipa e já busca). A SEFAZ preenche nome, NCM e CEST — confira o preço e ajuste o que faltar antes de cadastrar.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-[var(--muted)] max-w-[60%]">
+            Leitor USB/bluetooth funciona direto no campo acima. Bipar o mesmo código de novo soma +1 na quantidade. Nome/NCM/CEST vêm automáticos — confira e ajuste o que faltar.
+          </p>
+          <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm">
+            <input type="checkbox" checked={controlar} onChange={(e) => setControlar(e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+            Dar entrada no estoque (usar a quantidade bipada)
+          </label>
+        </div>
 
         {linhas.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[var(--border)] py-10 text-center text-sm text-[var(--muted)]">
@@ -158,6 +165,7 @@ export default function BipagemModal({
                   <th className="px-2 py-2 font-medium">Nome</th>
                   <th className="px-2 py-2 font-medium">NCM</th>
                   <th className="px-2 py-2 font-medium">Un.</th>
+                  {controlar && <th className="px-2 py-2 text-right font-medium">Qtd</th>}
                   <th className="px-2 py-2 text-right font-medium">Preço</th>
                   <th className="py-2 pl-2" />
                 </tr>
@@ -179,6 +187,16 @@ export default function BipagemModal({
                     <td className="px-2 py-2 w-[150px]">
                       <Select opcoes={UNIDADES} value={l.unidade} onChange={(e) => atualizar(l.gtin, { unidade: e.target.value })} />
                     </td>
+                    {controlar && (
+                      <td className="px-2 py-2 w-[90px]">
+                        <Input
+                          inputMode="numeric"
+                          className="text-right"
+                          value={String(l.quantidade)}
+                          onChange={(e) => atualizar(l.gtin, { quantidade: Math.max(0, Number(e.target.value.replace(/[^\d]/g, "")) || 0) })}
+                        />
+                      </td>
+                    )}
                     <td className="px-2 py-2 w-[120px]">
                       <MoneyInput value={l.preco} onChange={(v) => atualizar(l.gtin, { preco: v })} />
                     </td>
