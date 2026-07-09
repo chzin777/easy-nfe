@@ -50,6 +50,7 @@ const formVazio: Form = {
   ncm: "",
   origem: "0",
   preco: 0,
+  precoCusto: 0,
   descricao: "",
   categoriaId: "",
   cst: "40",
@@ -146,6 +147,24 @@ const COLUNAS_DISPONIVEIS: { chave: string; label: string; fixa?: boolean; col: 
     chave: "preco", label: "Preço", col: {
       chave: "preco", cabecalho: "Preço", alinhar: "right",
       render: (p) => <span className="font-medium">{formatBRL(p.preco)}</span>,
+    },
+  },
+  {
+    chave: "custo", label: "Custo", col: {
+      chave: "custo", cabecalho: "Custo", alinhar: "right",
+      render: (p) => p.precoCusto > 0
+        ? <span className="text-[var(--muted)]">{formatBRL(p.precoCusto)}</span>
+        : <span className="text-slate-300">—</span>,
+    },
+  },
+  {
+    chave: "margem", label: "Margem", col: {
+      chave: "margem", cabecalho: "Margem", alinhar: "right",
+      render: (p) => {
+        if (!(p.precoCusto > 0) || !(p.preco > 0)) return <span className="text-slate-300">—</span>;
+        const m = ((p.preco - p.precoCusto) / p.preco) * 100;
+        return <span className={"font-medium " + (m < 0 ? "text-[var(--danger)]" : "")}>{m.toFixed(1)}%</span>;
+      },
     },
   },
 ];
@@ -297,8 +316,18 @@ export default function ProdutosPage() {
       <Field label="Tipo de origem" required>
         <Select opcoes={ORIGENS} value={form.origem} onChange={(e) => set("origem", e.target.value)} />
       </Field>
-      <Field label="Preço" required>
+      <Field label="Preço de venda" required>
         <MoneyInput value={form.preco} onChange={(v) => set("preco", v)} />
+      </Field>
+      <Field
+        label="Preço de custo"
+        hint={
+          form.precoCusto > 0 && form.preco > 0
+            ? `Margem ${(((form.preco - form.precoCusto) / form.preco) * 100).toFixed(1)}%`
+            : "Opcional · usado nos indicadores de margem e lucro"
+        }
+      >
+        <MoneyInput value={form.precoCusto} onChange={(v) => set("precoCusto", v)} />
       </Field>
       <Field label="Peso líquido (kg)" hint="Opcional · ex.: 0,5">
         <Input

@@ -24,6 +24,7 @@ const vazio: ProdutoInput = {
   ncm: "",
   origem: "0",
   preco: 0,
+  precoCusto: 0,
   descricao: "",
   categoriaId: "",
   cst: "40",
@@ -198,7 +199,17 @@ export default function NovoProdutoModal({
           <SectionTitle>Origem, preço e descrição</SectionTitle>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Tipo de origem" required><Select opcoes={ORIGENS} value={form.origem} onChange={(e) => set("origem", e.target.value)} /></Field>
-            <Field label="Preço" required><MoneyInput value={form.preco} onChange={(v) => set("preco", v)} /></Field>
+            <Field label="Preço de venda" required><MoneyInput value={form.preco} onChange={(v) => set("preco", v)} /></Field>
+            <Field
+              label="Preço de custo"
+              hint={
+                form.precoCusto > 0 && form.preco > 0
+                  ? `Margem: ${(((form.preco - form.precoCusto) / form.preco) * 100).toFixed(1)}% · lucro ${(form.preco - form.precoCusto).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`
+                  : "Opcional · usado para calcular margem e lucro nos indicadores"
+              }
+            >
+              <MoneyInput value={form.precoCusto} onChange={(v) => set("precoCusto", v)} />
+            </Field>
             <Field label="Peso líquido (kg)" hint="Opcional · ex.: 0,5">
               <Input
                 inputMode="decimal"

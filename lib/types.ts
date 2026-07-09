@@ -11,7 +11,8 @@ export type Produto = {
   unidade: string; // sigla da unidade de medida
   ncm: string;
   origem: string; // código da tabela de origem (0-8)
-  preco: number;
+  preco: number; // preço de venda
+  precoCusto: number; // custo de aquisição (0 = não informado) — p/ margem/lucro
   descricao: string;
   categoriaId: string; // "" = sem categoria
   categoriaNome: string; // rótulo (derivado) p/ listagem

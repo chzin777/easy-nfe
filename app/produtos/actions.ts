@@ -18,6 +18,7 @@ type ProdutoRow = {
   ncm: string;
   origem: string;
   preco: unknown;
+  precoCusto: unknown;
   descricao: string | null;
   categoriaId: string | null;
   categoria?: { nome: string } | null;
@@ -45,6 +46,7 @@ function paraUI(p: ProdutoRow): Produto {
     ncm: p.ncm,
     origem: p.origem,
     preco: Number(p.preco),
+    precoCusto: p.precoCusto == null ? 0 : Number(p.precoCusto),
     descricao: p.descricao ?? "",
     categoriaId: p.categoriaId ?? "",
     categoriaNome: p.categoria?.nome ?? "",
@@ -74,6 +76,7 @@ function paraDados(input: ProdutoInput) {
     ncm: input.ncm,
     origem: input.origem,
     preco: input.preco,
+    precoCusto: input.precoCusto > 0 ? input.precoCusto : null,
     descricao: input.descricao || null,
     categoriaId: input.categoriaId || null,
     cst: input.cst || "40",
@@ -183,6 +186,7 @@ export type ProdutoBipagem = {
   unidade: string;
   ncm: string;
   preco: number;
+  precoCusto?: number;
   cest: string;
   quantidade: number;
 };
@@ -210,6 +214,7 @@ export async function criarProdutosBipagem(
           ncm: i.ncm.replace(/\D/g, ""),
           origem: "0",
           preco: Number(i.preco) || 0,
+          precoCusto: Number(i.precoCusto) > 0 ? Number(i.precoCusto) : null,
           cest: i.cest || null,
           controlaEstoque: controlarEstoque,
           estoque: qtd,
@@ -454,6 +459,7 @@ export async function importarEntradaXml(input: EntradaXmlInput): Promise<Entrad
               ncm: (it.ncm || "").replace(/\D/g, ""),
               origem: "0",
               preco: it.vUnCom > 0 ? it.vUnCom : 0,
+              precoCusto: it.vUnCom > 0 ? it.vUnCom : null,
               controlaEstoque: true,
               estoque: 0,
             },
@@ -471,6 +477,14 @@ export async function importarEntradaXml(input: EntradaXmlInput): Promise<Entrad
           where: { id: produtoId },
           data: { controlaEstoque: true, estoque: { increment: qtd } },
         });
+        // Preenche o custo do produto a partir do custo de compra quando ainda
+        // não houver um custo cadastrado (não sobrescreve custo definido à mão).
+        if (it.vUnCom > 0) {
+          await tx.produto.updateMany({
+            where: { id: produtoId, precoCusto: null },
+            data: { precoCusto: it.vUnCom },
+          });
+        }
         await tx.movimentoEstoque.create({
           data: {
             empresaId, produtoId, entradaId: ent.id, tipo: "ENTRADA",
