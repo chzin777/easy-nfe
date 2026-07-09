@@ -39,6 +39,7 @@ export default async function Dashboard({
   ];
 
   const recentes = resumo.recentes;
+  const temCusto = resumo.receitaComCusto > 0 || resumo.valorEstoqueCusto > 0;
 
   return (
     <div className="space-y-6">
@@ -76,14 +77,41 @@ export default async function Dashboard({
         ))}
       </div>
 
+      {/* Indicadores financeiros */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <FinCard titulo="Faturamento bruto" valor={faturado} sub="notas autorizadas no período" tom="success" />
+        <FinCard
+          titulo="Lucro bruto"
+          valor={resumo.lucroBruto}
+          sub={temCusto ? `margem ${resumo.margem.toFixed(1)}%` : "cadastre o custo dos produtos"}
+          tom="primary"
+        />
+        <FinCard titulo="Ticket médio" valor={resumo.ticketMedio} sub="por nota autorizada" />
+        <FinCard
+          titulo="Estoque (a custo)"
+          valor={resumo.valorEstoqueCusto}
+          sub={resumo.valorEstoqueVenda > 0 ? `${formatBRL(resumo.valorEstoqueVenda)} a preço de venda` : "produtos que controlam estoque"}
+        />
+      </div>
+
+      {resumo.itensSemCusto > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-[var(--warning-soft,#fef3c7)] px-4 py-3 text-sm text-[var(--warning)]">
+          <span className="mt-0.5">⚠</span>
+          <p>
+            {resumo.itensSemCusto} item(ns) vendido(s) no período <b>sem preço de custo</b> cadastrado — o lucro
+            e a margem consideram só os itens com custo. Cadastre o custo em <b>Produtos</b> para apurar tudo.
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="relative overflow-hidden p-5 lg:col-span-1">
           <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br from-[var(--primary)]/10 to-[var(--primary-2)]/10 blur-xl" />
-          <p className="text-sm text-[var(--muted)]">Faturamento (notas autorizadas)</p>
-          <p className="mt-2 text-3xl font-semibold tracking-tight text-[var(--success)]">
-            <CountUp to={faturado} prefix="R$ " separator="." duration={1.6} delay={0.2} />
+          <p className="text-sm text-[var(--muted)]">Custo da mercadoria vendida (CMV)</p>
+          <p className="mt-2 text-3xl font-semibold tracking-tight text-[var(--foreground)]">
+            <CountUp to={resumo.cmv} prefix="R$ " separator="." duration={1.6} delay={0.2} />
           </p>
-          <p className="mt-1 text-xs text-[var(--muted)]">Soma das notas autorizadas da empresa ativa.</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">Custo dos produtos vendidos (itens com custo cadastrado).</p>
         </Card>
 
         <Card className="lg:col-span-2">
@@ -112,8 +140,35 @@ export default async function Dashboard({
         </Card>
       </div>
 
-      <Graficos serieMensal={resumo.serieMensal} distribuicaoStatus={resumo.distribuicaoStatus} />
+      <Graficos serieMensal={resumo.serieMensal} distribuicaoStatus={resumo.distribuicaoStatus} topProdutosLucro={resumo.topProdutosLucro} />
     </div>
+  );
+}
+
+function FinCard({
+  titulo,
+  valor,
+  sub,
+  tom = "neutral",
+}: {
+  titulo: string;
+  valor: number;
+  sub?: string;
+  tom?: "neutral" | "success" | "primary";
+}) {
+  const cor = {
+    neutral: "text-[var(--foreground)]",
+    success: "text-[var(--success)]",
+    primary: "text-[var(--primary)]",
+  }[tom];
+  return (
+    <Card className="p-5">
+      <p className="text-sm text-[var(--muted)]">{titulo}</p>
+      <p className={"mt-2 text-2xl font-semibold tracking-tight tabular-nums " + cor}>
+        <CountUp to={valor} prefix="R$ " separator="." duration={1.4} delay={0.15} />
+      </p>
+      {sub && <p className="mt-1 text-xs text-[var(--muted)]">{sub}</p>}
+    </Card>
   );
 }
 
