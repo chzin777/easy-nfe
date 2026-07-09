@@ -811,3 +811,57 @@ export async function trocarEmpresa(id: string): Promise<void> {
   });
   if (ok) await definirEmpresaAtiva(id);
 }
+
+// Exclui uma empresa por completo — dados fiscais, notas, produtos, clientes,
+// equipe E o certificado A1 (que é uma coluna cifrada da própria empresa, some
+// junto). Operação irreversível. Só o dono (ou admin) pode. Exige confirmação
+// digitando o CNPJ para evitar exclusão acidental.
+//
+// A maioria das relações filho tem onDelete: Cascade, mas Nota/NotaServico
+// referenciam a empresa SEM cascade (proteção contra apagar fiscais por acidente)
+// e Orcamento aponta para Nota — por isso apagamos notas/orçamentos na ordem
+// certa dentro de uma transação antes do delete da empresa (que cascateia o resto).
+export async function excluirEmpresa(
+  id: string,
+  confirmacaoCnpj: string,
+): Promise<{ ok: true } | { ok: false; erro: string }> {
+  try {
+    const { uid, role } = await exigirSessao();
+    if (!(await ehDono(uid, role, id))) {
+      return { ok: false, erro: "Apenas o dono da empresa pode excluí-la." };
+    }
+    const empresa = await prisma.emitente.findUnique({ where: { id }, select: { cnpj: true } });
+    if (!empresa) return { ok: false, erro: "Empresa não encontrada." };
+
+    const digitado = (confirmacaoCnpj || "").replace(/\D/g, "");
+    if (digitado !== empresa.cnpj.replace(/\D/g, "")) {
+      return { ok: false, erro: "O CNPJ digitado não confere. Exclusão cancelada." };
+    }
+
+    await prisma.$transaction([
+      // Orçamentos referenciam Nota (notaId) — apagar antes das notas.
+      prisma.orcamento.deleteMany({ where: { emitenteId: id } }),
+      // Notas: cascateia itens; zera notaId em movimentos de estoque (SetNull).
+      prisma.nota.deleteMany({ where: { emitenteId: id } }),
+      prisma.notaServico.deleteMany({ where: { emitenteId: id } }),
+      // Empresa: cascateia produtos, clientes, categorias, fornecedores,
+      // transportadoras, serviços, notas recebidas, movimentos/entradas de
+      // estoque, acessos e configs. certData some junto (coluna da empresa).
+      prisma.emitente.delete({ where: { id } }),
+    ]);
+
+    // Se a empresa excluída era a ativa, aponta para outra acessível (ou limpa).
+    const ativaId = await empresaAtivaId().catch(() => null);
+    if (ativaId === null || ativaId === id) {
+      const restante = await prisma.acessoEmpresa.findFirst({
+        where: { userId: uid },
+        orderBy: { createdAt: "asc" },
+        select: { empresaId: true },
+      });
+      await definirEmpresaAtiva(restante?.empresaId ?? "");
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}

@@ -400,7 +400,8 @@ model Produto {
   unidade       String
   ncm           String
   origem        String // 0-8
-  preco         Decimal  @db.Decimal(15, 2)
+  preco         Decimal  @db.Decimal(15, 2) // preço de venda
+  precoCusto    Decimal? @db.Decimal(15, 2) // custo de aquisição (p/ margem/lucro)
   descricao     String?
 
   categoriaId String?

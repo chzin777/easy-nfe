@@ -17,6 +17,7 @@ import { TIPOS_NOTA, MODALIDADES_FRETE } from "@/lib/mock-data";
 import { listarClientes } from "@/app/clientes/actions";
 import type { Cliente } from "@/lib/types";
 import Tabs from "@/app/ui/Tabs";
+import Modal from "@/app/ui/Modal";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { EnderecoFields } from "@/app/ui/PessoaFields";
 import NovaEmpresaModal from "./NovaEmpresaModal";
@@ -27,6 +28,7 @@ import {
   obterEmpresaAtiva,
   salvarEmpresa,
   trocarEmpresa,
+  excluirEmpresa,
   salvarCertificado,
   removerCertificado,
   obterCertificado,
@@ -82,6 +84,10 @@ export default function ConfiguracoesPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [trocando, setTrocando] = useState(false);
   const [novaAberta, setNovaAberta] = useState(false);
+  const [excluirAberto, setExcluirAberto] = useState(false);
+  const [cnpjConfirma, setCnpjConfirma] = useState("");
+  const [excluindo, setExcluindo] = useState(false);
+  const [erroExcluir, setErroExcluir] = useState<string | null>(null);
 
   async function carregar() {
     const [lista, ativa] = await Promise.all([listarEmpresas(), obterEmpresaAtiva()]);
@@ -123,6 +129,26 @@ export default function ConfiguracoesPage() {
 
   function setE<K extends keyof EmpresaDados>(k: K, v: EmpresaDados[K]) {
     setForm((s) => ({ ...s, [k]: v }));
+  }
+
+  function abrirExcluir() {
+    setCnpjConfirma("");
+    setErroExcluir(null);
+    setExcluirAberto(true);
+  }
+
+  async function confirmarExcluir() {
+    if (!form.id) return;
+    setExcluindo(true);
+    setErroExcluir(null);
+    const r = await excluirEmpresa(form.id, cnpjConfirma);
+    setExcluindo(false);
+    if (!r.ok) {
+      setErroExcluir(r.erro);
+      return;
+    }
+    // Empresa ativa pode ter mudado — recarrega tudo (cookie/sidebar) do zero.
+    window.location.reload();
   }
 
   const ativaValue = form.id ?? "";
@@ -183,10 +209,73 @@ export default function ConfiguracoesPage() {
               ]}
             />
           </Card>
+
+          {form.id && (
+            <Card className="border-[var(--danger)]/30 p-6">
+              <SectionTitle>Zona de perigo</SectionTitle>
+              <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="max-w-2xl text-sm text-[var(--muted)]">
+                  Excluir a empresa apaga <b>tudo</b> desta empresa — notas emitidas, produtos, clientes,
+                  estoque, equipe e o <b>certificado digital</b> (removido da nossa base). Ação
+                  irreversível.
+                </p>
+                <Button variante="danger" onClick={abrirExcluir} className="shrink-0">
+                  Excluir empresa
+                </Button>
+              </div>
+            </Card>
+          )}
         </>
       )}
 
       {novaAberta && <NovaEmpresaModal onFechar={() => setNovaAberta(false)} onCriada={aoCriarEmpresa} />}
+
+      <Modal
+        aberto={excluirAberto}
+        onFechar={() => !excluindo && setExcluirAberto(false)}
+        titulo="Excluir empresa"
+        largura="max-w-lg"
+        rodape={
+          <>
+            <Button variante="secondary" onClick={() => setExcluirAberto(false)} disabled={excluindo}>
+              Cancelar
+            </Button>
+            <Button
+              variante="danger"
+              onClick={confirmarExcluir}
+              disabled={excluindo || cnpjConfirma.replace(/\D/g, "") !== form.cnpj.replace(/\D/g, "")}
+            >
+              {excluindo ? "Excluindo…" : "Excluir definitivamente"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 text-sm">
+          <div className="rounded-lg border border-[var(--danger)]/40 bg-[var(--danger-soft,#fee2e2)] px-4 py-3 text-[var(--danger)]">
+            <p className="font-semibold">Isso não pode ser desfeito.</p>
+            <p className="mt-1">
+              Serão apagados permanentemente: notas fiscais, produtos, clientes, movimentações de
+              estoque, equipe e o certificado A1 desta empresa.
+            </p>
+          </div>
+          <Field
+            label={`Digite o CNPJ da empresa para confirmar`}
+            hint="Somente números ou formatado — só confirmamos com o CNPJ correto."
+          >
+            <Input
+              value={cnpjConfirma}
+              onChange={(e) => setCnpjConfirma(e.target.value)}
+              placeholder={form.cnpj || "00.000.000/0000-00"}
+              inputMode="numeric"
+            />
+          </Field>
+          {erroExcluir && (
+            <p className="rounded-lg bg-[var(--danger-soft,#fee2e2)] px-3 py-2 font-medium text-[var(--danger)]">
+              {erroExcluir}
+            </p>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
