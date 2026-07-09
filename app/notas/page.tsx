@@ -233,36 +233,6 @@ export default function NotasEmitidasPage() {
         </Badge>
       ),
     },
-    {
-      chave: "acoes",
-      cabecalho: "",
-      alinhar: "right",
-      render: (n) => (
-        <div className="flex justify-end gap-1">
-          <Button
-            variante="warning"
-            disabled={n.status !== "autorizada"}
-            onClick={(e) => { e.stopPropagation(); abrirEvento(n, "cce"); }}
-          >
-            CC-e
-          </Button>
-          <Button
-            variante="secondary"
-            disabled={n.status !== "autorizada"}
-            onClick={(e) => { e.stopPropagation(); setDevolver(n); }}
-          >
-            Devolução
-          </Button>
-          <Button
-            variante="dangerSoft"
-            disabled={n.status !== "autorizada"}
-            onClick={(e) => { e.stopPropagation(); abrirEvento(n, "cancelamento"); }}
-          >
-            Cancelar
-          </Button>
-        </div>
-      ),
-    },
   ];
 
   return (
@@ -391,7 +361,27 @@ export default function NotasEmitidasPage() {
           <>
             <Button variante="secondary" onClick={() => setVisualizar(null)}>Fechar</Button>
             {visualizar?.status === "autorizada" && (
-              <Button variante="secondary" onClick={() => visualizar && baixarXml(visualizar)}>Salvar XML</Button>
+              <>
+                <Button
+                  variante="warning"
+                  onClick={() => { if (!visualizar) return; const n = visualizar; setVisualizar(null); abrirEvento(n, "cce"); }}
+                >
+                  CC-e
+                </Button>
+                <Button
+                  variante="secondary"
+                  onClick={() => { if (!visualizar) return; const n = visualizar; setVisualizar(null); setDevolver(n); }}
+                >
+                  Devolução
+                </Button>
+                <Button
+                  variante="dangerSoft"
+                  onClick={() => { if (!visualizar) return; const n = visualizar; setVisualizar(null); abrirEvento(n, "cancelamento"); }}
+                >
+                  Cancelar
+                </Button>
+                <Button variante="secondary" onClick={() => visualizar && baixarXml(visualizar)}>Salvar XML</Button>
+              </>
             )}
             <Button onClick={() => visualizar && baixarPdf(visualizar)} disabled={gerandoPdf}>{gerandoPdf ? "Gerando PDF…" : "Baixar PDF"}</Button>
           </>
