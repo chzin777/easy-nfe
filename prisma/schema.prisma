@@ -349,6 +349,7 @@ model Emitente {
   emailNota         ConfigEmailNota?
   movimentosEstoque MovimentoEstoque[]
   entradasEstoque   EntradaEstoque[]
+  lancamentosFiado  LancamentoFiado[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -530,15 +531,47 @@ model Cliente {
   municipio    String?
   uf           String?
 
-  notas        Nota[]
-  notasServico NotaServico[]
-  orcamentos   Orcamento[]
+  notas            Nota[]
+  notasServico     NotaServico[]
+  orcamentos       Orcamento[]
+  lancamentosFiado LancamentoFiado[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([empresaId])
   @@map("clientes")
+}
+
+// ----------------------------------------------------------------------------
+// Caderneta (contas fiado) — controle informal de crédito por cliente. Cada
+// lançamento é um DÉBITO (compra fiado, aumenta a dívida) ou CRÉDITO (pagamento
+// recebido, reduz a dívida). O saldo devedor do cliente = Σ débitos − Σ créditos.
+// ----------------------------------------------------------------------------
+enum TipoLancamentoFiado {
+  DEBITO // compra fiado (o cliente passa a dever)
+  CREDITO // pagamento recebido (abate a dívida)
+}
+
+model LancamentoFiado {
+  id String @id @default(uuid())
+
+  empresaId String
+  empresa   Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  tipo      TipoLancamentoFiado
+  valor     Decimal             @db.Decimal(15, 2)
+  descricao String?
+  data      DateTime            @default(now()) // data do evento (editável)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([empresaId, clienteId])
+  @@map("lancamentos_fiado")
 }
 
 // ----------------------------------------------------------------------------

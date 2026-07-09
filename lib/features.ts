@@ -9,6 +9,7 @@ export const FEATURES: Feature[] = [
   { chave: "clientes", nome: "Cadastro de clientes", categoria: "Cadastros" },
   { chave: "fornecedores", nome: "Cadastro de fornecedores", categoria: "Cadastros" },
   { chave: "transportadoras", nome: "Cadastro de transportadoras", categoria: "Cadastros" },
+  { chave: "caderneta", nome: "Caderneta (contas fiado)", categoria: "Cadastros" },
 
   // Emissão
   { chave: "orcamentos", nome: "Orçamentos (funil de vendas)", categoria: "Emissão" },
