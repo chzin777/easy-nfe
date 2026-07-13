@@ -3,6 +3,7 @@ import { dataHoraBrasilia } from "./chave";
 import { assinar } from "./sign";
 import { montarNFe } from "./xml";
 import { extrai, extraiBloco, soap } from "./soap";
+import { codigoUF, contingenciaDaUF, type Modelo, type TpAmb } from "./ufs";
 import type {
   DadosNFe,
   ResultadoEmissao,
@@ -10,9 +11,13 @@ import type {
   ResultadoStatus,
 } from "./types";
 
-export { carregarCertificado };
+export { carregarCertificado, contingenciaDaUF, codigoUF };
 export type { Certificado };
 export * from "./types";
+
+// Alvo de uma consulta/emissão: a UF do emitente + o modelo definem a
+// autorizadora (própria, SVRS ou SVAN) — ver lib/nfe/ufs.ts.
+type Alvo = { uf: string; mod: Modelo; tpAmb: TpAmb };
 
 // cStat de autorização concedida (NF-e) e de lote/serviço em operação.
 const AUTORIZADA = "100";
@@ -27,15 +32,18 @@ function gerarCNF(nNF: string): string {
 }
 
 // Consulta o status do serviço (smoke test do webservice + certificado).
+// Com tpEmis 6/7 checa a SVC — é assim que se confirma que a contingência está
+// no ar antes de emitir nela.
 export async function consultarStatus(
   cert: Certificado,
-  tpAmb: "1" | "2",
-  cUF: string,
+  alvo: Alvo & { tpEmis?: "1" | "6" | "7" },
 ): Promise<ResultadoStatus> {
+  const cUF = codigoUF(alvo.uf);
+  if (!cUF) throw new Error(`UF inválida: ${alvo.uf}`);
   const cons =
     `<consStatServ versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">` +
-    `<tpAmb>${tpAmb}</tpAmb><cUF>${cUF}</cUF><xServ>STATUS</xServ></consStatServ>`;
-  const r = await soap(tpAmb, "status", cons, cert);
+    `<tpAmb>${alvo.tpAmb}</tpAmb><cUF>${cUF}</cUF><xServ>STATUS</xServ></consStatServ>`;
+  const r = await soap(alvo, "status", cons, cert);
   const cStat = extrai(r.body, "cStat");
   return { ok: cStat === "107", cStat, xMotivo: extrai(r.body, "xMotivo") };
 }
@@ -45,13 +53,12 @@ export async function consultarStatus(
 // que ficaram fora do sistema. Read-only.
 export async function consultarNFe(
   cert: Certificado,
-  tpAmb: "1" | "2",
-  chave: string,
+  alvo: Alvo & { chave: string },
 ): Promise<{ cStat: string | null; xMotivo: string | null; nProt: string | null; protNFe: string | null }> {
   const cons =
     `<consSitNFe versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">` +
-    `<tpAmb>${tpAmb}</tpAmb><xServ>CONSULTAR</xServ><chNFe>${chave}</chNFe></consSitNFe>`;
-  const r = await soap(tpAmb, "consulta", cons, cert);
+    `<tpAmb>${alvo.tpAmb}</tpAmb><xServ>CONSULTAR</xServ><chNFe>${alvo.chave}</chNFe></consSitNFe>`;
+  const r = await soap(alvo, "consulta", cons, cert);
   const prot = extraiBloco(r.body, "protNFe");
   // cStat do protNFe = situação da NF-e (100 autorizada, 101 cancelada, etc).
   // Sem protNFe, cai no cStat do retorno (217 = não consta, etc).
@@ -80,7 +87,13 @@ export async function emitirNFe(
     `<enviNFe versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">` +
     `<idLote>1</idLote><indSinc>1</indSinc>${nfeAssinada}</enviNFe>`;
 
-  const r = await soap(dados.tpAmb, "autoriza", enviNFe, cert);
+  const tpEmis = dados.tpEmis ?? "1";
+  const r = await soap(
+    { uf: dados.uf, mod: dados.mod ?? "55", tpAmb: dados.tpAmb, tpEmis },
+    "autoriza",
+    enviNFe,
+    cert,
+  );
 
   const prot = extraiBloco(r.body, "protNFe");
   const cStat = prot ? extrai(prot, "cStat") : extrai(r.body, "cStat");
@@ -93,21 +106,23 @@ export async function emitirNFe(
       ? `<nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">${nfeAssinada}${prot}</nfeProc>`
       : null;
 
-  return { ok, cStat, xMotivo, chave, nProt, xmlAutorizado, xmlEnviado: nfeAssinada, qrCode, urlChave };
+  return { ok, cStat, xMotivo, chave, tpEmis, nProt, xmlAutorizado, xmlEnviado: nfeAssinada, qrCode, urlChave };
 }
 
 // Cancela uma NF-e autorizada (evento 110111). Exige nProt e justificativa (15-255 chars).
+// O evento sempre vai para a autorizadora normal da UF — inclusive para nota
+// autorizada em contingência SVC (a SVC não recebe cancelamento).
 export async function cancelarNFe(
   cert: Certificado,
-  params: {
-    tpAmb: "1" | "2";
-    cUF: string;
+  params: Alvo & {
     cnpj: string;
     chave: string;
     nProt: string;
     justificativa: string;
   },
 ): Promise<ResultadoEvento> {
+  const cUF = codigoUF(params.uf);
+  if (!cUF) throw new Error(`UF inválida: ${params.uf}`);
   const cnpj = params.cnpj.replace(/\D/g, "");
   const dh = dataHoraBrasilia();
   const nSeq = "1";
@@ -115,7 +130,7 @@ export async function cancelarNFe(
 
   const infEvento =
     `<infEvento Id="${idEvento}">` +
-    `<cOrgao>${params.cUF}</cOrgao><tpAmb>${params.tpAmb}</tpAmb><CNPJ>${cnpj}</CNPJ>` +
+    `<cOrgao>${cUF}</cOrgao><tpAmb>${params.tpAmb}</tpAmb><CNPJ>${cnpj}</CNPJ>` +
     `<chNFe>${params.chave}</chNFe><dhEvento>${dh}</dhEvento><tpEvento>110111</tpEvento>` +
     `<nSeqEvento>${nSeq}</nSeqEvento><verEvento>1.00</verEvento>` +
     `<detEvento versao="1.00"><descEvento>Cancelamento</descEvento>` +
@@ -127,7 +142,12 @@ export async function cancelarNFe(
     `<envEvento versao="1.00" xmlns="http://www.portalfiscal.inf.br/nfe">` +
     `<idLote>1</idLote>${eventoAssinado}</envEvento>`;
 
-  const r = await soap(params.tpAmb, "evento", envEvento, cert);
+  const r = await soap(
+    { uf: params.uf, mod: params.mod, tpAmb: params.tpAmb },
+    "evento",
+    envEvento,
+    cert,
+  );
   const ret = extraiBloco(r.body, "retEvento");
   const cStat = ret ? extrai(ret, "cStat") : extrai(r.body, "cStat");
   const xMotivo = ret ? extrai(ret, "xMotivo") : extrai(r.body, "xMotivo");

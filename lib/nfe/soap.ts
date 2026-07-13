@@ -1,45 +1,37 @@
 import https from "node:https";
 import type { Certificado } from "./cert";
+import { endpoint, type Destino, type Servico } from "./ufs";
 
-export type Servico = "status" | "autoriza" | "evento" | "consulta";
-
-// Webservices da SEFAZ-GO (autorizadora própria). Outras UFs exigem outros endpoints.
-const ENDPOINTS: Record<"1" | "2", Record<Servico, string>> = {
-  // Produção
-  "1": {
-    status: "https://nfe.sefaz.go.gov.br/nfe/services/NFeStatusServico4",
-    autoriza: "https://nfe.sefaz.go.gov.br/nfe/services/NFeAutorizacao4",
-    evento: "https://nfe.sefaz.go.gov.br/nfe/services/NFeRecepcaoEvento4",
-    consulta: "https://nfe.sefaz.go.gov.br/nfe/services/NFeConsultaProtocolo4",
-  },
-  // Homologação
-  "2": {
-    status: "https://homolog.sefaz.go.gov.br/nfe/services/NFeStatusServico4",
-    autoriza: "https://homolog.sefaz.go.gov.br/nfe/services/NFeAutorizacao4",
-    evento: "https://homolog.sefaz.go.gov.br/nfe/services/NFeRecepcaoEvento4",
-    consulta: "https://homolog.sefaz.go.gov.br/nfe/services/NFeConsultaProtocolo4",
-  },
-};
+export type { Destino, Servico };
 
 const WSDL_NS: Record<Servico, string> = {
   status: "http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4",
   autoriza: "http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4",
+  retAutoriza: "http://www.portalfiscal.inf.br/nfe/wsdl/NFeRetAutorizacao4",
   evento: "http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4",
   consulta: "http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4",
 };
 
-export function endpoint(tpAmb: "1" | "2", servico: Servico): string {
-  return ENDPOINTS[tpAmb][servico];
-}
+// Operação do WSDL. SOAP 1.2 dispensa o header SOAPAction, mas as autorizadoras
+// em Apache Axis (PE) devolvem "no SOAPAction header!" sem ele. Os demais
+// webservices ignoram o header — por isso vai sempre.
+const OPERACAO: Record<Servico, string> = {
+  status: "nfeStatusServicoNF",
+  autoriza: "nfeAutorizacaoLote",
+  retAutoriza: "nfeRetAutorizacaoLote",
+  evento: "nfeRecepcaoEvento",
+  consulta: "nfeConsultaNF",
+};
 
-// POST SOAP 1.2 via mTLS (key/cert PEM). Devolve corpo bruto da resposta.
+// POST SOAP 1.2 via mTLS (key/cert PEM). O destino (UF + modelo + ambiente +
+// tpEmis) resolve a autorizadora e a URL. Devolve o corpo bruto da resposta.
 export function soap(
-  tpAmb: "1" | "2",
+  destino: Destino,
   servico: Servico,
   innerXml: string,
   cert: Certificado,
 ): Promise<{ status: number; body: string }> {
-  const url = endpoint(tpAmb, servico);
+  const url = endpoint(destino, servico);
   const envelope =
     `<?xml version="1.0" encoding="utf-8"?>` +
     `<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">` +
@@ -51,15 +43,16 @@ export function soap(
     const req = https.request(
       {
         hostname: u.hostname,
-        port: 443,
-        path: u.pathname,
+        port: u.port ? Number(u.port) : 443,
+        path: u.pathname + u.search,
         method: "POST",
         key: cert.keyPem,
         cert: cert.chainPem, // envia folha + cadeia no handshake mTLS
         rejectUnauthorized: false, // cadeias da SEFAZ homologação são problemáticas
-        timeout: 30_000, // SEFAZ-GO costuma ficar instável; não trava a request
+        timeout: 30_000, // webservices da SEFAZ ficam instáveis; não trava a request
         headers: {
           "Content-Type": "application/soap+xml; charset=utf-8",
+          SOAPAction: `${WSDL_NS[servico]}/${OPERACAO[servico]}`,
           "Content-Length": Buffer.byteLength(envelope),
         },
       },

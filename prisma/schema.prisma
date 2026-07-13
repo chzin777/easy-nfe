@@ -684,6 +684,12 @@ model Nota {
   autorizadaEm  DateTime?
   xmlAutorizado String?   @db.Text
 
+  // contingência (NF-e 55): 1 normal | 6 SVC-AN | 7 SVC-RS. Autorização na SVC é
+  // definitiva — não há retransmissão para a SEFAZ de origem.
+  tpEmis                    String    @default("1")
+  contingenciaEm            DateTime? // dhCont declarado no XML
+  contingenciaJustificativa String?
+
   // NFC-e: conteúdo do QR Code (para o DANFE em cupom)
   qrCode String? @db.Text
 

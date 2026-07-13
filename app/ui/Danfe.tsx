@@ -30,15 +30,20 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
         ? "NF-e CANCELADA"
         : "NF-e sem Autorização de Uso da SEFAZ";
 
+  // Nota emitida em contingência: a SVC que autorizou vai na tarja (tpEmis 6/7).
+  const svc = nota.tpEmis === "6" ? "SVC-AN" : nota.tpEmis === "7" ? "SVC-RS" : null;
+
   // "SEM VALOR FISCAL" só em homologação. Em produção, nota autorizada não tem marca.
   const watermark =
     nota.status === "cancelada"
       ? "CANCELADA"
       : nota.ambiente === "homologacao"
         ? "SEM VALOR FISCAL"
-        : nota.status === "autorizada"
-          ? ""
-          : "SEM AUTORIZACAO";
+        : svc
+          ? `CONTINGENCIA ${svc}`
+          : nota.status === "autorizada"
+            ? ""
+            : "SEM AUTORIZACAO";
 
   return (
     <div className="relative mx-auto w-full bg-white font-sans text-[9px] leading-tight text-black">

@@ -1,5 +1,6 @@
 import { montarChave } from "./chave";
 import { montarQrCode } from "./qrcode";
+import { codigoUF, type TpEmis } from "./ufs";
 import type { DadosNFe, EnderecoNFe, ItemNFe } from "./types";
 
 // Escapa caracteres reservados de XML em conteúdo textual.
@@ -139,16 +140,31 @@ export function montarNFe(
 } {
   const mod = dados.mod ?? "55";
   const nfce = mod === "65";
+  const uf = dados.uf.toUpperCase();
+  const cUF = codigoUF(uf);
+  if (!cUF) throw new Error(`UF do emitente inválida: ${dados.uf}`);
+
+  // Contingência SVC (tpEmis 6/7): só existe na NF-e 55 e exige dhCont + xJust.
+  const tpEmis: TpEmis = dados.tpEmis ?? "1";
+  if (tpEmis !== "1") {
+    if (nfce) throw new Error("NFC-e não tem contingência SVC — a contingência do modelo 65 é offline.");
+    if (!dados.dhCont) throw new Error("Contingência exige a data/hora de entrada (dhCont).");
+    const just = dados.xJust?.trim() ?? "";
+    if (just.length < 15 || just.length > 256) {
+      throw new Error("A justificativa da contingência deve ter de 15 a 256 caracteres.");
+    }
+  }
+
   const cnpj = dados.emit.cnpj.replace(/\D/g, "");
   const aamm = dhEmi.slice(2, 4) + dhEmi.slice(5, 7);
   const chave = montarChave({
-    cUF: dados.cUF,
+    cUF,
     aamm,
     cnpj,
     mod,
     serie: dados.serie,
     nNF: dados.nNF,
-    tpEmis: "1",
+    tpEmis,
     cNF,
   });
 
@@ -168,15 +184,22 @@ export function montarNFe(
   // (idDest=1). NF-e 55: DANFE normal (tpImp=1), indPres=1 (mantido como já estava).
   const tpImp = nfce ? "4" : "1";
 
+  // Em contingência, dhCont/xJust fecham o <ide> (depois de verProc).
+  const cont =
+    tpEmis === "1"
+      ? ""
+      : `<dhCont>${dados.dhCont}</dhCont><xJust>${escLim(dados.xJust ?? "", 256)}</xJust>`;
+
   const ide =
     `<ide>` +
-    `<cUF>${dados.cUF}</cUF><cNF>${cNF}</cNF><natOp>${esc(dados.natOp)}</natOp>` +
+    `<cUF>${cUF}</cUF><cNF>${cNF}</cNF><natOp>${esc(dados.natOp)}</natOp>` +
     `<mod>${mod}</mod><serie>${dados.serie}</serie><nNF>${dados.nNF}</nNF>` +
     `<dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>1</idDest>` +
-    `<cMunFG>${cMunFG}</cMunFG><tpImp>${tpImp}</tpImp><tpEmis>1</tpEmis>` +
+    `<cMunFG>${cMunFG}</cMunFG><tpImp>${tpImp}</tpImp><tpEmis>${tpEmis}</tpEmis>` +
     `<cDV>${chave.slice(-1)}</cDV><tpAmb>${dados.tpAmb}</tpAmb><finNFe>1</finNFe>` +
     `<indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi>` +
     `<verProc>easy-nfe-1.0</verProc>` +
+    cont +
     `</ide>`;
 
   const emit =
@@ -242,6 +265,7 @@ export function montarNFe(
     }
     ({ qrCode, urlChave } = montarQrCode({
       chave,
+      uf,
       tpAmb: dados.tpAmb,
       idCsc: dados.idCsc,
       csc: dados.csc,

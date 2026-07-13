@@ -5,7 +5,11 @@ import {
   emitirNFe,
   cancelarNFe,
   consultarStatus,
+  codigoUF,
+  contingenciaDaUF,
+  type Certificado,
 } from "@/lib/nfe";
+import { dataHoraBrasilia } from "@/lib/nfe/chave";
 import type { DadosNFe, EnderecoNFe } from "@/lib/nfe/types";
 import { resolverCodMunicipio } from "@/lib/nfe/ibge";
 import { prisma } from "@/lib/prisma";
@@ -26,13 +30,24 @@ function certDaEmpresa(certData: string | null): { pfxBase64: string; senha: str
   return JSON.parse(decriptar(certData)) as { pfxBase64: string; senha: string };
 }
 
-// Código IBGE da UF (cUF). Necessário na chave de acesso e no cMunFG.
-const UF_IBGE: Record<string, string> = {
-  RO: "11", AC: "12", AM: "13", RR: "14", PA: "15", AP: "16", TO: "17",
-  MA: "21", PI: "22", CE: "23", RN: "24", PB: "25", PE: "26", AL: "27",
-  SE: "28", BA: "29", MG: "31", ES: "32", RJ: "33", SP: "35", PR: "41",
-  SC: "42", RS: "43", MS: "50", MT: "51", GO: "52", DF: "53",
-};
+// A SEFAZ da UF está respondendo? Erro de rede/timeout conta como fora do ar —
+// é exatamente o cenário que autoriza a contingência.
+async function sefazDaUfNoAr(cert: Certificado, uf: string, tpAmb: "1" | "2"): Promise<boolean> {
+  try {
+    const r = await consultarStatus(cert, { uf, mod: "55", tpAmb });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+// xJust não aceita acento nem caractere reservado de XML.
+function semAcento(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[<>&"']/g, " ");
+}
 
 // Razão social obrigatória do destinatário em homologação.
 const HOMOLOG_XNOME = "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL";
@@ -59,6 +74,9 @@ export type EmitirInput = {
   itens: { produtoId: string; quantidade: number; descTipo?: DescontoTipo; descValor?: number }[];
   // Desconto geral da nota (rateado entre os itens). % ou R$.
   descontoNota?: { tipo: DescontoTipo; valor: number };
+  // Emissão em contingência SVC (só NF-e 55), quando a autorizadora da UF está fora.
+  // A justificativa vai no XML (xJust, 15-256 chars) e é definitiva.
+  contingencia?: { justificativa: string };
 };
 
 export type EmitirResultado =
@@ -70,11 +88,19 @@ export type EmitirResultado =
       chave: string;
       nProt: string | null;
       numero: number;
+      tpEmis: string; // 1 normal | 6 SVC-AN | 7 SVC-RS
       notaId?: string; // id da nota gravada (p/ abrir DANFE/baixar XML após emitir)
       avisoPersistencia?: string;
       debugXml?: string; // XML enviado (exposto só em rejeição, p/ diagnóstico)
     }
-  | { ok: false; erro: string; codigo?: string; clienteId?: string };
+  | {
+      ok: false;
+      erro: string;
+      codigo?: string;
+      clienteId?: string;
+      // A SEFAZ da UF não respondeu: a UI pode oferecer a emissão em contingência.
+      contingencia?: { disponivel: true; autorizadora: "SVC-AN" | "SVC-RS" };
+    };
 
 // Soma as quantidades por produto controlado (vários itens podem repetir produto).
 type ItemQtd = { produtoId: string; quantidade: number };
@@ -141,8 +167,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
 
     const empresaId = await exigirEmpresa();
     const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
-    const cUF = UF_IBGE[empresa.uf];
-    if (!cUF) return { ok: false, erro: `UF do emitente inválida: ${empresa.uf}` };
+    if (!codigoUF(empresa.uf)) return { ok: false, erro: `UF do emitente inválida: ${empresa.uf}` };
 
     // NFC-e exige CSC + idCSC (cIdToken) da SEFAZ para o QR Code.
     if (nfce && (!empresa.cscNFCe || !empresa.idCscNFCe)) {
@@ -305,10 +330,38 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
           },
         };
 
+    // Contingência SVC: a UF define qual (SVC-AN ou SVC-RS) e, com ela, o tpEmis.
+    // A autorização na SVC é definitiva — não há retransmissão quando a SEFAZ volta.
+    let cont: { tpEmis: "6" | "7"; dhCont: string; xJust: string } | null = null;
+    if (input.contingencia) {
+      if (nfce) {
+        return {
+          ok: false,
+          erro: "NFC-e não tem contingência SVC — a contingência do cupom é offline. Aguarde a SEFAZ voltar.",
+        };
+      }
+      const just = semAcento(input.contingencia.justificativa.trim());
+      if (just.length < 15 || just.length > 256) {
+        return { ok: false, erro: "A justificativa da contingência deve ter de 15 a 256 caracteres." };
+      }
+      // Emitir em SVC com a autorizadora de origem no ar é uso indevido e volta
+      // rejeitado — checa antes de transmitir.
+      if (await sefazDaUfNoAr(cert, empresa.uf, tpAmb)) {
+        return {
+          ok: false,
+          erro: `A SEFAZ-${empresa.uf} voltou a responder. Emita normalmente — a contingência SVC só vale com a autorizadora fora do ar.`,
+        };
+      }
+      cont = { tpEmis: contingenciaDaUF(empresa.uf).tpEmis, dhCont: dataHoraBrasilia(), xJust: just };
+    }
+
     const dados: DadosNFe = {
       tpAmb,
       mod: modelo,
-      cUF,
+      uf: empresa.uf,
+      tpEmis: cont?.tpEmis,
+      dhCont: cont?.dhCont,
+      xJust: cont?.xJust,
       serie: String(serieDoc),
       nNF: String(numero),
       natOp: "VENDA DE MERCADORIA",
@@ -374,6 +427,9 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
             protocolo: r.nProt,
             autorizadaEm: r.ok ? new Date() : null,
             xmlAutorizado: r.xmlAutorizado,
+            tpEmis: r.tpEmis,
+            contingenciaEm: cont ? new Date(cont.dhCont) : null,
+            contingenciaJustificativa: cont?.xJust ?? null,
             cStat: r.cStat,
             xMotivo: r.xMotivo,
             itens: {
@@ -427,6 +483,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       chave: r.chave,
       nProt: r.nProt,
       numero,
+      tpEmis: r.tpEmis,
       notaId,
       avisoPersistencia,
       debugXml: r.ok ? undefined : r.xmlEnviado,
@@ -435,9 +492,29 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     const msg = e instanceof Error ? e.message : String(e);
     if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
     if (/SEFAZ_INDISPONIVEL|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|socket hang up|network|timed? ?out/i.test(msg)) {
-      return { ok: false, erro: "Serviço da SEFAZ-GO indisponível no momento (instabilidade do webservice). Aguarde alguns instantes e tente emitir de novo." };
+      // Webservice fora do ar: na NF-e 55 dá para emitir pela SVC da UF. A NFC-e
+      // não tem SVC — nesse caso é só esperar.
+      const svc = await svcDaEmpresa(input);
+      return {
+        ok: false,
+        erro: "Serviço da SEFAZ indisponível no momento (instabilidade do webservice). Aguarde alguns instantes e tente emitir de novo.",
+        ...(svc ? { contingencia: { disponivel: true as const, autorizadora: svc } } : {}),
+      };
     }
     return { ok: false, erro: msg };
+  }
+}
+
+// SVC que atende a UF da empresa ativa — só existe para NF-e 55, e não vale
+// oferecer contingência quando a própria tentativa já era em contingência.
+async function svcDaEmpresa(input: EmitirInput): Promise<"SVC-AN" | "SVC-RS" | null> {
+  if (input.tipoNota.startsWith("65") || input.contingencia) return null;
+  try {
+    const empresaId = await exigirEmpresa();
+    const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
+    return contingenciaDaUF(empresa.uf).autorizadora;
+  } catch {
+    return null;
   }
 }
 
@@ -445,15 +522,20 @@ export type StatusResultado =
   | { ok: boolean; cStat: string | null; xMotivo: string | null }
   | { ok: false; erro: string };
 
-export async function checarStatusSefaz(): Promise<StatusResultado> {
+// Status do webservice da autorizadora que atende a UF da empresa. O modelo
+// importa: BA, PE e MA (entre outras) usam autorizadoras diferentes na 55 e na 65.
+export async function checarStatusSefaz(modelo: "55" | "65" = "55"): Promise<StatusResultado> {
   try {
     const empresaId = await exigirEmpresa();
     const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
-    const cUF = UF_IBGE[empresa.uf];
-    if (!cUF) return { ok: false, erro: `UF inválida: ${empresa.uf}` };
+    if (!codigoUF(empresa.uf)) return { ok: false, erro: `UF inválida: ${empresa.uf}` };
     const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
     const cert = carregarCertificado(pfxBase64, senha);
-    const r = await consultarStatus(cert, empresa.ambiente === "PRODUCAO" ? "1" : "2", cUF);
+    const r = await consultarStatus(cert, {
+      uf: empresa.uf,
+      mod: modelo,
+      tpAmb: empresa.ambiente === "PRODUCAO" ? "1" : "2",
+    });
     return { ok: r.ok, cStat: r.cStat, xMotivo: r.xMotivo };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -481,6 +563,7 @@ export type NotaCompleta = {
   naturezaOperacao: string;
   status: "autorizada" | "rascunho" | "cancelada" | "rejeitada" | "denegada";
   ambiente: "producao" | "homologacao";
+  tpEmis: string; // 1 normal | 6 SVC-AN | 7 SVC-RS (tarja de contingência no DANFE)
   emitidaEm: string;
   valorTotal: number;
   chaveAcesso: string;
@@ -531,6 +614,7 @@ function mapNota(n: NotaRow): NotaCompleta {
     naturezaOperacao: n.naturezaOperacao,
     status: STATUS_UI[n.status] ?? "rascunho",
     ambiente: n.ambiente === "PRODUCAO" ? "producao" : "homologacao",
+    tpEmis: n.tpEmis,
     emitidaEm: n.emitidaEm.toISOString(),
     valorTotal: Number(n.valorTotal),
     chaveAcesso: n.chaveAcesso ?? "",
@@ -628,14 +712,14 @@ export async function cancelarNota(input: CancelarInput): Promise<CancelarResult
     if (!nota || !nota.chaveAcesso || !nota.protocolo) {
       return { ok: false, erro: "Nota não encontrada ou sem protocolo de autorização." };
     }
-    const cUF = UF_IBGE[nota.emitente.uf];
-    if (!cUF) return { ok: false, erro: `UF inválida: ${nota.emitente.uf}` };
+    if (!codigoUF(nota.emitente.uf)) return { ok: false, erro: `UF inválida: ${nota.emitente.uf}` };
 
     const { pfxBase64, senha } = certDaEmpresa(nota.emitente.certData);
     const cert = carregarCertificado(pfxBase64, senha);
     const r = await cancelarNFe(cert, {
       tpAmb: nota.ambiente === "PRODUCAO" ? "1" : "2",
-      cUF,
+      uf: nota.emitente.uf,
+      mod: nota.modelo === "65" ? "65" : "55",
       cnpj: nota.emitente.cnpj,
       chave: nota.chaveAcesso,
       nProt: nota.protocolo,

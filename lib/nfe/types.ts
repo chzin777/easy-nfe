@@ -1,5 +1,7 @@
-// Estruturas de entrada para montagem da NF-e (modelo 55).
+// Estruturas de entrada para montagem da NF-e (modelo 55) e da NFC-e (65).
 // Desacopladas dos tipos de UI (lib/types.ts) — só o que o XML precisa.
+
+import type { TpEmis } from "./ufs";
 
 export type EnderecoNFe = {
   xLgr: string;
@@ -51,8 +53,13 @@ export type ItemNFe = {
 export type DadosNFe = {
   tpAmb: "1" | "2"; // 1 produção | 2 homologação
   mod?: "55" | "65"; // modelo do documento (default 55)
-  cUF: string; // código IBGE da UF (GO = 52)
+  uf: string; // sigla da UF do emitente — resolve cUF, autorizadora e URLs do QR
   serie: string;
+  // Contingência (só NF-e 55): 6 = SVC-AN, 7 = SVC-RS, conforme a UF. Entra na
+  // chave de acesso (posição 35) e exige dhCont + xJust.
+  tpEmis?: TpEmis;
+  dhCont?: string; // AAAA-MM-DDThh:mm:ss-03:00 — entrada em contingência
+  xJust?: string; // justificativa, 15-256 chars
   nNF: string; // número da nota
   natOp: string;
   emit: EmitenteNFe;
@@ -70,6 +77,7 @@ export type ResultadoEmissao = {
   cStat: string | null;
   xMotivo: string | null;
   chave: string;
+  tpEmis: TpEmis; // o efetivamente usado (1 normal | 6 SVC-AN | 7 SVC-RS)
   nProt: string | null;
   xmlAutorizado: string | null; // nfeProc completo, quando autorizada
   xmlEnviado: string; // NFe assinada que foi transmitida

@@ -78,6 +78,8 @@ export default function NovaNotaPage() {
   const [autoEnviarEmail, setAutoEnviarEmail] = useState(false);
   const [corrigirCliente, setCorrigirCliente] = useState<Cliente | null>(null);
   const [corrigirProduto, setCorrigirProduto] = useState<Produto | null>(null);
+  // Justificativa da emissão em contingência (xJust do XML, 15-256 chars).
+  const [justContingencia, setJustContingencia] = useState("");
   // Muda a key do Stepper p/ remontá-lo ao recomeçar/voltar a um passo.
   const [formKey, setFormKey] = useState(0);
   // Passo em que o Stepper monta (1 ao recomeçar; 4 ao voltar de uma correção).
@@ -175,7 +177,8 @@ export default function NovaNotaPage() {
     setItens((lista) => lista.map((i) => (i.produtoId === produtoId ? { ...i, ...patch } : i)));
   }
 
-  async function emitir() {
+  // contingencia: reenvia a mesma nota pela SVC da UF quando a SEFAZ está fora.
+  async function emitir(contingencia?: { justificativa: string }) {
     if (!clienteId) {
       setResultado({ ok: false, erro: "Selecione um cliente." });
       return;
@@ -198,6 +201,7 @@ export default function NovaNotaPage() {
         descValor: i.descValor || 0,
       })),
       descontoNota: descNota.valor > 0 ? descNota : undefined,
+      contingencia,
     };
 
     setEmitindo(true);
@@ -612,6 +616,32 @@ export default function NovaNotaPage() {
               >
                 Corrigir endereço do cliente
               </Button>
+            )}
+
+            {/* SEFAZ da UF fora do ar: a NF-e 55 pode ser autorizada pela SVC.
+                A autorização na SVC é definitiva — sem retransmissão depois. */}
+            {resultado.contingencia?.disponivel && (
+              <div className="space-y-2 rounded-lg border border-[var(--warning)] bg-[var(--warning-soft)] p-3">
+                <p className="text-sm font-medium text-[var(--warning)]">
+                  Emitir em contingência ({resultado.contingencia.autorizadora})?
+                </p>
+                <p className="text-xs text-[var(--muted)]">
+                  A nota é autorizada de forma definitiva pela SEFAZ Virtual de Contingência e não é
+                  retransmitida quando a SEFAZ do seu estado voltar. A justificativa vai gravada no XML.
+                </p>
+                <Textarea
+                  rows={2}
+                  value={justContingencia}
+                  onChange={(e) => setJustContingencia(e.target.value)}
+                  placeholder="Justificativa (mín. 15 caracteres). Ex.: SEFAZ do estado indisponivel no momento da emissao."
+                />
+                <Button
+                  disabled={justContingencia.trim().length < 15}
+                  onClick={() => emitir({ justificativa: justContingencia.trim() })}
+                >
+                  Emitir em contingência
+                </Button>
+              </div>
             )}
           </div>
         )}
