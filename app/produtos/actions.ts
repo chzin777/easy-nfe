@@ -276,6 +276,48 @@ export async function ajustarEstoque(
   }
 }
 
+// Liga/desliga o controle de estoque de um produto (a partir da aba Estoque).
+// Ao ligar com saldo inicial > 0, registra o movimento de ENTRADA correspondente.
+export async function ativarControleEstoque(
+  produtoId: string,
+  ativar: boolean,
+  estoqueInicial = 0,
+): Promise<{ ok: true; estoque: number } | { ok: false; erro: string }> {
+  try {
+    await exigirFeature("estoque");
+    const empresaId = await exigirEmpresa();
+    const prod = await prisma.produto.findFirst({ where: { id: produtoId, empresaId } });
+    if (!prod) return { ok: false, erro: "Produto não encontrado." };
+
+    if (!ativar) {
+      await prisma.produto.update({ where: { id: produtoId }, data: { controlaEstoque: false } });
+      return { ok: true, estoque: Number(prod.estoque) };
+    }
+
+    const saldo = Number.isFinite(estoqueInicial) && estoqueInicial > 0
+      ? Math.round(estoqueInicial * 1e4) / 1e4
+      : 0;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.produto.update({
+        where: { id: produtoId },
+        data: { controlaEstoque: true, estoque: saldo },
+      });
+      if (saldo > 0) {
+        await tx.movimentoEstoque.create({
+          data: {
+            empresaId, produtoId, tipo: "ENTRADA",
+            quantidade: saldo, saldoApos: saldo, motivo: "Estoque inicial",
+          },
+        });
+      }
+    });
+    return { ok: true, estoque: saldo };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export type MovimentoEstoqueRow = {
   id: string;
   tipo: "ENTRADA" | "SAIDA" | "AJUSTE" | "DEVOLUCAO";

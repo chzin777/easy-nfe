@@ -4,7 +4,7 @@ import { prisma } from "../lib/prisma.ts";
 
 // Cada benefício libera estas features. "emissao_ilimitada" carrega o pacote básico (core).
 const MAPA = {
-  emissao_ilimitada: ["produtos", "clientes", "transportadoras", "emitir_nfe", "notas_listar", "dashboard"],
+  emissao_ilimitada: ["produtos", "clientes", "transportadoras", "emitir_nfe", "notas_listar", "dashboard", "vendas"],
   danfe: ["danfe", "nota_cancelar"],
   cert_a1: [],
   import_xml: ["importar_xml"],
@@ -19,6 +19,7 @@ const MAPA = {
   api: ["api"],
   gerente: [],
   orcamentos: ["orcamentos"],
+  controle_estoque: ["estoque"],
 };
 
 for (const [chave, features] of Object.entries(MAPA)) {

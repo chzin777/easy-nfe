@@ -108,6 +108,30 @@ model RedefinicaoSenha {
 }
 
 // ----------------------------------------------------------------------------
+// Chave de API para integração de terceiros. Guarda apenas o HASH (SHA-256) do
+// token — o valor bruto é mostrado UMA vez, na geração (via script). `prefixo`
+// são os primeiros caracteres visíveis, só para identificar a chave em logs.
+// Escopo por empresa: a chave autentica requisições daquela empresa.
+// ----------------------------------------------------------------------------
+model ApiKey {
+  id        String @id @default(uuid())
+
+  empresaId String
+  empresa   Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  nome      String // rótulo livre (ex.: "Integração loja X")
+  prefixo   String // primeiros chars do token, p/ identificação (não é segredo)
+  tokenHash String @unique // SHA-256 do token completo
+
+  ultimoUso  DateTime?
+  revogadaEm DateTime? // != null => chave inativa
+  createdAt  DateTime  @default(now())
+
+  @@index([empresaId])
+  @@map("api_keys")
+}
+
+// ----------------------------------------------------------------------------
 // SaaS: planos, licenças e pagamentos.
 // ----------------------------------------------------------------------------
 model Plano {
@@ -350,6 +374,8 @@ model Emitente {
   movimentosEstoque MovimentoEstoque[]
   entradasEstoque   EntradaEstoque[]
   lancamentosFiado  LancamentoFiado[]
+  vendas            Venda[]
+  apiKeys           ApiKey[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -426,6 +452,7 @@ model Produto {
 
   itens             ItemNota[]
   itensOrcamento    ItemOrcamento[]
+  itensVenda        ItemVenda[]
   movimentosEstoque MovimentoEstoque[]
 
   createdAt DateTime @default(now())
@@ -467,11 +494,15 @@ model MovimentoEstoque {
   entradaId String?
   entrada   EntradaEstoque? @relation(fields: [entradaId], references: [id], onDelete: SetNull)
 
+  vendaId String?
+  venda   Venda?  @relation(fields: [vendaId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
 
   @@index([empresaId, produtoId])
   @@index([notaId])
   @@index([entradaId])
+  @@index([vendaId])
   @@map("movimentos_estoque")
 }
 
@@ -535,6 +566,7 @@ model Cliente {
   notasServico     NotaServico[]
   orcamentos       Orcamento[]
   lancamentosFiado LancamentoFiado[]
+  vendas           Venda[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1002,4 +1034,69 @@ model ItemOrcamento {
   valorTotal    Decimal @db.Decimal(15, 2)
 
   @@map("itens_orcamento")
+}
+
+// ----------------------------------------------------------------------------
+// Venda sem emissão de nota fiscal — registro NÃO fiscal de venda concluída.
+// Serve para controle de caixa/estoque de vendas que não geram NF-e (ex.: venda
+// balcão a consumidor). Documento sem valor fiscal. Pode baixar estoque e/ou
+// lançar na caderneta (fiado). Aparece normalmente nos relatórios financeiros.
+// ----------------------------------------------------------------------------
+enum StatusVenda {
+  CONCLUIDA
+  CANCELADA
+}
+
+model Venda {
+  id     String @id @default(uuid())
+  numero Int
+
+  empresaId String
+  empresa   Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  status         StatusVenda @default(CONCLUIDA)
+  formaPagamento String      @default("dinheiro") // dinheiro | pix | cartao | fiado | outro
+  observacoes    String?
+
+  descontoTipo  String  @default("valor") // "valor" | "percent"
+  descontoValor Decimal @default(0) @db.Decimal(15, 2)
+  valorTotal    Decimal @default(0) @db.Decimal(15, 2)
+
+  baixaEstoque Boolean @default(false) // registrou saída no estoque
+  fiado        Boolean @default(false) // gerou lançamento na caderneta
+
+  data      DateTime @default(now()) // data da venda (editável)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  itens      ItemVenda[]
+  movimentos MovimentoEstoque[]
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, status])
+  @@index([empresaId, data])
+  @@map("vendas")
+}
+
+model ItemVenda {
+  id      String @id @default(uuid())
+  vendaId String
+  venda   Venda  @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+
+  produtoId String?
+  produto   Produto? @relation(fields: [produtoId], references: [id], onDelete: SetNull)
+
+  nome          String // snapshot
+  unidade       String?
+  quantidade    Decimal @db.Decimal(15, 4)
+  precoUnitario Decimal @db.Decimal(15, 10)
+  descontoTipo  String  @default("valor")
+  descontoValor Decimal @default(0) @db.Decimal(15, 2)
+  valorTotal    Decimal @db.Decimal(15, 2)
+
+  @@index([vendaId])
+  @@map("itens_venda")
 }

@@ -18,6 +18,7 @@ const CATALOGO = [
   { chave: "api", nome: "API de integração", ordem: 13 },
   { chave: "gerente", nome: "Gerente de conta dedicado", ordem: 14 },
   { chave: "orcamentos", nome: "Orçamentos", ordem: 15 },
+  { chave: "controle_estoque", nome: "Controle de estoque", ordem: 16 },
 ];
 
 for (const b of CATALOGO) {
@@ -28,8 +29,8 @@ const conectar = (chaves) => ({ set: chaves.map((c) => ({ id: byChave[c] })) });
 
 const PLANOS = {
   "Básico": ["emissao_ilimitada", "danfe", "cert_a1", "import_xml", "suporte_email"],
-  "Profissional": ["emissao_ilimitada", "danfe", "cert_a1", "import_xml", "ecommerce", "nfe_email", "whatsapp", "multiusuario", "suporte_prioritario"],
-  "Empresarial": ["emissao_ilimitada", "danfe", "cert_a1", "ecommerce", "nfe_email", "whatsapp", "multiusuario", "dfe", "nfce_nfse", "api", "gerente"],
+  "Profissional": ["emissao_ilimitada", "danfe", "cert_a1", "import_xml", "ecommerce", "nfe_email", "whatsapp", "multiusuario", "suporte_prioritario", "controle_estoque"],
+  "Empresarial": ["emissao_ilimitada", "danfe", "cert_a1", "ecommerce", "nfe_email", "whatsapp", "multiusuario", "dfe", "nfce_nfse", "api", "gerente", "controle_estoque"],
 };
 
 for (const [nome, chaves] of Object.entries(PLANOS)) {

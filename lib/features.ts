@@ -13,6 +13,7 @@ export const FEATURES: Feature[] = [
 
   // Emissão
   { chave: "orcamentos", nome: "Orçamentos (funil de vendas)", categoria: "Emissão" },
+  { chave: "vendas", nome: "Vendas sem nota fiscal", categoria: "Emissão" },
   { chave: "emitir_nfe", nome: "Emitir NF-e (mod. 55)", categoria: "Emissão" },
   { chave: "emitir_nfce", nome: "Emitir NFC-e (mod. 65)", categoria: "Emissão" },
   { chave: "emitir_nfse", nome: "Emitir NFS-e (serviço)", categoria: "Emissão" },
@@ -30,6 +31,7 @@ export const FEATURES: Feature[] = [
 
   // Gestão
   { chave: "dashboard", nome: "Dashboard e gráficos", categoria: "Gestão" },
+  { chave: "estoque", nome: "Controle de estoque", categoria: "Gestão" },
   { chave: "multiempresa", nome: "Multiempresa (vários CNPJs)", categoria: "Gestão" },
   { chave: "multiusuario", nome: "Equipe / multiusuário", categoria: "Gestão" },
   { chave: "relatorios", nome: "Relatórios fiscais", categoria: "Gestão" },
