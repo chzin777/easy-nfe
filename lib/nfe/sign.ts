@@ -1,13 +1,16 @@
 import { SignedXml } from "xml-crypto";
 import type { Certificado } from "./cert";
 
-// Assina um nó XML (infNFe ou infEvento) com XML-DSig RSA-SHA1 + C14N,
-// conforme exigido pela NF-e 4.00. `refId` é o atributo Id do nó assinado.
+// Assina um nó XML (infNFe, infEvento ou infDPS) com XML-DSig RSA-SHA1 + C14N.
+// `refId` é o atributo Id do nó assinado.
+//
+// A NFS-e Padrão Nacional usa o mesmo esquema da NF-e 4.00 — inclusive o
+// action "after", que deixa <Signature> como irmã do nó assinado, e não filha.
 export function assinar(
   xml: string,
   refId: string,
   cert: Certificado,
-  tag: "infNFe" | "infEvento",
+  tag: "infNFe" | "infEvento" | "infDPS",
 ): string {
   const sig = new SignedXml({
     privateKey: cert.keyPem,
