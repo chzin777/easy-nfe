@@ -14,7 +14,7 @@ import {
 import { definirEmpresaAtiva, hashSenha } from "@/lib/auth";
 import { resolverCodMunicipio as resolverCodMunicipioIBGE } from "@/lib/nfe/ibge";
 import { encriptar } from "@/lib/crypto";
-import { temFeature, exigirFeature } from "@/lib/permissoes";
+import { temFeature, exigirFeature, minhasFeatures } from "@/lib/permissoes";
 import {
   TEMPLATE_PADRAO,
   workerConfigurado,
@@ -484,7 +484,15 @@ export async function obterCertificado(): Promise<CertStatus> {
 // Equipe (multiusuário) — membros da empresa ativa, limitado pelo plano.
 // ----------------------------------------------------------------------------
 
-export type MembroEquipe = { userId: string; email: string; nome: string; papel: string; voce: boolean };
+export type MembroEquipe = {
+  userId: string;
+  email: string;
+  nome: string;
+  papel: string;
+  voce: boolean;
+  // Vazio = sem restrição própria (vale tudo do plano). Ignorado p/ dono.
+  permissoes: string[];
+};
 export type EquipeInfo = {
   membros: MembroEquipe[];
   limite: number; // -1 = ilimitado
@@ -492,6 +500,7 @@ export type EquipeInfo = {
   podeAdicionar: boolean;
   permitido: boolean; // plano permite equipe (>1 ou ilimitado)
   voceEhDono: boolean; // só dono (ou admin) gerencia papéis/membros
+  featuresDoPlano: string[]; // teto do que dá para conceder a um membro
 };
 
 async function ehDono(uid: string, role: string, empresaId: string): Promise<boolean> {
@@ -531,7 +540,10 @@ export async function listarEquipe(): Promise<EquipeInfo> {
       nome: a.user.nome ?? "",
       papel: a.papel,
       voce: a.user.id === uid,
+      permissoes: a.permissoes,
     })),
+    // Features que o plano libera — teto do que dá para conceder a um membro.
+    featuresDoPlano: await minhasFeatures(),
     limite,
     usados: lim.usados,
     podeAdicionar: admin || lim.podeAdicionar,
@@ -545,6 +557,8 @@ export async function adicionarMembro(input: {
   nome: string;
   senha: string;
   papel?: "dono" | "membro";
+  // Só vale para papel "membro"; vazio = sem restrição própria.
+  permissoes?: string[];
 }): Promise<{ ok: true } | { ok: false; erro: string }> {
   try {
     const { uid, role } = await exigirSessao();
@@ -574,7 +588,14 @@ export async function adicionarMembro(input: {
     });
     if (jaTem) return { ok: false, erro: "Esse usuário já tem acesso a esta empresa." };
 
-    await prisma.acessoEmpresa.create({ data: { userId: user.id, empresaId, papel: input.papel === "dono" ? "dono" : "membro" } });
+    const papel = input.papel === "dono" ? "dono" : "membro";
+    // Mesma regra do definirPermissoesMembro: o que vem do cliente é filtrado
+    // pelo plano, e dono nunca carrega restrição.
+    const doPlano = new Set(await minhasFeatures());
+    const permissoes =
+      papel === "dono" ? [] : [...new Set(input.permissoes ?? [])].filter((p) => doPlano.has(p));
+
+    await prisma.acessoEmpresa.create({ data: { userId: user.id, empresaId, papel, permissoes } });
     return { ok: true };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
@@ -606,7 +627,44 @@ export async function alterarPapelMembro(
 
     await prisma.acessoEmpresa.update({
       where: { userId_empresaId: { userId, empresaId } },
-      data: { papel },
+      // Dono tem acesso total: promover limpa qualquer restrição antiga p/ ela
+      // não voltar a valer caso ele seja rebaixado de novo.
+      data: { papel, ...(papel === "dono" ? { permissoes: [] } : {}) },
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Define o que um membro pode acessar dentro desta empresa. Nunca amplia o
+// plano: o que chega é interceptado contra as features do plano antes de
+// gravar, então uma lista adulterada no cliente não libera nada a mais.
+// Lista vazia = sem restrição própria. Dono não é restringido.
+export async function definirPermissoesMembro(
+  userId: string,
+  permissoes: string[],
+): Promise<{ ok: true } | { ok: false; erro: string }> {
+  try {
+    const { uid, role } = await exigirSessao();
+    const empresaId = await exigirEmpresa();
+    await exigirDono(uid, role, empresaId);
+
+    const acesso = await prisma.acessoEmpresa.findUnique({
+      where: { userId_empresaId: { userId, empresaId } },
+      select: { papel: true },
+    });
+    if (!acesso) return { ok: false, erro: "Membro não encontrado nesta empresa." };
+    if (acesso.papel === "dono") {
+      return { ok: false, erro: "Dono tem acesso total — rebaixe para membro antes de restringir permissões." };
+    }
+
+    const doPlano = new Set(await minhasFeatures());
+    const validas = [...new Set(permissoes)].filter((p) => doPlano.has(p));
+
+    await prisma.acessoEmpresa.update({
+      where: { userId_empresaId: { userId, empresaId } },
+      data: { permissoes: validas },
     });
     return { ok: true };
   } catch (e) {

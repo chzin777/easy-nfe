@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./prisma";
 import { lerSessaoCompleta } from "./auth";
-import { isAdminRole, uidDaLicencaVigente } from "./empresa";
+import { empresaAtivaId, isAdminRole, uidDaLicencaVigente } from "./empresa";
 import { FEATURES } from "./features";
 
 const TODAS = FEATURES.map((f) => f.chave);
@@ -48,7 +48,26 @@ export async function featuresDoUsuario(): Promise<{ admin: boolean; features: S
   const pagante = await uidDaLicencaVigente(s.uid);
   const lic = await prisma.licenca.findUnique({ where: { userId: pagante }, select: { planoId: true } });
   if (!lic?.planoId) return { admin: false, features: new Set() };
-  return { admin: false, features: await featuresDoPlano(lic.planoId) };
+
+  const doPlano = await featuresDoPlano(lic.planoId);
+
+  // Restrição por membro: o dono da empresa escolhe o que cada convidado pode
+  // usar. Só restringe — o acesso final é plano ∩ permissoes, então mexer aqui
+  // nunca libera algo que o plano não tem. Papel "dono" não é restringido, e
+  // lista vazia significa "sem restrição própria".
+  const empresaId = await empresaAtivaId();
+  if (!empresaId) return { admin: false, features: doPlano };
+
+  const acesso = await prisma.acessoEmpresa.findUnique({
+    where: { userId_empresaId: { userId: s.uid, empresaId } },
+    select: { papel: true, permissoes: true },
+  });
+  if (!acesso || acesso.papel === "dono" || acesso.permissoes.length === 0) {
+    return { admin: false, features: doPlano };
+  }
+
+  const permitidas = new Set(acesso.permissoes);
+  return { admin: false, features: new Set([...doPlano].filter((f) => permitidas.has(f))) };
 }
 
 export async function temFeature(chave: string): Promise<boolean> {

@@ -18,8 +18,13 @@ import { listarClientes } from "@/app/clientes/actions";
 import type { Cliente } from "@/lib/types";
 import Tabs from "@/app/ui/Tabs";
 import Modal from "@/app/ui/Modal";
+import ConfirmDialog from "@/app/ui/ConfirmDialog";
+import StepperModal from "@/app/ui/StepperModal";
+import Stepper, { Step } from "@/app/ui/Stepper";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { EnderecoFields } from "@/app/ui/PessoaFields";
+import { FEATURES } from "@/lib/features";
+import { formatCep, formatCpfCnpj, formatTelefone } from "@/lib/format";
 import NovaEmpresaModal from "./NovaEmpresaModal";
 import AbaWhatsApp from "./AbaWhatsApp";
 import AbaEmail from "./AbaEmail";
@@ -36,12 +41,14 @@ import {
   adicionarMembro,
   removerMembro,
   alterarPapelMembro,
+  definirPermissoesMembro,
   obterDadosCobranca,
   salvarDadosCobranca,
   type CertStatus,
   type EmpresaDados,
   type EmpresaResumo,
   type EquipeInfo,
+  type MembroEquipe,
 } from "./actions";
 
 const CRT = [
@@ -198,33 +205,17 @@ export default function ConfiguracoesPage() {
             {trocando && <LightningLoader overlay texto="Carregando empresa…" />}
             <Tabs
               abas={[
-                { id: "emit", label: "Empresa emitente", content: <AbaEmitente form={form} setE={setE} setForm={setForm} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
+                { id: "emit", label: "Empresa emitente", content: <AbaEmitente form={form} setE={setE} setForm={setForm} onSalvar={salvar} salvando={salvando} salvo={salvo} onExcluir={abrirExcluir} /> },
+                { id: "padroes", label: "Padrões de emissão", content: <AbaPadroes form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
+                { id: "amb", label: "Ambiente & numeração", content: <AbaAmbiente form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
                 { id: "cert", label: "Certificado A1", content: <AbaCertificado /> },
                 { id: "cobranca", label: "Cobrança", content: <AbaCobranca /> },
                 { id: "equipe", label: "Equipe", content: <AbaEquipe /> },
                 { id: "whatsapp", label: "WhatsApp", content: <AbaWhatsApp /> },
                 { id: "email", label: "E-mail", content: <AbaEmail /> },
-                { id: "padroes", label: "Padrões de emissão", content: <AbaPadroes form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
-                { id: "amb", label: "Ambiente & numeração", content: <AbaAmbiente form={form} setE={setE} onSalvar={salvar} salvando={salvando} salvo={salvo} /> },
               ]}
             />
           </Card>
-
-          {form.id && (
-            <Card className="border-[var(--danger)]/30 p-6">
-              <SectionTitle>Zona de perigo</SectionTitle>
-              <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="max-w-2xl text-sm text-[var(--muted)]">
-                  Excluir a empresa apaga <b>tudo</b> desta empresa — notas emitidas, produtos, clientes,
-                  estoque, equipe e o <b>certificado digital</b> (removido da nossa base). Ação
-                  irreversível.
-                </p>
-                <Button variante="danger" onClick={abrirExcluir} className="shrink-0">
-                  Excluir empresa
-                </Button>
-              </div>
-            </Card>
-          )}
         </>
       )}
 
@@ -330,12 +321,9 @@ function AbaCobranca() {
 
 function AbaEquipe() {
   const [info, setInfo] = useState<EquipeInfo | null>(null);
-  const [email, setEmail] = useState("");
-  const [nome, setNome] = useState("");
-  const [senha, setSenha] = useState("");
-  const [papel, setPapel] = useState<"dono" | "membro">("membro");
   const [erro, setErro] = useState<string | null>(null);
-  const [salvando, setSalvando] = useState(false);
+  const [editando, setEditando] = useState<MembroEquipe | null>(null);
+  const [novoAberto, setNovoAberto] = useState(false);
 
   async function recarregar() {
     setInfo(await listarEquipe());
@@ -344,27 +332,6 @@ function AbaEquipe() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void recarregar();
   }, []);
-
-  async function adicionar() {
-    setSalvando(true);
-    setErro(null);
-    const r = await adicionarMembro({ email, nome, senha, papel });
-    setSalvando(false);
-    if (!r.ok) { setErro(r.erro); return; }
-    setEmail(""); setNome(""); setSenha(""); setPapel("membro");
-    await recarregar();
-  }
-  async function remover(userId: string) {
-    const r = await removerMembro(userId);
-    if (!r.ok) { setErro(r.erro); return; }
-    await recarregar();
-  }
-  async function trocarPapel(userId: string, novo: "dono" | "membro") {
-    setErro(null);
-    const r = await alterarPapelMembro(userId, novo);
-    if (!r.ok) { setErro(r.erro); return; }
-    await recarregar();
-  }
 
   if (!info) return <LightningLoader texto="Carregando equipe…" />;
 
@@ -377,67 +344,335 @@ function AbaEquipe() {
     );
   }
 
+  // Ninguém edita a si mesmo, e só o dono gerencia a equipe.
+  const podeEditar = (m: MembroEquipe) => info.voceEhDono && !m.voce;
+
   return (
     <div className="space-y-6">
       <div>
-        <SectionTitle>Membros desta empresa</SectionTitle>
-        <p className="text-sm text-[var(--muted)]">
-          {info.limite < 0 ? "Usuários ilimitados" : `${info.usados}/${info.limite} membros`} · o dono não conta no limite.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <SectionTitle>Membros desta empresa</SectionTitle>
+            <p className="text-sm text-[var(--muted)]">
+              {info.limite < 0 ? "Usuários ilimitados" : `${info.usados}/${info.limite} membros`} · o dono não conta no limite.
+            </p>
+          </div>
+          {info.voceEhDono && (
+            <Button onClick={() => setNovoAberto(true)} disabled={!info.podeAdicionar} className="shrink-0">
+              + Adicionar membro
+            </Button>
+          )}
+        </div>
+        {info.voceEhDono && !info.podeAdicionar && (
+          <p className="mt-2 text-sm text-[var(--warning)]">Limite do plano atingido.</p>
+        )}
+
         <ul className="mt-3 divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
-          {info.membros.map((m) => (
-            <li key={m.userId} className="flex items-center justify-between px-4 py-2.5 text-sm">
-              <span>
-                <span className="font-medium">{m.nome || m.email}</span>
-                <span className="text-[var(--muted)]"> · {m.email}</span>
-                <span className={"ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " + (m.papel === "dono" ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "bg-slate-100 text-slate-600")}>{m.papel}</span>
-                {m.voce && <span className="ml-1 text-xs text-[var(--muted)]">(você)</span>}
-              </span>
-              {info.voceEhDono && !m.voce && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variante="secondary"
-                    onClick={() => trocarPapel(m.userId, m.papel === "dono" ? "membro" : "dono")}
-                    className="!px-3 !py-1.5 !text-xs"
-                  >
-                    {m.papel === "dono" ? "Tornar membro" : "Tornar dono"}
-                  </Button>
-                  <Button variante="danger" onClick={() => remover(m.userId)} className="!px-3 !py-1.5 !text-xs">Remover</Button>
+          {info.membros.map((m) => {
+            const editavel = podeEditar(m);
+            return (
+              <li key={m.userId}>
+                <div
+                  onClick={editavel ? () => { setErro(null); setEditando(m); } : undefined}
+                  className={
+                    "flex items-center justify-between gap-3 px-4 py-2.5 text-sm " +
+                    (editavel ? "cursor-pointer transition hover:bg-slate-50" : "")
+                  }
+                >
+                  <span className="min-w-0">
+                    <span className="font-medium">{m.nome || m.email}</span>
+                    <span className="text-[var(--muted)]"> · {m.email}</span>
+                    <span className={"ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " + (m.papel === "dono" ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "bg-slate-100 text-slate-600")}>{m.papel}</span>
+                    {m.voce && <span className="ml-1 text-xs text-[var(--muted)]">(você)</span>}
+                    {m.papel !== "dono" && m.permissoes.length > 0 && (
+                      <span className="ml-2 text-xs text-[var(--muted)]">{m.permissoes.length} permissão(ões)</span>
+                    )}
+                  </span>
+                  {editavel && (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-slate-400"><path d="m9 18 6-6-6-6" /></svg>
+                  )}
                 </div>
-              )}
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       </div>
 
-      {info.voceEhDono && (
-        <section>
-          <SectionTitle>Adicionar membro</SectionTitle>
-          <p className="mb-3 text-xs text-[var(--muted)]">Se o e-mail já existir, ele só ganha acesso a esta empresa. Senão, cria a conta.</p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Nome"><Input value={nome} onChange={(e) => setNome(e.target.value)} /></Field>
-            <Field label="E-mail" required><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-            <Field label="Senha (se novo)" hint="Mín. 8 caracteres"><Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} /></Field>
-            <Field label="Papel" hint="Dono gerencia equipe, dados e certificado">
-              <Select
-                opcoes={[{ value: "membro", label: "Membro" }, { value: "dono", label: "Dono" }]}
-                value={papel}
-                onChange={(e) => setPapel(e.target.value as "dono" | "membro")}
-              />
-            </Field>
-          </div>
-          {erro && <p className="mt-3 text-sm font-medium text-[var(--danger)]">{erro}</p>}
-          <div className="mt-4">
-            <Button onClick={adicionar} disabled={salvando || !info.podeAdicionar || !email}>
-              {salvando ? "Adicionando…" : "Adicionar à equipe"}
-            </Button>
-            {!info.podeAdicionar && <span className="ml-3 text-sm text-[var(--warning)]">Limite do plano atingido.</span>}
-          </div>
-        </section>
+      {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
+
+      {editando && (
+        <MembroModal
+          membro={editando}
+          featuresDoPlano={info.featuresDoPlano}
+          onFechar={() => setEditando(null)}
+          onSalvo={async () => { setEditando(null); await recarregar(); }}
+        />
       )}
 
-      {!info.voceEhDono && erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
+      {novoAberto && (
+        <NovoMembroModal
+          featuresDoPlano={info.featuresDoPlano}
+          onFechar={() => setNovoAberto(false)}
+          onCriado={async () => { setNovoAberto(false); await recarregar(); }}
+        />
+      )}
     </div>
+  );
+}
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Grade de permissões limitada ao que o plano libera — não adianta oferecer
+// o que a licença não entrega.
+function GradePermissoes({
+  featuresDoPlano,
+  selecionadas,
+  onChange,
+}: {
+  featuresDoPlano: string[];
+  selecionadas: string[];
+  onChange: (chaves: string[]) => void;
+}) {
+  const disponiveis = FEATURES.filter((f) => featuresDoPlano.includes(f.chave));
+  const categorias = [...new Set(disponiveis.map((f) => f.categoria))];
+
+  function alternar(chave: string) {
+    onChange(selecionadas.includes(chave) ? selecionadas.filter((c) => c !== chave) : [...selecionadas, chave]);
+  }
+
+  if (disponiveis.length === 0) {
+    return <p className="text-xs text-[var(--muted)]">Seu plano não libera funcionalidades restringíveis.</p>;
+  }
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-[var(--muted)]">{selecionadas.length} de {disponiveis.length} selecionada(s)</p>
+        <div className="flex gap-2">
+          <Button variante="ghost" className="!px-2 !py-1 !text-xs" onClick={() => onChange(disponiveis.map((f) => f.chave))}>
+            Marcar todas
+          </Button>
+          <Button variante="ghost" className="!px-2 !py-1 !text-xs" onClick={() => onChange([])}>
+            Limpar
+          </Button>
+        </div>
+      </div>
+      <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-[var(--border)] p-3">
+        {categorias.map((cat) => (
+          <div key={cat}>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">{cat}</p>
+            <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+              {disponiveis.filter((f) => f.categoria === cat).map((f) => (
+                <label key={f.chave} className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-slate-50">
+                  <input type="checkbox" checked={selecionadas.includes(f.chave)} onChange={() => alternar(f.chave)} className="h-4 w-4 accent-[var(--primary)]" />
+                  {f.nome}
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {selecionadas.length === 0 && (
+        <p className="mt-2 rounded-md bg-slate-50 px-3 py-2 text-xs text-[var(--muted)]">
+          Nada marcado = <b>sem restrição própria</b>: o membro acessa tudo que o plano libera. Marque itens para limitar o acesso.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MembroModal({
+  membro,
+  featuresDoPlano,
+  onFechar,
+  onSalvo,
+}: {
+  membro: MembroEquipe;
+  featuresDoPlano: string[];
+  onFechar: () => void;
+  onSalvo: () => void;
+}) {
+  const [papel, setPapel] = useState<"dono" | "membro">(membro.papel === "dono" ? "dono" : "membro");
+  const [permissoes, setPermissoes] = useState<string[]>(membro.permissoes);
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [confirmarRemover, setConfirmarRemover] = useState(false);
+  const [removendo, setRemovendo] = useState(false);
+
+  async function salvar() {
+    setSalvando(true);
+    setErro(null);
+    try {
+      if (papel !== membro.papel) {
+        const r = await alterarPapelMembro(membro.userId, papel);
+        if (!r.ok) { setErro(r.erro); return; }
+      }
+      // Dono tem acesso total — o servidor recusa restrição para ele.
+      if (papel === "membro") {
+        const r = await definirPermissoesMembro(membro.userId, permissoes);
+        if (!r.ok) { setErro(r.erro); return; }
+      }
+      onSalvo();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Falha ao salvar. Tente novamente.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function remover() {
+    setRemovendo(true);
+    setErro(null);
+    try {
+      const r = await removerMembro(membro.userId);
+      if (!r.ok) { setErro(r.erro); setConfirmarRemover(false); return; }
+      onSalvo();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Falha ao remover. Tente novamente.");
+      setConfirmarRemover(false);
+    } finally {
+      setRemovendo(false);
+    }
+  }
+
+  const ocupado = salvando || removendo;
+
+  return (
+    <>
+      <Modal
+        aberto
+        onFechar={ocupado ? () => {} : onFechar}
+        titulo={membro.nome || membro.email}
+        largura="max-w-2xl"
+        rodape={
+          <div className="flex w-full items-center justify-between">
+            <Button variante="ghost" className="text-[var(--danger)]" onClick={() => setConfirmarRemover(true)} disabled={ocupado}>
+              Remover da empresa
+            </Button>
+            <div className="flex gap-2">
+              <Button variante="secondary" onClick={onFechar} disabled={ocupado}>Cancelar</Button>
+              <Button onClick={salvar} disabled={ocupado}>{salvando ? "Salvando…" : "Salvar"}</Button>
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--muted)]">{membro.email}</p>
+          <Field label="Papel" hint="Dono gerencia equipe, dados e certificado — sem restrição de acesso">
+            <Select
+              opcoes={[{ value: "membro", label: "Membro" }, { value: "dono", label: "Dono" }]}
+              value={papel}
+              onChange={(e) => setPapel(e.target.value as "dono" | "membro")}
+            />
+          </Field>
+
+          {papel === "membro" && (
+            <div>
+              <p className="text-sm font-semibold">Permissões</p>
+              <p className="mb-2 text-xs text-[var(--muted)]">O que este membro pode acessar dentro desta empresa.</p>
+              <GradePermissoes featuresDoPlano={featuresDoPlano} selecionadas={permissoes} onChange={setPermissoes} />
+            </div>
+          )}
+
+          {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        aberto={confirmarRemover}
+        titulo="Remover da empresa"
+        mensagem={`Remover ${membro.nome || membro.email} desta empresa?`}
+        detalhe="A conta continua existindo, mas perde o acesso a esta empresa."
+        confirmarLabel="Sim, remover"
+        processando={removendo}
+        onConfirmar={remover}
+        onFechar={() => setConfirmarRemover(false)}
+      />
+    </>
+  );
+}
+
+function NovoMembroModal({
+  featuresDoPlano,
+  onFechar,
+  onCriado,
+}: {
+  featuresDoPlano: string[];
+  onFechar: () => void;
+  onCriado: () => void;
+}) {
+  const [nome, setNome] = useState("");
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [papel, setPapel] = useState<"dono" | "membro">("membro");
+  const [permissoes, setPermissoes] = useState<string[]>([]);
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+
+  async function salvar() {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const r = await adicionarMembro({ email, nome, senha, papel, permissoes: papel === "membro" ? permissoes : [] });
+      if (!r.ok) { setErro(r.erro); return; }
+      onCriado();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Falha ao adicionar. Tente novamente.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  const contaUI = (
+    <div className="space-y-4">
+      <p className="text-sm font-semibold">Dados da conta</p>
+      <p className="text-xs text-[var(--muted)]">Se o e-mail já existir, ele só ganha acesso a esta empresa. Senão, cria a conta.</p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Nome"><Input value={nome} onChange={(e) => setNome(e.target.value)} /></Field>
+        <Field label="E-mail" required><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+        <Field label="Senha (se novo)" hint="Mín. 8 caracteres" className="sm:col-span-2">
+          <Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} />
+        </Field>
+      </div>
+      {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
+    </div>
+  );
+
+  const acessoUI = (
+    <div className="space-y-4">
+      <p className="text-sm font-semibold">Papel e permissões</p>
+      <Field label="Papel" hint="Dono gerencia equipe, dados e certificado — sem restrição de acesso">
+        <Select
+          opcoes={[{ value: "membro", label: "Membro" }, { value: "dono", label: "Dono" }]}
+          value={papel}
+          onChange={(e) => setPapel(e.target.value as "dono" | "membro")}
+        />
+      </Field>
+      {papel === "membro" && (
+        <GradePermissoes featuresDoPlano={featuresDoPlano} selecionadas={permissoes} onChange={setPermissoes} />
+      )}
+      {erro && <p className="text-sm font-medium text-[var(--danger)]">{erro}</p>}
+    </div>
+  );
+
+  return (
+    <StepperModal onFechar={salvando ? () => {} : onFechar} largura="max-w-3xl">
+      {salvando ? (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-16 shadow-2xl">
+          <LightningLoader texto="Adicionando membro…" />
+        </div>
+      ) : (
+        <Stepper
+          completeButtonText="Adicionar à equipe"
+          onFinalStepCompleted={salvar}
+          canProceed={(s) => (s === 1 ? emailRegex.test(email.trim()) : true)}
+          reservarFechar
+        >
+          <Step>{contaUI}</Step>
+          <Step>{acessoUI}</Step>
+        </Stepper>
+      )}
+    </StepperModal>
   );
 }
 
@@ -563,6 +798,8 @@ function BarraSalvar({
   );
 }
 
+const soDigitos = (v: string) => v.replace(/\D/g, "");
+
 function AbaEmitente({
   form,
   setE,
@@ -570,6 +807,7 @@ function AbaEmitente({
   onSalvar,
   salvando,
   salvo,
+  onExcluir,
 }: {
   form: EmpresaDados;
   setE: <K extends keyof EmpresaDados>(k: K, v: EmpresaDados[K]) => void;
@@ -577,6 +815,7 @@ function AbaEmitente({
   onSalvar: () => void;
   salvando: boolean;
   salvo: boolean;
+  onExcluir: () => void;
 }) {
   return (
     <div className="space-y-6">
@@ -589,8 +828,15 @@ function AbaEmitente({
           <Field label="Nome fantasia">
             <Input value={form.nomeFantasia} onChange={(e) => setE("nomeFantasia", e.target.value)} />
           </Field>
+          {/* Máscaras são só de exibição: o state guarda dígitos, que é o que
+              o XML da NF-e consome. */}
           <Field label="CNPJ" required>
-            <Input value={form.cnpj} onChange={(e) => setE("cnpj", e.target.value)} />
+            <Input
+              value={formatCpfCnpj(form.cnpj)}
+              onChange={(e) => setE("cnpj", soDigitos(e.target.value).slice(0, 14))}
+              placeholder="00.000.000/0000-00"
+              inputMode="numeric"
+            />
           </Field>
           <Field label="Inscrição estadual" required>
             <Input value={form.inscricaoEstadual} onChange={(e) => setE("inscricaoEstadual", e.target.value)} />
@@ -599,15 +845,39 @@ function AbaEmitente({
             <Select opcoes={CRT} value={form.crt} onChange={(e) => setE("crt", e.target.value)} />
           </Field>
           <Field label="Telefone">
-            <Input value={form.telefone} onChange={(e) => setE("telefone", e.target.value)} />
+            <Input
+              value={formatTelefone(form.telefone)}
+              onChange={(e) => setE("telefone", soDigitos(e.target.value).slice(0, 11))}
+              placeholder="(00) 00000-0000"
+              inputMode="numeric"
+            />
           </Field>
           <Field label="E-mail">
             <Input type="email" value={form.email} onChange={(e) => setE("email", e.target.value)} />
           </Field>
         </div>
       </section>
-      <EnderecoFields value={form.endereco} onChange={(endereco) => setForm((s) => ({ ...s, endereco }))} />
+      <EnderecoFields
+        value={{ ...form.endereco, cep: formatCep(form.endereco.cep) }}
+        onChange={(endereco) => setForm((s) => ({ ...s, endereco: { ...endereco, cep: soDigitos(endereco.cep).slice(0, 8) } }))}
+      />
       <BarraSalvar onSalvar={onSalvar} salvando={salvando} salvo={salvo} rotuloNovo={form.id ? "Salvar alterações" : "Cadastrar empresa"} />
+
+      {form.id && (
+        <Card className="border-[var(--danger)]/30 p-6">
+          <SectionTitle>Zona de perigo</SectionTitle>
+          <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="max-w-2xl text-sm text-[var(--muted)]">
+              Excluir a empresa apaga <b>tudo</b> desta empresa — notas emitidas, produtos, clientes,
+              estoque, equipe e o <b>certificado digital</b> (removido da nossa base). Ação
+              irreversível.
+            </p>
+            <Button variante="danger" onClick={onExcluir} className="shrink-0">
+              Excluir empresa
+            </Button>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -846,6 +1116,10 @@ function AbaCertificado() {
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [cert, setCert] = useState<CertStatus | null>(null);
+  const [envioAberto, setEnvioAberto] = useState(false);
+  const [confirmarRemover, setConfirmarRemover] = useState(false);
+  const [removendo, setRemovendo] = useState(false);
+  const [erroRemover, setErroRemover] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function recarregar() {
@@ -882,6 +1156,7 @@ function AbaCertificado() {
         setSenha("");
         setNomeArquivo(null);
         if (inputRef.current) inputRef.current.value = "";
+        setEnvioAberto(false);
         await recarregar();
       } else {
         setErro(r.erro);
@@ -894,9 +1169,39 @@ function AbaCertificado() {
   }
 
   async function remover() {
-    await removerCertificado();
-    await recarregar();
+    setRemovendo(true);
+    setErroRemover(null);
+    try {
+      await removerCertificado();
+      setConfirmarRemover(false);
+      await recarregar();
+    } catch (e) {
+      setErroRemover(e instanceof Error ? e.message : "Falha ao remover o certificado. Tente novamente.");
+      setConfirmarRemover(false);
+    } finally {
+      setRemovendo(false);
+    }
   }
+
+  // Mesmo formulário nos dois caminhos: primeiro envio (inline) e substituição (modal).
+  const formularioUI = (
+    <>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Arquivo .pfx / .p12" required>
+          <label className="flex cursor-pointer items-center justify-between rounded-lg border border-dashed border-[var(--border)] bg-white px-3.5 py-2.5 text-sm hover:border-slate-300">
+            <span className={nomeArquivo ? "font-medium" : "text-slate-400"}>{nomeArquivo ?? "Selecionar arquivo…"}</span>
+            <span className="text-[var(--primary)]">procurar</span>
+            <input ref={inputRef} type="file" accept=".pfx,.p12,application/x-pkcs12" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) aoSelecionar(f); }} />
+          </label>
+        </Field>
+        <Field label="Senha do certificado" required>
+          <Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••••" />
+        </Field>
+      </div>
+      {erro && <p className="mt-3 text-sm font-medium text-[var(--danger)]">{erro}</p>}
+    </>
+  );
 
   return (
     <div className="space-y-6">
@@ -908,42 +1213,64 @@ function AbaCertificado() {
         </p>
       </div>
 
-      {cert?.temCert && (
-        <Card className="p-5">
-          <div className="flex items-center justify-between">
-            <SectionTitle>Certificado configurado</SectionTitle>
-            <div className="flex items-center gap-3">
+      {cert?.temCert ? (
+        <>
+          <Card className="p-5">
+            <div className="flex items-center justify-between">
+              <SectionTitle>Certificado configurado</SectionTitle>
               <StatusCert cert={cert} />
-              <button onClick={remover} className="text-xs font-medium text-[var(--danger)] hover:underline">remover</button>
             </div>
-          </div>
-          <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-            <Linha rotulo="Titular" valor={cert.titular ?? "—"} />
-            <Linha rotulo="Válido até" valor={cert.validoAte ? `${formatData(cert.validoAte)} (${cert.diasRestantes} dias)` : "—"} />
-          </dl>
-        </Card>
-      )}
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <Linha rotulo="Titular" valor={cert.titular ?? "—"} />
+              <Linha rotulo="Válido até" valor={cert.validoAte ? `${formatData(cert.validoAte)} (${cert.diasRestantes} dias)` : "—"} />
+            </dl>
+            <div className="mt-4 flex items-center gap-3 border-t border-[var(--border)] pt-4">
+              <Button variante="secondary" onClick={() => { setErro(null); setEnvioAberto(true); }}>
+                Substituir certificado
+              </Button>
+              <Button variante="ghost" className="text-[var(--danger)]" onClick={() => setConfirmarRemover(true)}>
+                Remover
+              </Button>
+            </div>
+            {erroRemover && <p className="mt-3 text-sm font-medium text-[var(--danger)]">{erroRemover}</p>}
+          </Card>
 
-      <section>
-        <SectionTitle>{cert?.temCert ? "Substituir certificado A1 (.pfx)" : "Enviar certificado A1 (.pfx)"}</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Arquivo .pfx / .p12" required>
-            <label className="flex cursor-pointer items-center justify-between rounded-lg border border-dashed border-[var(--border)] bg-white px-3.5 py-2.5 text-sm hover:border-slate-300">
-              <span className={nomeArquivo ? "font-medium" : "text-slate-400"}>{nomeArquivo ?? "Selecionar arquivo…"}</span>
-              <span className="text-[var(--primary)]">procurar</span>
-              <input ref={inputRef} type="file" accept=".pfx,.p12,application/x-pkcs12" className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) aoSelecionar(f); }} />
-            </label>
-          </Field>
-          <Field label="Senha do certificado" required>
-            <Input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••••" />
-          </Field>
-        </div>
-        {erro && <p className="mt-3 text-sm font-medium text-[var(--danger)]">{erro}</p>}
-        <div className="mt-4">
-          <Button onClick={enviar} disabled={carregando || !pfxB64}>{carregando ? "Validando e salvando…" : "Validar e salvar"}</Button>
-        </div>
-      </section>
+          <Modal
+            aberto={envioAberto}
+            onFechar={() => !carregando && setEnvioAberto(false)}
+            titulo="Substituir certificado A1 (.pfx)"
+            largura="max-w-2xl"
+            rodape={
+              <>
+                <Button variante="secondary" onClick={() => setEnvioAberto(false)} disabled={carregando}>Cancelar</Button>
+                <Button onClick={enviar} disabled={carregando || !pfxB64}>{carregando ? "Validando e salvando…" : "Validar e salvar"}</Button>
+              </>
+            }
+          >
+            {formularioUI}
+          </Modal>
+
+          <ConfirmDialog
+            aberto={confirmarRemover}
+            titulo="Remover certificado"
+            mensagem="Remover o certificado A1 desta empresa?"
+            detalhe="Sem certificado a empresa não consegue assinar nem emitir notas. Você precisará enviar o arquivo .pfx e a senha novamente."
+            confirmarLabel="Sim, remover"
+            processando={removendo}
+            onConfirmar={remover}
+            onFechar={() => setConfirmarRemover(false)}
+          />
+        </>
+      ) : (
+        // Primeiro envio: formulário direto, sem clique extra.
+        <section>
+          <SectionTitle>Enviar certificado A1 (.pfx)</SectionTitle>
+          {formularioUI}
+          <div className="mt-4">
+            <Button onClick={enviar} disabled={carregando || !pfxB64}>{carregando ? "Validando e salvando…" : "Validar e salvar"}</Button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

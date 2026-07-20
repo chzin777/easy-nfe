@@ -13,7 +13,22 @@ import {
   type ConfigWhatsAppView,
 } from "./actions";
 
+// A integração depende de um worker que ainda não está no ar. Até subir, a aba
+// mostra só o aviso abaixo — reativar é trocar este corpo por <AbaWhatsAppCompleta />.
 export default function AbaWhatsApp() {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-slate-50 p-6 text-sm">
+      <p className="font-medium">Envio por WhatsApp em desenvolvimento</p>
+      <p className="mt-1 text-[var(--muted)]">
+        Estamos finalizando a integração para enviar a NF-e ao cliente automaticamente pelo seu próprio
+        número. Avisaremos assim que estiver disponível.
+      </p>
+    </div>
+  );
+}
+
+// Implementação completa, preservada para quando o worker estiver disponível.
+export function AbaWhatsAppCompleta() {
   const [cfg, setCfg] = useState<ConfigWhatsAppView | null>(null);
 
   // preferências (form)

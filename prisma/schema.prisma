@@ -275,6 +275,10 @@ model AcessoEmpresa {
   empresaId String
   empresa   Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   papel     String   @default("membro") // dono | membro
+  // Features (lib/features.ts) liberadas para este membro nesta empresa.
+  // Vazio = sem restrição própria: vale tudo que o plano do titular libera.
+  // Nunca amplia o plano — o acesso final é plano ∩ permissoes. Dono ignora.
+  permissoes String[] @default([])
   createdAt DateTime @default(now())
 
   @@unique([userId, empresaId])
