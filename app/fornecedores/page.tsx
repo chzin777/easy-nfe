@@ -2,27 +2,35 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  BarraSelecao,
   Button,
   Card,
   Field,
   Input,
   PageHeader,
   SectionTitle,
+  Select,
   Tabela,
   EmptyState,
   type Coluna,
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
+import ConfirmDialog from "@/app/ui/ConfirmDialog";
+import CampoMassa from "@/app/ui/CampoMassa";
 import Tabs from "@/app/ui/Tabs";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { ContatoFields, EnderecoFields } from "@/app/ui/PessoaFields";
+import { UFS } from "@/lib/mock-data";
 import {
   listarFornecedores,
   criarFornecedor,
   atualizarFornecedor,
   excluirFornecedor,
+  excluirFornecedores,
+  atualizarFornecedoresEmMassa,
   type Fornecedor,
   type FornecedorInput,
+  type PatchFornecedores,
 } from "./actions";
 
 const soDig = (s: string) => s.replace(/\D/g, "");
@@ -47,6 +55,13 @@ export default function FornecedoresPage() {
   const [carregando, setCarregando] = useState(true);
   const [buscandoCnpj, setBuscandoCnpj] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  // Seleção múltipla + ações em massa.
+  const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [confirmando, setConfirmando] = useState<"um" | "massa" | null>(null);
+  const [edicaoMassa, setEdicaoMassa] = useState(false);
+  const [erroMassa, setErroMassa] = useState<string | null>(null);
+  const [processando, setProcessando] = useState(false);
 
   async function recarregar() {
     try {
@@ -142,21 +157,60 @@ export default function FornecedoresPage() {
   async function excluir() {
     if (!editId) return;
     setSalvando(true);
-    await excluirFornecedor(editId);
-    await recarregar();
-    setSalvando(false);
-    fechar();
+    setErro(null);
+    try {
+      await excluirFornecedor(editId);
+      await recarregar();
+      setSelecionados((s) => s.filter((id) => id !== editId));
+      setConfirmando(null);
+      fechar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+      setConfirmando(null);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function excluirSelecionados() {
+    setProcessando(true);
+    setErroMassa(null);
+    try {
+      const r = await excluirFornecedores(selecionados);
+      if (!r.ok) { setErroMassa(r.erro); return; }
+      await recarregar();
+      setSelecionados([]);
+      setConfirmando(null);
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  async function aplicarEmMassa(patch: PatchFornecedores) {
+    setProcessando(true);
+    setErroMassa(null);
+    try {
+      const r = await atualizarFornecedoresEmMassa(selecionados, patch);
+      if (!r.ok) { setErroMassa(r.erro); return; }
+      await recarregar();
+      setSelecionados([]);
+      setEdicaoMassa(false);
+    } finally {
+      setProcessando(false);
+    }
   }
 
   const colunas: Coluna<Fornecedor>[] = [
     {
       chave: "codigo",
       cabecalho: "Cód.",
+      valor: (f) => f.codigoInterno,
       render: (f) => <span className="font-mono text-xs text-[var(--muted)]">{f.codigoInterno}</span>,
     },
     {
       chave: "nome",
       cabecalho: "Fornecedor",
+      valor: (f) => f.nome,
       render: (f) => (
         <div>
           <p className="font-medium">{f.nome}</p>
@@ -167,11 +221,13 @@ export default function FornecedoresPage() {
     {
       chave: "doc",
       cabecalho: "CNPJ/CPF",
+      valor: (f) => f.documento,
       render: (f) => <span className="font-mono text-xs">{f.documento || "—"}</span>,
     },
     {
       chave: "local",
       cabecalho: "Cidade/UF",
+      valor: (f) => (f.endereco.municipio ? `${f.endereco.municipio}/${f.endereco.uf}` : ""),
       render: (f) => (f.endereco.municipio ? `${f.endereco.municipio}/${f.endereco.uf}` : "—"),
     },
   ];
@@ -212,7 +268,7 @@ export default function FornecedoresPage() {
           <Input
             placeholder="Buscar por nome, CNPJ ou código…"
             value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+            onChange={(e) => { setBusca(e.target.value); setSelecionados([]); }}
             className="max-w-md"
           />
         </div>
@@ -223,10 +279,44 @@ export default function FornecedoresPage() {
             colunas={colunas}
             dados={filtrados}
             onRowClick={abrirEdicao}
+            selecionados={selecionados}
+            onSelecionados={setSelecionados}
             vazio={<EmptyState titulo="Nenhum fornecedor" descricao="Cadastre o primeiro fornecedor." />}
           />
         )}
       </Card>
+
+      <BarraSelecao quantidade={selecionados.length} onLimpar={() => setSelecionados([])}>
+        {erroMassa && <span className="text-xs font-medium text-[var(--danger)]">{erroMassa}</span>}
+        <Button variante="secondary" onClick={() => { setErroMassa(null); setEdicaoMassa(true); }}>
+          Editar em massa
+        </Button>
+        <Button variante="dangerSoft" onClick={() => { setErroMassa(null); setConfirmando("massa"); }}>
+          Excluir
+        </Button>
+      </BarraSelecao>
+
+      <EdicaoMassaModal
+        aberto={edicaoMassa}
+        quantidade={selecionados.length}
+        processando={processando}
+        erro={erroMassa}
+        onAplicar={aplicarEmMassa}
+        onFechar={() => setEdicaoMassa(false)}
+      />
+
+      <ConfirmDialog
+        aberto={confirmando !== null}
+        mensagem={
+          confirmando === "massa"
+            ? `Excluir ${selecionados.length} fornecedor${selecionados.length > 1 ? "es" : ""}?`
+            : "Excluir este fornecedor?"
+        }
+        detalhe={erroMassa ?? erro ?? undefined}
+        processando={processando || salvando}
+        onConfirmar={confirmando === "massa" ? excluirSelecionados : excluir}
+        onFechar={() => setConfirmando(null)}
+      />
 
       <Modal
         aberto={modo !== null}
@@ -235,7 +325,7 @@ export default function FornecedoresPage() {
         rodape={
           <div className="flex w-full items-center justify-between">
             {modo === "editar" ? (
-              <Button variante="ghost" className="text-[var(--danger)]" onClick={excluir} disabled={salvando}>Excluir</Button>
+              <Button variante="ghost" className="text-[var(--danger)]" onClick={() => setConfirmando("um")} disabled={salvando}>Excluir</Button>
             ) : <span />}
             <div className="flex gap-2">
               <Button variante="secondary" onClick={fechar} disabled={salvando}>Cancelar</Button>
@@ -272,5 +362,79 @@ export default function FornecedoresPage() {
         />
       </Modal>
     </div>
+  );
+}
+
+// Edição em massa. O fornecedor não tem categoria — os campos agrupáveis são
+// cidade/UF e as observações internas.
+function EdicaoMassaModal({
+  aberto,
+  quantidade,
+  processando,
+  erro,
+  onAplicar,
+  onFechar,
+}: {
+  aberto: boolean;
+  quantidade: number;
+  processando: boolean;
+  erro: string | null;
+  onAplicar: (patch: PatchFornecedores) => void;
+  onFechar: () => void;
+}) {
+  const [usarLocal, setUsarLocal] = useState(false);
+  const [usarObs, setUsarObs] = useState(false);
+  const [municipio, setMunicipio] = useState("");
+  const [uf, setUf] = useState("GO");
+  const [observacoes, setObservacoes] = useState("");
+
+  const nenhum = !usarLocal && !usarObs;
+
+  function aplicar() {
+    const patch: PatchFornecedores = {};
+    if (usarLocal) { patch.municipio = municipio; patch.uf = uf; }
+    if (usarObs) patch.observacoes = observacoes;
+    onAplicar(patch);
+  }
+
+  return (
+    <Modal
+      aberto={aberto}
+      onFechar={onFechar}
+      titulo={`Editar ${quantidade} fornecedor${quantidade > 1 ? "es" : ""}`}
+      largura="max-w-lg"
+      rodape={
+        <>
+          <Button variante="secondary" onClick={onFechar} disabled={processando}>Cancelar</Button>
+          <Button onClick={aplicar} disabled={processando || nenhum}>
+            {processando ? "Aplicando…" : "Aplicar aos selecionados"}
+          </Button>
+        </>
+      }
+    >
+      <p className="mb-3 text-sm text-[var(--muted)]">
+        Marque só os campos que devem ser sobrescritos. Os demais ficam como estão.
+      </p>
+      {erro && <p className="mb-3 text-sm font-medium text-[var(--danger)]">{erro}</p>}
+      <div className="space-y-2.5">
+        <CampoMassa label="Cidade / UF" ativo={usarLocal} onAtivo={setUsarLocal}>
+          <div className="grid grid-cols-[1fr_110px] gap-3">
+            <Field label="Município">
+              <Input value={municipio} onChange={(e) => setMunicipio(e.target.value)} />
+            </Field>
+            <Field label="UF">
+              <Select opcoes={UFS} value={uf} onChange={(e) => setUf(e.target.value)} />
+            </Field>
+          </div>
+        </CampoMassa>
+        <CampoMassa label="Observações" ativo={usarObs} onAtivo={setUsarObs}>
+          <Input
+            value={observacoes}
+            onChange={(e) => setObservacoes(e.target.value)}
+            placeholder="Anotações internas sobre o fornecedor"
+          />
+        </CampoMassa>
+      </div>
+    </Modal>
   );
 }

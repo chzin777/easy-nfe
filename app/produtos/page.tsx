@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Badge,
+  BarraSelecao,
   Button,
   Card,
   Field,
@@ -16,6 +17,8 @@ import {
   type Coluna,
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
+import ConfirmDialog from "@/app/ui/ConfirmDialog";
+import CampoMassa from "@/app/ui/CampoMassa";
 import Tabs from "@/app/ui/Tabs";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { ORIGENS, UNIDADES } from "@/lib/mock-data";
@@ -24,8 +27,11 @@ import {
   listarProdutos,
   atualizarProduto,
   excluirProduto,
+  excluirProdutos,
+  atualizarProdutosEmMassa,
   importarProdutos,
   ajustarEstoque,
+  type PatchProdutos,
 } from "./actions";
 import NovoProdutoModal from "./NovoProdutoModal";
 import BipagemModal from "./BipagemModal";
@@ -69,13 +75,13 @@ const formVazio: Form = {
 const COLUNAS_DISPONIVEIS: { chave: string; label: string; fixa?: boolean; col: Coluna<Produto> }[] = [
   {
     chave: "codigo", label: "Código", col: {
-      chave: "codigo", cabecalho: "Cód.",
+      chave: "codigo", cabecalho: "Cód.", valor: (p) => p.codigoInterno,
       render: (p) => <span className="font-mono text-xs text-[var(--muted)]">{p.codigoInterno}</span>,
     },
   },
   {
     chave: "nome", label: "Produto", fixa: true, col: {
-      chave: "nome", cabecalho: "Produto",
+      chave: "nome", cabecalho: "Produto", valor: (p) => p.nome,
       render: (p) => (
         <div>
           <p className="font-medium">{p.nome}</p>
@@ -86,36 +92,36 @@ const COLUNAS_DISPONIVEIS: { chave: string; label: string; fixa?: boolean; col: 
   },
   {
     chave: "marca", label: "Marca", col: {
-      chave: "marca", cabecalho: "Marca",
+      chave: "marca", cabecalho: "Marca", valor: (p) => p.marca,
       render: (p) => p.marca || <span className="text-slate-300">—</span>,
     },
   },
   {
     chave: "categoria", label: "Categoria", col: {
-      chave: "categoria", cabecalho: "Categoria",
+      chave: "categoria", cabecalho: "Categoria", valor: (p) => p.categoriaNome,
       render: (p) => (p.categoriaNome ? <Badge tom="primary">{p.categoriaNome}</Badge> : <span className="text-slate-300">—</span>),
     },
   },
   {
     chave: "unidade", label: "Unidade", col: {
-      chave: "unidade", cabecalho: "Un.", render: (p) => p.unidade,
+      chave: "unidade", cabecalho: "Un.", valor: (p) => p.unidade, render: (p) => p.unidade,
     },
   },
   {
     chave: "peso", label: "Peso (kg)", col: {
-      chave: "peso", cabecalho: "Peso", alinhar: "right",
+      chave: "peso", cabecalho: "Peso", alinhar: "right", valor: (p) => p.peso,
       render: (p) => (p.peso > 0 ? `${p.peso.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} kg` : <span className="text-slate-300">—</span>),
     },
   },
   {
     chave: "ncm", label: "NCM", col: {
-      chave: "ncm", cabecalho: "NCM",
+      chave: "ncm", cabecalho: "NCM", valor: (p) => p.ncm,
       render: (p) => <span className="font-mono text-xs">{p.ncm || "—"}</span>,
     },
   },
   {
     chave: "gtin", label: "GTIN / EAN", col: {
-      chave: "gtin", cabecalho: "GTIN",
+      chave: "gtin", cabecalho: "GTIN", valor: (p) => p.codigoBarras,
       render: (p) => <span className="font-mono text-xs">{p.codigoBarras || "—"}</span>,
     },
   },
@@ -128,6 +134,8 @@ const COLUNAS_DISPONIVEIS: { chave: string; label: string; fixa?: boolean; col: 
   {
     chave: "estoque", label: "Estoque", col: {
       chave: "estoque", cabecalho: "Estoque", alinhar: "right",
+      // Sem controle de estoque não há saldo — vai pro fim da ordenação.
+      valor: (p) => (p.controlaEstoque ? p.estoque : null),
       render: (p) => {
         if (!p.controlaEstoque) return <span className="text-slate-300">—</span>;
         const zerado = p.estoque <= 0;
@@ -145,13 +153,14 @@ const COLUNAS_DISPONIVEIS: { chave: string; label: string; fixa?: boolean; col: 
   },
   {
     chave: "preco", label: "Preço", col: {
-      chave: "preco", cabecalho: "Preço", alinhar: "right",
+      chave: "preco", cabecalho: "Preço", alinhar: "right", valor: (p) => p.preco,
       render: (p) => <span className="font-medium">{formatBRL(p.preco)}</span>,
     },
   },
   {
     chave: "custo", label: "Custo", col: {
       chave: "custo", cabecalho: "Custo", alinhar: "right",
+      valor: (p) => (p.precoCusto > 0 ? p.precoCusto : null),
       render: (p) => p.precoCusto > 0
         ? <span className="text-[var(--muted)]">{formatBRL(p.precoCusto)}</span>
         : <span className="text-slate-300">—</span>,
@@ -160,6 +169,7 @@ const COLUNAS_DISPONIVEIS: { chave: string; label: string; fixa?: boolean; col: 
   {
     chave: "margem", label: "Margem", col: {
       chave: "margem", cabecalho: "Margem", alinhar: "right",
+      valor: (p) => (p.precoCusto > 0 && p.preco > 0 ? ((p.preco - p.precoCusto) / p.preco) * 100 : null),
       render: (p) => {
         if (!(p.precoCusto > 0) || !(p.preco > 0)) return <span className="text-slate-300">—</span>;
         const m = ((p.preco - p.precoCusto) / p.preco) * 100;
@@ -187,6 +197,13 @@ export default function ProdutosPage() {
   const [form, setForm] = useState<Form>(formVazio);
   const [salvando, setSalvando] = useState(false);
   const [carregando, setCarregando] = useState(true);
+
+  // Seleção múltipla + ações em massa.
+  const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [confirmando, setConfirmando] = useState<"um" | "massa" | null>(null);
+  const [edicaoMassa, setEdicaoMassa] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [processando, setProcessando] = useState(false);
 
   // Colunas visíveis (persistidas no navegador).
   const [colsVisiveis, setColsVisiveis] = useState<string[]>(COLS_PADRAO);
@@ -256,10 +273,47 @@ export default function ProdutosPage() {
   async function excluir() {
     if (!editId) return;
     setSalvando(true);
-    await excluirProduto(editId);
-    await recarregar();
-    setSalvando(false);
-    fechar();
+    setErro(null);
+    try {
+      await excluirProduto(editId);
+      await recarregar();
+      setSelecionados((s) => s.filter((id) => id !== editId));
+      setConfirmando(null);
+      fechar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+      setConfirmando(null);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function excluirSelecionados() {
+    setProcessando(true);
+    setErro(null);
+    try {
+      const r = await excluirProdutos(selecionados);
+      if (!r.ok) { setErro(r.erro); return; }
+      await recarregar();
+      setSelecionados([]);
+      setConfirmando(null);
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  async function aplicarEmMassa(patch: PatchProdutos) {
+    setProcessando(true);
+    setErro(null);
+    try {
+      const r = await atualizarProdutosEmMassa(selecionados, patch);
+      if (!r.ok) { setErro(r.erro); return; }
+      await recarregar();
+      setSelecionados([]);
+      setEdicaoMassa(false);
+    } finally {
+      setProcessando(false);
+    }
   }
   // Ajuste de estoque: commita o saldo digitado (form.estoque) via movimento.
   const [ajustando, setAjustando] = useState(false);
@@ -442,13 +496,13 @@ export default function ProdutosPage() {
           <Input
             placeholder="Buscar por nome, marca, código, GTIN ou NCM…"
             value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+            onChange={(e) => { setBusca(e.target.value); setSelecionados([]); }}
           />
           <Select
             placeholder="Todas as categorias"
             opcoes={categorias.map((c) => ({ value: c.id, label: c.nome }))}
             value={filtroCategoria}
-            onChange={(e) => setFiltroCategoria(e.target.value)}
+            onChange={(e) => { setFiltroCategoria(e.target.value); setSelecionados([]); }}
           />
         </div>
         {carregando ? (
@@ -458,10 +512,46 @@ export default function ProdutosPage() {
             colunas={colunas}
             dados={filtrados}
             onRowClick={abrirEdicao}
+            selecionados={selecionados}
+            onSelecionados={setSelecionados}
             vazio={<EmptyState titulo="Nenhum produto" descricao="Cadastre o primeiro produto para começar." />}
           />
         )}
       </Card>
+
+      <BarraSelecao quantidade={selecionados.length} onLimpar={() => setSelecionados([])}>
+        {erro && <span className="text-xs font-medium text-[var(--danger)]">{erro}</span>}
+        <Button variante="secondary" onClick={() => { setErro(null); setEdicaoMassa(true); }}>
+          Editar em massa
+        </Button>
+        <Button variante="dangerSoft" onClick={() => { setErro(null); setConfirmando("massa"); }}>
+          Excluir
+        </Button>
+      </BarraSelecao>
+
+      <EdicaoMassaModal
+        aberto={edicaoMassa}
+        quantidade={selecionados.length}
+        categorias={categorias}
+        onCategoriasChange={setCategorias}
+        processando={processando}
+        erro={erro}
+        onAplicar={aplicarEmMassa}
+        onFechar={() => setEdicaoMassa(false)}
+      />
+
+      <ConfirmDialog
+        aberto={confirmando !== null}
+        mensagem={
+          confirmando === "massa"
+            ? `Excluir ${selecionados.length} produto${selecionados.length > 1 ? "s" : ""}?`
+            : "Excluir este produto?"
+        }
+        detalhe={erro ?? undefined}
+        processando={processando || salvando}
+        onConfirmar={confirmando === "massa" ? excluirSelecionados : excluir}
+        onFechar={() => setConfirmando(null)}
+      />
 
       {/* Criação em etapas (modal compartilhado) */}
       {modo === "novo" && (
@@ -557,7 +647,7 @@ export default function ProdutosPage() {
         titulo={`Produto #${editId ? produtos.find((p) => p.id === editId)?.codigoInterno : ""}`}
         rodape={
           <div className="flex w-full items-center justify-between">
-            <Button variante="ghost" className="text-[var(--danger)]" onClick={excluir} disabled={salvando}>Excluir</Button>
+            <Button variante="ghost" className="text-[var(--danger)]" onClick={() => setConfirmando("um")} disabled={salvando}>Excluir</Button>
             <div className="flex gap-2">
               <Button variante="secondary" onClick={fechar} disabled={salvando}>Cancelar</Button>
               <Button onClick={salvarEdicao} disabled={salvando}>{salvando ? "Salvando…" : "Salvar alterações"}</Button>
@@ -584,5 +674,155 @@ export default function ProdutosPage() {
         />
       )}
     </div>
+  );
+}
+
+// Mesmas opções do form de edição (TributacaoFields).
+const OPCOES_CST_MASSA = [
+  { value: "40", label: "Isenção (CST 40)" },
+  { value: "20", label: "Redução de base de cálculo (CST 20)" },
+];
+
+function EdicaoMassaModal({
+  aberto,
+  quantidade,
+  categorias,
+  onCategoriasChange,
+  processando,
+  erro,
+  onAplicar,
+  onFechar,
+}: {
+  aberto: boolean;
+  quantidade: number;
+  categorias: Categoria[];
+  onCategoriasChange: (c: Categoria[]) => void;
+  processando: boolean;
+  erro: string | null;
+  onAplicar: (patch: PatchProdutos) => void;
+  onFechar: () => void;
+}) {
+  const [usar, setUsar] = useState({
+    categoria: false, origem: false, unidade: false,
+    ncm: false, cfop: false, cst: false, preco: false,
+  });
+  const [categoriaId, setCategoriaId] = useState("");
+  const [origem, setOrigem] = useState("0");
+  const [unidade, setUnidade] = useState("UN");
+  const [ncm, setNcm] = useState("");
+  const [cfop, setCfop] = useState("");
+  const [cst, setCst] = useState("40");
+  const [modoPreco, setModoPreco] = useState<"percentual" | "valor">("percentual");
+  const [reajuste, setReajuste] = useState("");
+
+  function alternar<K extends keyof typeof usar>(chave: K, v: boolean) {
+    setUsar((u) => ({ ...u, [chave]: v }));
+  }
+
+  const valorReajuste = Number(reajuste.replace(",", ".").replace(/[^\d.-]/g, "")) || 0;
+  const nenhum = !Object.values(usar).some(Boolean);
+
+  function aplicar() {
+    const patch: PatchProdutos = {};
+    if (usar.categoria) patch.categoriaId = categoriaId;
+    if (usar.origem) patch.origem = origem;
+    if (usar.unidade) patch.unidade = unidade;
+    if (usar.ncm) patch.ncm = ncm;
+    if (usar.cfop) patch.cfopPadrao = cfop;
+    if (usar.cst) patch.cst = cst;
+    if (usar.preco) patch.reajuste = { modo: modoPreco, valor: valorReajuste };
+    onAplicar(patch);
+  }
+
+  return (
+    <Modal
+      aberto={aberto}
+      onFechar={onFechar}
+      titulo={`Editar ${quantidade} produto${quantidade > 1 ? "s" : ""}`}
+      largura="max-w-lg"
+      rodape={
+        <>
+          <Button variante="secondary" onClick={onFechar} disabled={processando}>Cancelar</Button>
+          <Button onClick={aplicar} disabled={processando || nenhum}>
+            {processando ? "Aplicando…" : "Aplicar aos selecionados"}
+          </Button>
+        </>
+      }
+    >
+      <p className="mb-3 text-sm text-[var(--muted)]">
+        Marque só os campos que devem ser sobrescritos. Os demais ficam como estão.
+      </p>
+      {erro && <p className="mb-3 text-sm font-medium text-[var(--danger)]">{erro}</p>}
+      <div className="space-y-2.5">
+        <CampoMassa label="Categoria" ativo={usar.categoria} onAtivo={(v) => alternar("categoria", v)}>
+          <CategoriaSelect
+            tipo="produto"
+            categorias={categorias}
+            value={categoriaId}
+            onChange={setCategoriaId}
+            onCategoriasChange={onCategoriasChange}
+          />
+          <p className="mt-1.5 text-xs text-[var(--muted)]">Sem categoria = remove a categoria atual.</p>
+        </CampoMassa>
+        <CampoMassa label="Tipo de origem" ativo={usar.origem} onAtivo={(v) => alternar("origem", v)}>
+          <Select opcoes={ORIGENS} value={origem} onChange={(e) => setOrigem(e.target.value)} />
+        </CampoMassa>
+        <CampoMassa label="Unidade de medida" ativo={usar.unidade} onAtivo={(v) => alternar("unidade", v)}>
+          <Select opcoes={UNIDADES} value={unidade} onChange={(e) => setUnidade(e.target.value)} />
+        </CampoMassa>
+        <CampoMassa label="NCM" ativo={usar.ncm} onAtivo={(v) => alternar("ncm", v)}>
+          <Input
+            inputMode="numeric"
+            value={ncm}
+            onChange={(e) => setNcm(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            placeholder="00000000"
+          />
+        </CampoMassa>
+        <CampoMassa label="CFOP padrão" ativo={usar.cfop} onAtivo={(v) => alternar("cfop", v)}>
+          <Input
+            inputMode="numeric"
+            value={cfop}
+            onChange={(e) => setCfop(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            placeholder="5102"
+          />
+        </CampoMassa>
+        <CampoMassa label="Tributação do ICMS" ativo={usar.cst} onAtivo={(v) => alternar("cst", v)}>
+          <Select opcoes={OPCOES_CST_MASSA} value={cst} onChange={(e) => setCst(e.target.value)} />
+          <p className="mt-1.5 text-xs text-[var(--muted)]">
+            {cst === "20"
+              ? "Alíquota e carga efetiva não são alteradas em massa — confira produto a produto quem ainda estiver sem alíquota."
+              : "CST 40 zera alíquota e redução de base dos produtos selecionados."}
+          </p>
+        </CampoMassa>
+        <CampoMassa label="Reajustar preço" ativo={usar.preco} onAtivo={(v) => alternar("preco", v)}>
+          <div className="grid grid-cols-[150px_1fr] gap-3">
+            <Field label="Tipo">
+              <Select
+                opcoes={[
+                  { value: "percentual", label: "Percentual (%)" },
+                  { value: "valor", label: "Valor fixo (R$)" },
+                ]}
+                value={modoPreco}
+                onChange={(e) => setModoPreco(e.target.value as "percentual" | "valor")}
+              />
+            </Field>
+            <Field
+              label={modoPreco === "percentual" ? "Reajuste (%)" : "Reajuste (R$)"}
+              hint="Use negativo para reduzir · ex.: -10"
+            >
+              <Input
+                inputMode="decimal"
+                value={reajuste}
+                onChange={(e) => setReajuste(e.target.value)}
+                placeholder={modoPreco === "percentual" ? "10" : "5,00"}
+              />
+            </Field>
+          </div>
+          <p className="mt-1.5 text-xs text-[var(--muted)]">
+            Aplicado sobre o preço atual de cada produto. Preço nunca fica abaixo de zero.
+          </p>
+        </CampoMassa>
+      </div>
+    </Modal>
   );
 }

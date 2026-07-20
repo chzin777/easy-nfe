@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Badge,
+  BarraSelecao,
   Button,
   Card,
   Field,
@@ -15,16 +16,21 @@ import {
   type Coluna,
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
+import ConfirmDialog from "@/app/ui/ConfirmDialog";
+import CampoMassa from "@/app/ui/CampoMassa";
 import Tabs from "@/app/ui/Tabs";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { ContatoFields, EnderecoFields } from "@/app/ui/PessoaFields";
-import { TIPOS_CONTRIBUINTE, rotulo } from "@/lib/mock-data";
+import { TIPOS_CONTRIBUINTE, UFS, rotulo } from "@/lib/mock-data";
 import type { Cliente } from "@/lib/types";
 import {
   listarClientes,
   atualizarCliente,
   excluirCliente,
+  excluirClientes,
+  atualizarClientesEmMassa,
   importarClientes,
+  type PatchClientes,
 } from "./actions";
 import NovoClienteModal from "./NovoClienteModal";
 import ImportarPlanilhaModal from "@/app/ui/ImportarPlanilhaModal";
@@ -56,6 +62,13 @@ export default function ClientesPage() {
   const [form, setForm] = useState<Form>(formVazio);
   const [salvando, setSalvando] = useState(false);
   const [carregando, setCarregando] = useState(true);
+
+  // Seleção múltipla + ações em massa.
+  const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [confirmando, setConfirmando] = useState<"um" | "massa" | null>(null);
+  const [edicaoMassa, setEdicaoMassa] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [processando, setProcessando] = useState(false);
 
   async function recarregar() {
     try {
@@ -110,24 +123,73 @@ export default function ClientesPage() {
   async function excluir() {
     if (!editId) return;
     setSalvando(true);
-    await excluirCliente(editId);
-    await recarregar();
-    setSalvando(false);
-    fechar();
+    setErro(null);
+    try {
+      await excluirCliente(editId);
+      await recarregar();
+      setSelecionados((s) => s.filter((id) => id !== editId));
+      setConfirmando(null);
+      fechar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+      setConfirmando(null);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  // O Consumidor final (padrão) nunca entra na seleção — não pode ser excluído
+  // nem editado em massa.
+  function marcar(ids: string[]) {
+    const proibidos = new Set(clientes.filter((c) => c.padrao).map((c) => c.id));
+    setSelecionados(ids.filter((id) => !proibidos.has(id)));
+  }
+
+  async function excluirSelecionados() {
+    setProcessando(true);
+    setErro(null);
+    try {
+      const r = await excluirClientes(selecionados);
+      if (!r.ok) { setErro(r.erro); return; }
+      await recarregar();
+      setSelecionados([]);
+      setConfirmando(null);
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  async function aplicarEmMassa(patch: PatchClientes) {
+    setProcessando(true);
+    setErro(null);
+    try {
+      const r = await atualizarClientesEmMassa(selecionados, patch);
+      if (!r.ok) { setErro(r.erro); return; }
+      await recarregar();
+      setSelecionados([]);
+      setEdicaoMassa(false);
+    } finally {
+      setProcessando(false);
+    }
   }
 
   const colunas: Coluna<Cliente>[] = [
     {
       chave: "codigo",
       cabecalho: "Cód.",
+      valor: (c) => c.codigoInterno,
       render: (c) => <span className="font-mono text-xs text-[var(--muted)]">{c.codigoInterno}</span>,
     },
     {
       chave: "nome",
       cabecalho: "Cliente",
+      valor: (c) => c.nome,
       render: (c) => (
         <div>
-          <p className="font-medium">{c.nome}</p>
+          <p className="flex items-center gap-2 font-medium">
+            {c.nome}
+            {c.padrao && <Badge>padrão</Badge>}
+          </p>
           <p className="text-xs text-[var(--muted)]">{c.documento || "—"}</p>
         </div>
       ),
@@ -135,16 +197,19 @@ export default function ClientesPage() {
     {
       chave: "contribuinte",
       cabecalho: "Contribuinte",
+      valor: (c) => rotulo(TIPOS_CONTRIBUINTE, c.tipoContribuinte),
       render: (c) => <Badge tom="primary">{rotulo(TIPOS_CONTRIBUINTE, c.tipoContribuinte)}</Badge>,
     },
     {
       chave: "categoria",
       cabecalho: "Categoria",
+      valor: (c) => c.categoriaNome,
       render: (c) => (c.categoriaNome ? <Badge tom="primary">{c.categoriaNome}</Badge> : <span className="text-slate-300">—</span>),
     },
     {
       chave: "local",
       cabecalho: "Cidade/UF",
+      valor: (c) => (c.endereco.municipio ? `${c.endereco.municipio}/${c.endereco.uf}` : ""),
       render: (c) => (c.endereco.municipio ? `${c.endereco.municipio}/${c.endereco.uf}` : "—"),
     },
   ];
@@ -201,13 +266,13 @@ export default function ClientesPage() {
           <Input
             placeholder="Buscar por nome, CPF/CNPJ ou código…"
             value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+            onChange={(e) => { setBusca(e.target.value); setSelecionados([]); }}
           />
           <Select
             placeholder="Todas as categorias"
             opcoes={categorias.map((c) => ({ value: c.id, label: c.nome }))}
             value={filtroCategoria}
-            onChange={(e) => setFiltroCategoria(e.target.value)}
+            onChange={(e) => { setFiltroCategoria(e.target.value); setSelecionados([]); }}
           />
         </div>
         {carregando ? (
@@ -217,10 +282,46 @@ export default function ClientesPage() {
             colunas={colunas}
             dados={filtrados}
             onRowClick={abrirEdicao}
+            selecionados={selecionados}
+            onSelecionados={marcar}
             vazio={<EmptyState titulo="Nenhum cliente" descricao="Cadastre o primeiro cliente." />}
           />
         )}
       </Card>
+
+      <BarraSelecao quantidade={selecionados.length} onLimpar={() => setSelecionados([])}>
+        {erro && <span className="text-xs font-medium text-[var(--danger)]">{erro}</span>}
+        <Button variante="secondary" onClick={() => { setErro(null); setEdicaoMassa(true); }}>
+          Editar em massa
+        </Button>
+        <Button variante="dangerSoft" onClick={() => { setErro(null); setConfirmando("massa"); }}>
+          Excluir
+        </Button>
+      </BarraSelecao>
+
+      <EdicaoMassaModal
+        aberto={edicaoMassa}
+        quantidade={selecionados.length}
+        categorias={categorias}
+        onCategoriasChange={setCategorias}
+        processando={processando}
+        erro={erro}
+        onAplicar={aplicarEmMassa}
+        onFechar={() => setEdicaoMassa(false)}
+      />
+
+      <ConfirmDialog
+        aberto={confirmando !== null}
+        mensagem={
+          confirmando === "massa"
+            ? `Excluir ${selecionados.length} cliente${selecionados.length > 1 ? "s" : ""}?`
+            : "Excluir este cliente?"
+        }
+        detalhe={erro ?? undefined}
+        processando={processando || salvando}
+        onConfirmar={confirmando === "massa" ? excluirSelecionados : excluir}
+        onFechar={() => setConfirmando(null)}
+      />
 
       {/* Criação em etapas (modal compartilhado) */}
       {modo === "novo" && (
@@ -274,7 +375,7 @@ export default function ClientesPage() {
             {clientes.find((c) => c.id === editId)?.padrao ? (
               <span className="text-xs text-[var(--muted)]">Cliente padrão do sistema</span>
             ) : (
-              <Button variante="ghost" className="text-[var(--danger)]" onClick={excluir} disabled={salvando}>Excluir</Button>
+              <Button variante="ghost" className="text-[var(--danger)]" onClick={() => setConfirmando("um")} disabled={salvando}>Excluir</Button>
             )}
             <div className="flex gap-2">
               <Button variante="secondary" onClick={fechar} disabled={salvando}>Cancelar</Button>
@@ -314,5 +415,94 @@ export default function ClientesPage() {
         />
       </Modal>
     </div>
+  );
+}
+
+function EdicaoMassaModal({
+  aberto,
+  quantidade,
+  categorias,
+  onCategoriasChange,
+  processando,
+  erro,
+  onAplicar,
+  onFechar,
+}: {
+  aberto: boolean;
+  quantidade: number;
+  categorias: Categoria[];
+  onCategoriasChange: (c: Categoria[]) => void;
+  processando: boolean;
+  erro: string | null;
+  onAplicar: (patch: PatchClientes) => void;
+  onFechar: () => void;
+}) {
+  const [usarCategoria, setUsarCategoria] = useState(false);
+  const [usarContribuinte, setUsarContribuinte] = useState(false);
+  const [usarLocal, setUsarLocal] = useState(false);
+  const [categoriaId, setCategoriaId] = useState("");
+  const [tipoContribuinte, setTipoContribuinte] = useState("1");
+  const [municipio, setMunicipio] = useState("");
+  const [uf, setUf] = useState("GO");
+
+  const nenhum = !usarCategoria && !usarContribuinte && !usarLocal;
+
+  function aplicar() {
+    const patch: PatchClientes = {};
+    if (usarCategoria) patch.categoriaId = categoriaId;
+    if (usarContribuinte) patch.tipoContribuinte = tipoContribuinte;
+    if (usarLocal) { patch.municipio = municipio; patch.uf = uf; }
+    onAplicar(patch);
+  }
+
+  return (
+    <Modal
+      aberto={aberto}
+      onFechar={onFechar}
+      titulo={`Editar ${quantidade} cliente${quantidade > 1 ? "s" : ""}`}
+      largura="max-w-lg"
+      rodape={
+        <>
+          <Button variante="secondary" onClick={onFechar} disabled={processando}>Cancelar</Button>
+          <Button onClick={aplicar} disabled={processando || nenhum}>
+            {processando ? "Aplicando…" : "Aplicar aos selecionados"}
+          </Button>
+        </>
+      }
+    >
+      <p className="mb-3 text-sm text-[var(--muted)]">
+        Marque só os campos que devem ser sobrescritos. Os demais ficam como estão.
+      </p>
+      {erro && <p className="mb-3 text-sm font-medium text-[var(--danger)]">{erro}</p>}
+      <div className="space-y-2.5">
+        <CampoMassa label="Categoria" ativo={usarCategoria} onAtivo={setUsarCategoria}>
+          <CategoriaSelect
+            tipo="cliente"
+            categorias={categorias}
+            value={categoriaId}
+            onChange={setCategoriaId}
+            onCategoriasChange={onCategoriasChange}
+          />
+          <p className="mt-1.5 text-xs text-[var(--muted)]">Sem categoria = remove a categoria atual.</p>
+        </CampoMassa>
+        <CampoMassa label="Tipo de contribuinte" ativo={usarContribuinte} onAtivo={setUsarContribuinte}>
+          <Select
+            opcoes={TIPOS_CONTRIBUINTE}
+            value={tipoContribuinte}
+            onChange={(e) => setTipoContribuinte(e.target.value)}
+          />
+        </CampoMassa>
+        <CampoMassa label="Cidade / UF" ativo={usarLocal} onAtivo={setUsarLocal}>
+          <div className="grid grid-cols-[1fr_110px] gap-3">
+            <Field label="Município">
+              <Input value={municipio} onChange={(e) => setMunicipio(e.target.value)} />
+            </Field>
+            <Field label="UF">
+              <Select opcoes={UFS} value={uf} onChange={(e) => setUf(e.target.value)} />
+            </Field>
+          </div>
+        </CampoMassa>
+      </div>
+    </Modal>
   );
 }

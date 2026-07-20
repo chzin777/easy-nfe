@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import { exigirEmpresa } from "@/lib/empresa";
 import { exigirFeature } from "@/lib/permissoes";
 import { consultarGtin } from "@/lib/gtin";
@@ -238,6 +239,88 @@ export async function excluirProduto(id: string): Promise<void> {
   await exigirFeature("produtos");
   const empresaId = await exigirEmpresa();
   await prisma.produto.deleteMany({ where: { id, empresaId } });
+}
+
+// ---------------------------------------------------------------------------
+// Ações em massa (seleção múltipla na lista). Todo where cruza `ids` com
+// `empresaId` — uma empresa nunca alcança linha de outra.
+// ---------------------------------------------------------------------------
+export type ResultadoMassa = { ok: true; afetados: number } | { ok: false; erro: string };
+
+export async function excluirProdutos(ids: string[]): Promise<ResultadoMassa> {
+  try {
+    await exigirFeature("produtos");
+    const empresaId = await exigirEmpresa();
+    if (!ids.length) return { ok: false, erro: "Nenhum produto selecionado." };
+    const r = await prisma.produto.deleteMany({ where: { id: { in: ids }, empresaId } });
+    return { ok: true, afetados: r.count };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Só os campos marcados no modal chegam aqui — `undefined` = não alterar.
+// `reajuste` recalcula o preço a partir do preço atual de cada produto.
+export type PatchProdutos = {
+  categoriaId?: string; // "" remove a categoria
+  origem?: string;
+  unidade?: string;
+  ncm?: string;
+  cfopPadrao?: string;
+  cst?: string;
+  reajuste?: { modo: "percentual" | "valor"; valor: number };
+};
+
+export async function atualizarProdutosEmMassa(
+  ids: string[],
+  patch: PatchProdutos,
+): Promise<ResultadoMassa> {
+  try {
+    await exigirFeature("produtos");
+    const empresaId = await exigirEmpresa();
+    if (!ids.length) return { ok: false, erro: "Nenhum produto selecionado." };
+
+    // Unchecked: `categoriaId` é campo escalar de relação (não entra no input "checked").
+    const data: Prisma.ProdutoUncheckedUpdateManyInput = {};
+    if (patch.categoriaId !== undefined) data.categoriaId = patch.categoriaId || null;
+    if (patch.origem !== undefined) data.origem = patch.origem;
+    if (patch.unidade !== undefined) data.unidade = patch.unidade;
+    if (patch.ncm !== undefined) data.ncm = patch.ncm.replace(/\D/g, "");
+    if (patch.cfopPadrao !== undefined) data.cfopPadrao = patch.cfopPadrao.replace(/\D/g, "") || null;
+    if (patch.cst !== undefined) {
+      data.cst = patch.cst;
+      // CST 40 (isenção) não destaca imposto: zera os campos de redução de BC.
+      if (patch.cst !== "20") {
+        data.aliquotaIcms = null;
+        data.reducaoBaseIcms = null;
+      }
+    }
+
+    if (patch.reajuste) {
+      const { modo, valor } = patch.reajuste;
+      if (!Number.isFinite(valor)) return { ok: false, erro: "Valor de reajuste inválido." };
+      if (modo === "percentual") {
+        if (valor <= -100) return { ok: false, erro: "Reajuste percentual não pode zerar ou inverter o preço." };
+        data.preco = { multiply: 1 + valor / 100 };
+      } else {
+        data.preco = { increment: Math.round(valor * 100) / 100 };
+      }
+    }
+
+    if (Object.keys(data).length === 0) return { ok: false, erro: "Nenhum campo selecionado para alterar." };
+
+    const r = await prisma.produto.updateMany({ where: { id: { in: ids }, empresaId }, data });
+    // Reajuste negativo pode passar do zero — piso em 0 (preço não fica devendo).
+    if (patch.reajuste) {
+      await prisma.produto.updateMany({
+        where: { id: { in: ids }, empresaId, preco: { lt: 0 } },
+        data: { preco: 0 },
+      });
+    }
+    return { ok: true, afetados: r.count };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 // Ajuste manual de estoque. `novoSaldo` = saldo final desejado; registra o

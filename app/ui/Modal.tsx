@@ -12,6 +12,7 @@ export default function Modal({
   children,
   rodape,
   largura = "max-w-2xl",
+  camada = "z-50",
 }: {
   aberto: boolean;
   onFechar: () => void;
@@ -19,6 +20,9 @@ export default function Modal({
   children: ReactNode;
   rodape?: ReactNode;
   largura?: string;
+  // Portais entram no body na ordem em que montam, então um modal aberto depois
+  // fica por cima. Confirmações precisam subir de camada p/ vencer isso.
+  camada?: string;
 }) {
   useEffect(() => {
     if (!aberto) return;
@@ -43,7 +47,7 @@ export default function Modal({
     <AnimatePresence>
       {aberto && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-sm sm:p-8"
+          className={"fixed inset-0 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-sm sm:p-8 " + camada}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

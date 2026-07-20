@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import { exigirEmpresa } from "@/lib/empresa";
 import { exigirFeature } from "@/lib/permissoes";
 import type { Endereco } from "@/lib/types";
@@ -103,6 +104,55 @@ export async function excluirFornecedor(id: string): Promise<void> {
   await exigirFeature("fornecedores");
   const empresaId = await exigirEmpresa();
   await prisma.fornecedor.deleteMany({ where: { id, empresaId } });
+}
+
+// ---------------------------------------------------------------------------
+// Ações em massa (seleção múltipla na lista). Todo where cruza `ids` com
+// `empresaId` — uma empresa nunca alcança linha de outra.
+// ---------------------------------------------------------------------------
+export type ResultadoMassa = { ok: true; afetados: number } | { ok: false; erro: string };
+
+export async function excluirFornecedores(ids: string[]): Promise<ResultadoMassa> {
+  try {
+    await exigirFeature("fornecedores");
+    const empresaId = await exigirEmpresa();
+    if (!ids.length) return { ok: false, erro: "Nenhum fornecedor selecionado." };
+    const r = await prisma.fornecedor.deleteMany({ where: { id: { in: ids }, empresaId } });
+    return { ok: true, afetados: r.count };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Só os campos marcados no modal chegam aqui — `undefined` = não alterar.
+// O fornecedor não tem categoria; `observacoes` é o único campo de agrupamento.
+export type PatchFornecedores = {
+  municipio?: string;
+  uf?: string;
+  observacoes?: string;
+};
+
+export async function atualizarFornecedoresEmMassa(
+  ids: string[],
+  patch: PatchFornecedores,
+): Promise<ResultadoMassa> {
+  try {
+    await exigirFeature("fornecedores");
+    const empresaId = await exigirEmpresa();
+    if (!ids.length) return { ok: false, erro: "Nenhum fornecedor selecionado." };
+
+    const data: Prisma.FornecedorUpdateManyMutationInput = {};
+    if (patch.municipio !== undefined) data.municipio = patch.municipio.trim() || null;
+    if (patch.uf !== undefined) data.uf = patch.uf || null;
+    if (patch.observacoes !== undefined) data.observacoes = patch.observacoes.trim() || null;
+
+    if (Object.keys(data).length === 0) return { ok: false, erro: "Nenhum campo selecionado para alterar." };
+
+    const r = await prisma.fornecedor.updateMany({ where: { id: { in: ids }, empresaId }, data });
+    return { ok: true, afetados: r.count };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 // Identifica fornecedores cadastrados a partir de uma lista de CNPJs (emitentes

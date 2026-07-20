@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import { exigirEmpresa } from "@/lib/empresa";
 import { exigirFeature } from "@/lib/permissoes";
 import type { Cliente } from "@/lib/types";
@@ -157,6 +158,62 @@ export async function excluirCliente(id: string): Promise<void> {
   const empresaId = await exigirEmpresa();
   // Não exclui o Consumidor final (cliente padrão do sistema).
   await prisma.cliente.deleteMany({ where: { id, empresaId, padrao: false } });
+}
+
+// ---------------------------------------------------------------------------
+// Ações em massa (seleção múltipla na lista). Todo where cruza `ids` com
+// `empresaId` — uma empresa nunca alcança linha de outra.
+// ---------------------------------------------------------------------------
+export type ResultadoMassa = { ok: true; afetados: number } | { ok: false; erro: string };
+
+export async function excluirClientes(ids: string[]): Promise<ResultadoMassa> {
+  try {
+    await exigirFeature("clientes");
+    const empresaId = await exigirEmpresa();
+    if (!ids.length) return { ok: false, erro: "Nenhum cliente selecionado." };
+    // padrao: false mantém o Consumidor final fora de qualquer exclusão.
+    const r = await prisma.cliente.deleteMany({ where: { id: { in: ids }, empresaId, padrao: false } });
+    return { ok: true, afetados: r.count };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Só os campos marcados no modal chegam aqui — `undefined` = não alterar.
+export type PatchClientes = {
+  categoriaId?: string; // "" remove a categoria
+  tipoContribuinte?: string;
+  municipio?: string;
+  uf?: string;
+};
+
+export async function atualizarClientesEmMassa(
+  ids: string[],
+  patch: PatchClientes,
+): Promise<ResultadoMassa> {
+  try {
+    await exigirFeature("clientes");
+    const empresaId = await exigirEmpresa();
+    if (!ids.length) return { ok: false, erro: "Nenhum cliente selecionado." };
+
+    // Unchecked: `categoriaId` é campo escalar de relação (não entra no input "checked").
+    const data: Prisma.ClienteUncheckedUpdateManyInput = {};
+    if (patch.categoriaId !== undefined) data.categoriaId = patch.categoriaId || null;
+    if (patch.tipoContribuinte !== undefined) data.tipoContribuinte = patch.tipoContribuinte;
+    if (patch.municipio !== undefined) data.municipio = patch.municipio.trim() || null;
+    if (patch.uf !== undefined) data.uf = patch.uf || null;
+
+    if (Object.keys(data).length === 0) return { ok: false, erro: "Nenhum campo selecionado para alterar." };
+
+    // O Consumidor final é fixo do sistema: não entra na edição em massa.
+    const r = await prisma.cliente.updateMany({
+      where: { id: { in: ids }, empresaId, padrao: false },
+      data,
+    });
+    return { ok: true, afetados: r.count };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 export type DadosCnpj = {
