@@ -11,7 +11,8 @@ import { obterMinhasFeatures } from "@/app/permissoes-actions";
 
 type Item = { href: string; label: string; icon: ReactNode; feature?: string };
 // flat = grupo renderiza itens direto, sem header colapsável (corta ruído de
-// grupos pequenos). Ordem segue o fluxo de uso: início → emitir → cadastros → sistema.
+// grupos pequenos). Ordem segue o fluxo de uso: início → saída fiscal →
+// comercial → entrada fiscal → cadastros → sistema.
 type Grupo = { titulo: string; itens: Item[]; flat?: boolean };
 
 const grupos: Grupo[] = [
@@ -23,14 +24,27 @@ const grupos: Grupo[] = [
       { href: "/relatorios", label: "Relatórios", icon: <IconReport />, feature: "dashboard" },
     ],
   },
+  // Só o que gera documento fiscal de saída.
   {
     titulo: "Emissão de notas",
     itens: [
-      { href: "/orcamentos", label: "Orçamentos", icon: <IconClipboard />, feature: "orcamentos" },
       { href: "/notas/nova", label: "Emitir nova nota", icon: <IconPlus />, feature: "emitir_nfe" },
+      { href: "/orcamentos", label: "Orçamentos", icon: <IconClipboard />, feature: "orcamentos" },
       { href: "/notas", label: "Notas emitidas", icon: <IconList />, feature: "notas_listar" },
+    ],
+  },
+  // Venda sem nota e fiado não são emissão fiscal — vivem no comercial.
+  {
+    titulo: "Vendas e fiado",
+    itens: [
       { href: "/vendas", label: "Vendas sem nota", icon: <IconCart />, feature: "vendas" },
-      { href: "/eventos", label: "Eventos", icon: <IconActivity />, feature: "notas_listar" },
+      { href: "/caderneta", label: "Caderneta", icon: <IconBook />, feature: "clientes" },
+    ],
+  },
+  // Documento fiscal que CHEGA (de terceiros), não que sai.
+  {
+    titulo: "Notas de entrada",
+    itens: [
       { href: "/recebidas", label: "Notas recebidas", icon: <IconInbox />, feature: "dfe" },
       { href: "/importar", label: "Importar XML", icon: <IconImport />, feature: "importar_xml" },
     ],
@@ -41,20 +55,18 @@ const grupos: Grupo[] = [
       { href: "/produtos", label: "Produtos", icon: <IconBox />, feature: "produtos" },
       { href: "/estoque", label: "Estoque", icon: <IconLayers />, feature: "estoque" },
       { href: "/clientes", label: "Clientes", icon: <IconUser />, feature: "clientes" },
-      { href: "/caderneta", label: "Caderneta", icon: <IconBook />, feature: "clientes" },
       { href: "/fornecedores", label: "Fornecedores", icon: <IconFactory />, feature: "fornecedores" },
       { href: "/transportadoras", label: "Transportadoras", icon: <IconTruck />, feature: "transportadoras" },
     ],
   },
   {
-    titulo: "Recursos",
-    flat: true,
-    itens: [{ href: "/integracao", label: "Integração", icon: <IconPlug /> }],
-  },
-  {
     titulo: "Sistema",
     flat: true,
-    itens: [{ href: "/configuracoes", label: "Configurações", icon: <IconGear /> }],
+    itens: [
+      { href: "/configuracoes", label: "Configurações", icon: <IconGear /> },
+      { href: "/eventos", label: "Eventos", icon: <IconActivity />, feature: "notas_listar" },
+      { href: "/integracao", label: "Integração", icon: <IconPlug /> },
+    ],
   },
 ];
 
@@ -535,10 +547,14 @@ function IconInbox() {
     </svg>
   );
 }
+// lucide: file-up
 function IconImport() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M12 12v6" />
+      <path d="m15 15-3-3-3 3" />
     </svg>
   );
 }

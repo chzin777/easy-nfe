@@ -8,6 +8,8 @@ import {
   PageHeader,
   Select,
   EmptyState,
+  Paginacao,
+  paginar,
   formatBRL,
   formatData,
 } from "@/app/ui/primitives";
@@ -37,6 +39,8 @@ export default function EventosPage() {
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
 
   useEffect(() => {
     listarEventos()
@@ -52,6 +56,8 @@ export default function EventosPage() {
       return true;
     });
   }, [eventos, busca, filtro]);
+
+  const pag = paginar(filtrados, pagina, porPagina);
 
   const contagem = useMemo(() => {
     const c: Record<string, number> = {};
@@ -77,8 +83,8 @@ export default function EventosPage() {
 
       <Card>
         <div className="grid grid-cols-1 gap-3 border-b border-[var(--border)] p-4 sm:grid-cols-[1fr_240px]">
-          <Input placeholder="Buscar por nº, cliente ou chave…" value={busca} onChange={(e) => setBusca(e.target.value)} />
-          <Select opcoes={OPCOES_TIPO} value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+          <Input placeholder="Buscar por nº, cliente ou chave…" value={busca} onChange={(e) => { setBusca(e.target.value); setPagina(1); }} />
+          <Select opcoes={OPCOES_TIPO} value={filtro} onChange={(e) => { setFiltro(e.target.value); setPagina(1); }} />
         </div>
 
         {carregando ? (
@@ -87,7 +93,7 @@ export default function EventosPage() {
           <EmptyState titulo="Nenhum evento" descricao="As emissões aparecem aqui assim que você emitir notas." />
         ) : (
           <ul className="divide-y divide-[var(--border)]">
-            {filtrados.map((e) => {
+            {pag.fatia.map((e) => {
               const meta = META[e.tipo];
               const ex = e.tipo === "rejeitada" || e.tipo === "denegada" ? explicarRejeicao(e.cStat, e.xMotivo) : null;
               return (
@@ -120,9 +126,15 @@ export default function EventosPage() {
           </ul>
         )}
 
-        <div className="border-t border-[var(--border)] px-4 py-3 text-xs text-[var(--muted)]">
-          {filtrados.length} evento(s)
-        </div>
+        <Paginacao
+          total={filtrados.length}
+          pagina={pag.pagina}
+          paginas={pag.paginas}
+          porPagina={porPagina}
+          onPagina={setPagina}
+          onPorPagina={(n) => { setPorPagina(n); setPagina(1); }}
+          rotulo="evento"
+        />
       </Card>
     </div>
   );

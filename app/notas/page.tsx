@@ -12,6 +12,8 @@ import {
   Tabela,
   Textarea,
   EmptyState,
+  Paginacao,
+  paginar,
   formatBRL,
   formatData,
   type Coluna,
@@ -42,6 +44,8 @@ export default function NotasEmitidasPage() {
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
   const [evento, setEvento] = useState<AcaoEvento | null>(null);
   const [justificativa, setJustificativa] = useState("");
   const [visualizar, setVisualizar] = useState<NotaCompleta | null>(null);
@@ -101,6 +105,8 @@ export default function NotasEmitidasPage() {
       return true;
     });
   }, [notas, busca, filtroStatus, filtroTipo]);
+
+  const pag = paginar(filtradas, pagina, porPagina);
 
   // KPIs calculados sobre o conjunto filtrado (acompanham busca/filtros).
   const kpis = useMemo(() => {
@@ -264,24 +270,24 @@ export default function NotasEmitidasPage() {
           <Input
             placeholder="Buscar por nº, cliente ou chave…"
             value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+            onChange={(e) => { setBusca(e.target.value); setPagina(1); }}
           />
           <Select
             opcoes={STATUS_NOTA}
             value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value)}
+            onChange={(e) => { setFiltroStatus(e.target.value); setPagina(1); }}
             placeholder="Todos os status"
           />
           <Select
             opcoes={TIPOS_NOTA}
             value={filtroTipo}
-            onChange={(e) => setFiltroTipo(e.target.value)}
+            onChange={(e) => { setFiltroTipo(e.target.value); setPagina(1); }}
             placeholder="Todos os tipos"
           />
         </div>
         <Tabela
           colunas={colunas}
-          dados={filtradas}
+          dados={pag.fatia}
           onRowClick={(n) => setVisualizar(n)}
           vazio={
             carregando
@@ -289,10 +295,20 @@ export default function NotasEmitidasPage() {
               : <EmptyState titulo="Nenhuma nota encontrada" descricao="Ajuste os filtros ou emita uma nova nota." />
           }
         />
-        <div className="border-t border-[var(--border)] px-4 py-3 text-xs text-[var(--muted)]">
-          {filtradas.length} nota(s) · Total exibido:{" "}
-          {formatBRL(filtradas.reduce((s, n) => s + n.valorTotal, 0))}
+        {/* Total do conjunto filtrado inteiro, não só da página — senão o número
+            mudaria a cada virada de página. */}
+        <div className="border-t border-[var(--border)] px-4 pt-3 text-xs text-[var(--muted)]">
+          Total filtrado: <b className="text-[var(--foreground)]">{formatBRL(filtradas.reduce((s, n) => s + n.valorTotal, 0))}</b>
         </div>
+        <Paginacao
+          total={filtradas.length}
+          pagina={pag.pagina}
+          paginas={pag.paginas}
+          porPagina={porPagina}
+          onPagina={setPagina}
+          onPorPagina={(n) => { setPorPagina(n); setPagina(1); }}
+          rotulo="nota"
+        />
       </Card>
 
       <Modal

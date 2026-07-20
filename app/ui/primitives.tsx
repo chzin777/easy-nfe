@@ -494,6 +494,77 @@ export function Tabela<T extends { id: string }>({
   );
 }
 
+// Rodapé de paginação. A lista continua vindo inteira do servidor; aqui só
+// fatiamos para a tela não virar um rolo infinito.
+export const OPCOES_POR_PAGINA = [10, 25, 50, 100];
+
+// Fatia uma lista já filtrada. `pagina` é 1-based e vem corrigida quando o
+// filtro encolhe a lista e a página atual deixa de existir.
+export function paginar<T>(itens: T[], pagina: number, porPagina: number): { fatia: T[]; paginas: number; pagina: number } {
+  const paginas = Math.max(1, Math.ceil(itens.length / porPagina));
+  const atual = Math.min(Math.max(1, pagina), paginas);
+  const inicio = (atual - 1) * porPagina;
+  return { fatia: itens.slice(inicio, inicio + porPagina), paginas, pagina: atual };
+}
+
+export function Paginacao({
+  total,
+  pagina,
+  paginas,
+  porPagina,
+  onPagina,
+  onPorPagina,
+  rotulo = "registro",
+}: {
+  total: number;
+  pagina: number;
+  paginas: number;
+  porPagina: number;
+  onPagina: (p: number) => void;
+  onPorPagina?: (n: number) => void;
+  rotulo?: string;
+}) {
+  const primeiro = total === 0 ? 0 : (pagina - 1) * porPagina + 1;
+  const ultimo = Math.min(pagina * porPagina, total);
+
+  const btn =
+    "flex h-8 min-w-8 items-center justify-center rounded-md border border-[var(--border)] px-2 text-sm transition " +
+    "hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40";
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3 text-xs text-[var(--muted)]">
+      <span>
+        {total === 0 ? `Nenhum ${rotulo}` : <>Exibindo <b className="text-[var(--foreground)]">{primeiro}–{ultimo}</b> de {total} {rotulo}(s)</>}
+      </span>
+
+      <div className="flex items-center gap-3">
+        {onPorPagina && (
+          <label className="flex items-center gap-1.5">
+            por página
+            <select
+              value={porPagina}
+              onChange={(e) => onPorPagina(Number(e.target.value))}
+              className="cursor-pointer rounded-md border border-[var(--border)] bg-white px-1.5 py-1 text-xs outline-none focus:border-[var(--primary)]"
+            >
+              {OPCOES_POR_PAGINA.map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <div className="flex items-center gap-1">
+          <button type="button" className={btn} onClick={() => onPagina(pagina - 1)} disabled={pagina <= 1} aria-label="Página anterior">‹</button>
+          <span className="px-1.5">
+            <b className="text-[var(--foreground)]">{pagina}</b> / {paginas}
+          </span>
+          <button type="button" className={btn} onClick={() => onPagina(pagina + 1)} disabled={pagina >= paginas} aria-label="Próxima página">›</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Barra flutuante de ações em massa — aparece quando há seleção.
 export function BarraSelecao({
   quantidade,

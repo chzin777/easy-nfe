@@ -11,6 +11,8 @@ import { listarProdutos } from "@/app/produtos/actions";
 import { listarTransportadoras } from "@/app/transportadoras/actions";
 import { obterCasasDecimaisQtd, obterEmpresaAtiva, type EmpresaDados } from "@/app/configuracoes/actions";
 import { baixarElementoPdf } from "@/app/ui/danfePdf";
+import VisualizarDanfeModal from "@/app/notas/VisualizarDanfeModal";
+import { obterNota, type NotaCompleta } from "@/app/notas/actions";
 import OrcamentoModal from "./OrcamentoModal";
 import OrcamentoPdf from "./OrcamentoPdf";
 import Kanban from "./Kanban";
@@ -198,6 +200,22 @@ function DetalheOrcamento({
   const [motivo, setMotivo] = useState("");
   const terminal = orc.status === "fechado" || orc.status === "cancelado";
 
+  // NF-e gerada por este orçamento (só existe depois de "Fechar venda").
+  const [nota, setNota] = useState<NotaCompleta | null>(null);
+  // Já nasce carregando quando há nota — evita piscar "não foi possível".
+  const [carregandoNota, setCarregandoNota] = useState(!!orc.notaId);
+  const [verDanfe, setVerDanfe] = useState(false);
+
+  useEffect(() => {
+    if (!orc.notaId) return;
+    let vivo = true;
+    obterNota(orc.notaId)
+      .then((n) => { if (vivo) setNota(n); })
+      .catch(() => { if (vivo) setNota(null); })
+      .finally(() => { if (vivo) setCarregandoNota(false); });
+    return () => { vivo = false; };
+  }, [orc.notaId]);
+
   async function fecharVenda() {
     setProc(true); setMsg(null); setDialog(null);
     try {
@@ -346,9 +364,44 @@ function DetalheOrcamento({
               </>
             ),
           },
+          // Só existe depois que o orçamento virou nota.
+          ...(orc.notaId
+            ? [{
+                id: "nfe",
+                label: "NF-e",
+                content: carregandoNota ? (
+                  <p className="py-8 text-center text-sm text-[var(--muted)]">Carregando nota…</p>
+                ) : !nota ? (
+                  <p className="py-8 text-center text-sm text-[var(--muted)]">
+                    Não foi possível carregar a nota vinculada a este orçamento.
+                  </p>
+                ) : (
+                  <>
+                    <SectionTitle>Nota fiscal gerada</SectionTitle>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <Info rotulo="Número / série" valor={`${nota.numero} / ${nota.serie}`} />
+                      <Info rotulo="Status" valor={nota.status} />
+                      <Info rotulo="Emitida em" valor={fmtData(nota.emitidaEm.slice(0, 10))} />
+                      <Info rotulo="Protocolo" valor={nota.protocolo || "—"} />
+                      <Info rotulo="Modelo" valor={nota.modelo === "65" ? "NFC-e (65)" : "NF-e (55)"} />
+                      <Info rotulo="Total" valor={formatBRL(nota.valorTotal)} />
+                    </div>
+                    {nota.chaveAcesso && (
+                      <div className="mt-3 rounded-xl border border-[var(--border)] bg-slate-50 px-4 py-3">
+                        <p className="text-[11px] uppercase tracking-wider text-[var(--muted)]">Chave de acesso</p>
+                        <p className="mt-0.5 break-all font-mono text-xs">{nota.chaveAcesso}</p>
+                      </div>
+                    )}
+                    <Button className="mt-4" onClick={() => setVerDanfe(true)}>Ver DANFE / baixar PDF e XML</Button>
+                  </>
+                ),
+              }]
+            : []),
         ]}
       />
     </Modal>
+
+    {verDanfe && nota && <VisualizarDanfeModal nota={nota} onFechar={() => setVerDanfe(false)} />}
 
     {d && (
       <Modal

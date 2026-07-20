@@ -47,6 +47,7 @@ export default function VendasPage() {
   const [nova, setNova] = useState(false);
   const [cancelarId, setCancelarId] = useState<string | null>(null);
   const [cancelando, setCancelando] = useState(false);
+  const [detalhe, setDetalhe] = useState<VendaCompleta | null>(null);
 
   async function recarregar() {
     try {
@@ -73,13 +74,13 @@ export default function VendasPage() {
     setCancelando(true);
     const r = await cancelarVenda(cancelarId);
     setCancelando(false);
-    if (r.ok) { setCancelarId(null); await recarregar(); }
+    if (r.ok) { setCancelarId(null); setDetalhe(null); await recarregar(); }
     else alert(r.erro);
   }
 
   const colunas: Coluna<VendaCompleta>[] = [
     {
-      chave: "numero", cabecalho: "Venda",
+      chave: "numero", cabecalho: "Venda", valor: (v) => v.numero,
       render: (v) => (
         <div>
           <p className="font-medium">#{v.numero}</p>
@@ -88,11 +89,12 @@ export default function VendasPage() {
       ),
     },
     {
-      chave: "cliente", cabecalho: "Cliente",
+      chave: "cliente", cabecalho: "Cliente", valor: (v) => v.clienteNome,
       render: (v) => v.clienteNome,
     },
     {
       chave: "pagamento", cabecalho: "Pagamento",
+      valor: (v) => PAG_LABEL[v.formaPagamento] ?? v.formaPagamento,
       render: (v) => (
         <span className="inline-flex items-center gap-1.5">
           {PAG_LABEL[v.formaPagamento] ?? v.formaPagamento}
@@ -101,22 +103,16 @@ export default function VendasPage() {
       ),
     },
     {
-      chave: "itens", cabecalho: "Itens", alinhar: "center",
+      chave: "itens", cabecalho: "Itens", alinhar: "center", valor: (v) => v.itens.length,
       render: (v) => v.itens.length,
     },
     {
-      chave: "total", cabecalho: "Total", alinhar: "right",
+      chave: "total", cabecalho: "Total", alinhar: "right", valor: (v) => v.valorTotal,
       render: (v) => <span className="font-semibold">{formatBRL(v.valorTotal)}</span>,
     },
     {
-      chave: "status", cabecalho: "Status", alinhar: "center",
+      chave: "status", cabecalho: "Status", alinhar: "center", valor: (v) => v.status,
       render: (v) => (v.status === "cancelada" ? <Badge tom="danger">cancelada</Badge> : <Badge tom="success">concluída</Badge>),
-    },
-    {
-      chave: "acoes", cabecalho: "", alinhar: "right",
-      render: (v) => v.status === "concluida" ? (
-        <Button variante="ghost" className="text-[var(--danger)]" onClick={() => setCancelarId(v.id)}>Cancelar</Button>
-      ) : null,
     },
   ];
 
@@ -146,10 +142,20 @@ export default function VendasPage() {
           <Tabela
             colunas={colunas}
             dados={vendas}
+            onRowClick={setDetalhe}
+            ordemInicial={{ chave: "numero", dir: "desc" }}
             vazio={<EmptyState titulo="Nenhuma venda registrada" descricao="Registre a primeira venda sem nota para começar." />}
           />
         )}
       </Card>
+
+      {detalhe && (
+        <DetalheVendaModal
+          venda={detalhe}
+          onFechar={() => setDetalhe(null)}
+          onCancelar={() => setCancelarId(detalhe.id)}
+        />
+      )}
 
       {nova && (
         <NovaVendaModal
@@ -174,6 +180,113 @@ export default function VendasPage() {
           A venda será marcada como cancelada. Se houve baixa de estoque, os itens voltam ao saldo; se foi fiado, o débito é estornado na caderneta.
         </p>
       </Modal>
+    </div>
+  );
+}
+
+// Detalhe de uma venda já registrada. Só leitura: venda sem nota não é
+// editável depois de fechada — o que dá para fazer é cancelar (que estorna
+// estoque e fiado).
+function DetalheVendaModal({
+  venda,
+  onFechar,
+  onCancelar,
+}: {
+  venda: VendaCompleta;
+  onFechar: () => void;
+  onCancelar: () => void;
+}) {
+  const subtotal = venda.itens.reduce((s, i) => s + i.valorTotal, 0);
+  const desconto = Math.max(0, Math.round((subtotal - venda.valorTotal) * 100) / 100);
+
+  return (
+    <Modal
+      aberto
+      onFechar={onFechar}
+      titulo={`Venda #${venda.numero}`}
+      largura="max-w-2xl"
+      rodape={
+        <div className="flex w-full items-center justify-between">
+          {venda.status === "concluida" ? (
+            <Button variante="ghost" className="text-[var(--danger)]" onClick={onCancelar}>
+              Cancelar venda
+            </Button>
+          ) : (
+            <span className="text-xs text-[var(--muted)]">Venda cancelada</span>
+          )}
+          <Button variante="secondary" onClick={onFechar}>Fechar</Button>
+        </div>
+      }
+    >
+      <div className="space-y-5">
+        <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+          <Resumo rotulo="Data" valor={formatData(venda.data)} />
+          <Resumo rotulo="Cliente" valor={venda.clienteNome || "—"} />
+          <Resumo rotulo="Pagamento" valor={PAG_LABEL[venda.formaPagamento] ?? venda.formaPagamento} />
+          <Resumo
+            rotulo="Status"
+            valor={venda.status === "cancelada" ? "Cancelada" : "Concluída"}
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {venda.fiado && <Badge tom="warning">fiado · lançado na caderneta</Badge>}
+          {venda.baixaEstoque && <Badge tom="primary">baixou estoque</Badge>}
+        </div>
+
+        <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[var(--border)] bg-slate-50 text-left text-xs uppercase tracking-wider text-[var(--muted)]">
+                <th className="px-4 py-2.5">Produto</th>
+                <th className="px-4 py-2.5 text-center">Qtd.</th>
+                <th className="px-4 py-2.5 text-right">Preço un.</th>
+                <th className="px-4 py-2.5 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {venda.itens.map((i) => (
+                <tr key={i.id} className="border-b border-[var(--border)] last:border-0">
+                  <td className="px-4 py-2.5">
+                    <p className="font-medium">{i.nome}</p>
+                    {i.unidade && <p className="text-xs text-[var(--muted)]">{i.unidade}</p>}
+                  </td>
+                  <td className="px-4 py-2.5 text-center tabular-nums">{i.quantidade}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{formatBRL(i.precoUnitario)}</td>
+                  <td className="px-4 py-2.5 text-right font-medium tabular-nums">{formatBRL(i.valorTotal)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-50">
+                <td colSpan={3} className="px-4 py-2.5 text-right text-[var(--muted)]">
+                  Subtotal {formatBRL(subtotal)}
+                  {desconto > 0 && <> · Desconto {formatBRL(desconto)}</>}
+                </td>
+                <td className="px-4 py-2.5 text-right text-base font-bold text-[var(--primary)]">
+                  {formatBRL(venda.valorTotal)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {venda.observacoes && (
+          <div>
+            <p className="text-xs uppercase tracking-wider text-[var(--muted)]">Observações</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm">{venda.observacoes}</p>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function Resumo({ rotulo, valor }: { rotulo: string; valor: string }) {
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wider text-[var(--muted)]">{rotulo}</p>
+      <p className="mt-0.5 truncate font-medium">{valor}</p>
     </div>
   );
 }
