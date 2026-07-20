@@ -78,12 +78,25 @@ section[id] {
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 100% -10%, rgba(82, 39, 255, 0.06), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(124, 58, 237, 0.05), transparent 60%),
-    var(--background);
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Brilho roxo decorativo. Fica numa camada presa à viewport (fixed) em vez de
+   pintar o body: como as posições dos gradientes são relativas à ALTURA DO
+   DOCUMENTO, em páginas longas o segundo deles (at -10% 110%) caía lá no fim e
+   aparecia como uma faixa lilás ao rolar até embaixo. Preso à tela, o efeito
+   fica constante e o resto da página mantém uma cor só. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 600px at 100% -10%, rgba(82, 39, 255, 0.06), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(124, 58, 237, 0.05), transparent 60%);
 }
 
 /* Scrollbar refinada */
