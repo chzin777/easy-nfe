@@ -19,6 +19,21 @@ export type ResumoDashboard = {
   valorEstoqueCusto: number; // Σ saldo × custo (produtos que controlam estoque)
   valorEstoqueVenda: number; // Σ saldo × preço de venda
   topProdutosLucro: { nome: string; lucro: number; receita: number }[];
+  // Mesmas métricas no período imediatamente anterior, de mesma duração —
+  // um KPI sem comparação não diz se o número é bom ou ruim.
+  anterior: { faturado: number; lucro: number; notas: number; ticketMedio: number };
+  // Qualidade da emissão: quanto do que foi enviado à SEFAZ passou.
+  emitidasNoPeriodo: number;
+  taxaAprovacao: number; // autorizadas / emitidas × 100
+  // Faturamento por modelo de documento (NF-e 55 x NFC-e 65).
+  porModelo: { modelo: string; qtd: number; faturado: number }[];
+  topClientes: { nome: string; faturado: number; notas: number }[];
+  // Venda sem nota (módulo /vendas) — receita que não aparece no faturamento fiscal.
+  vendasSemNota: { qtd: number; total: number };
+  // Fiado em aberto (caderneta): débitos − créditos, saldo devedor total.
+  fiadoEmAberto: { saldo: number; clientes: number };
+  // Produtos no ou abaixo do mínimo — lista acionável, não só um número.
+  estoqueCritico: { nome: string; saldo: number; minimo: number }[];
   recentes: {
     id: string;
     numero: number;
@@ -44,6 +59,11 @@ const RESUMO_VAZIO: ResumoDashboard = {
   cmv: 0, receitaComCusto: 0, lucroBruto: 0, margem: 0, ticketMedio: 0, itensSemCusto: 0,
   valorEstoqueCusto: 0, valorEstoqueVenda: 0, topProdutosLucro: [],
   recentes: [], serieMensal: [], distribuicaoStatus: [],
+  anterior: { faturado: 0, lucro: 0, notas: 0, ticketMedio: 0 },
+  emitidasNoPeriodo: 0, taxaAprovacao: 0, porModelo: [], topClientes: [],
+  vendasSemNota: { qtd: 0, total: 0 },
+  fiadoEmAberto: { saldo: 0, clientes: 0 },
+  estoqueCritico: [],
 };
 
 export type PeriodoFiltro = "30d" | "90d" | "6m" | "12m" | "ano" | "tudo";
@@ -91,6 +111,19 @@ async function resumoInterno(filtros: FiltrosDashboard): Promise<ResumoDashboard
   // Janela da série temporal (sempre cobre os `meses` buckets exibidos).
   const inicioJanela = new Date(agora.getFullYear(), agora.getMonth() - (meses - 1), 1);
 
+  // Período imediatamente anterior, de mesma duração — base da comparação.
+  // Em "tudo" não existe anterior: a comparação fica zerada de propósito.
+  const janelaAnterior = inicio
+    ? { de: new Date(inicio.getTime() - (agora.getTime() - inicio.getTime())), ate: inicio }
+    : null;
+  const wherePeriodoAnterior = janelaAnterior
+    ? {
+        emitenteId: empresaId,
+        ...(modelo ? { modelo } : {}),
+        emitidaEm: { gte: janelaAnterior.de, lt: janelaAnterior.ate },
+      }
+    : null;
+
   // Itens vendidos (autorizados) no período — base do custo/lucro. Só itens com
   // produto vinculado têm custo; o snapshot de preço vem do próprio item.
   const whereItensAutorizados = (desde: Date | null) => ({
@@ -103,7 +136,11 @@ async function resumoInterno(filtros: FiltrosDashboard): Promise<ResumoDashboard
     },
   });
 
-  const [produtos, clientes, transportadoras, autorizadas, agg, recentesRows, porStatus, notasJanela, itensPeriodo, itensJanela, produtosEstoque] = await Promise.all([
+  const [
+    produtos, clientes, transportadoras, autorizadas, agg, recentesRows, porStatus,
+    notasJanela, itensPeriodo, itensJanela, produtosEstoque,
+    aggAnterior, itensAnterior, porModeloRows, topClientesRows, aggVendas, fiadoRows, produtosMinimo,
+  ] = await Promise.all([
     prisma.produto.count({ where: { empresaId } }),
     prisma.cliente.count({ where: { empresaId } }),
     prisma.transportadora.count({ where: { empresaId } }),
@@ -138,6 +175,62 @@ async function resumoInterno(filtros: FiltrosDashboard): Promise<ResumoDashboard
     prisma.produto.findMany({
       where: { empresaId, controlaEstoque: true },
       select: { estoque: true, preco: true, precoCusto: true },
+    }),
+    // --- Comparação com o período anterior ---
+    wherePeriodoAnterior
+      ? prisma.nota.aggregate({
+          where: { ...wherePeriodoAnterior, status: "AUTORIZADA" },
+          _sum: { valorTotal: true },
+          _count: { _all: true },
+        })
+      : null,
+    janelaAnterior
+      ? prisma.itemNota.findMany({
+          where: {
+            produtoId: { not: null },
+            nota: {
+              emitenteId: empresaId,
+              status: "AUTORIZADA" as const,
+              ...(modelo ? { modelo } : {}),
+              emitidaEm: { gte: janelaAnterior.de, lt: janelaAnterior.ate },
+            },
+          },
+          select: { quantidade: true, valorTotal: true, produto: { select: { precoCusto: true } } },
+        })
+      : null,
+    // Faturamento e volume por modelo de documento.
+    prisma.nota.groupBy({
+      by: ["modelo"],
+      where: { ...wherePeriodo, status: "AUTORIZADA" },
+      _sum: { valorTotal: true },
+      _count: { _all: true },
+    }),
+    // Top clientes por faturamento no período.
+    prisma.nota.groupBy({
+      by: ["clienteId"],
+      where: { ...wherePeriodo, status: "AUTORIZADA" },
+      _sum: { valorTotal: true },
+      _count: { _all: true },
+      orderBy: { _sum: { valorTotal: "desc" } },
+      take: 6,
+    }),
+    // Venda sem nota concluída no período (receita fora do faturamento fiscal).
+    prisma.venda.aggregate({
+      where: { empresaId, status: "CONCLUIDA", ...(inicio ? { data: { gte: inicio } } : {}) },
+      _sum: { valorTotal: true },
+      _count: { _all: true },
+    }),
+    // Caderneta: saldo devedor por tipo de lançamento (todo o histórico — dívida
+    // não "expira" no fim do período escolhido).
+    prisma.lancamentoFiado.groupBy({
+      by: ["tipo", "clienteId"],
+      where: { empresaId },
+      _sum: { valor: true },
+    }),
+    // Produtos no ou abaixo do mínimo. Sem mínimo cadastrado não há alerta.
+    prisma.produto.findMany({
+      where: { empresaId, controlaEstoque: true, estoqueMinimo: { gt: 0 } },
+      select: { nome: true, estoque: true, estoqueMinimo: true },
     }),
   ]);
 
@@ -198,7 +291,81 @@ async function resumoInterno(filtros: FiltrosDashboard): Promise<ResumoDashboard
 
   const faturado = Number(agg._sum.valorTotal ?? 0);
 
+  // Período anterior — mesma regra de lucro (só itens com custo cadastrado).
+  const faturadoAnterior = Number(aggAnterior?._sum.valorTotal ?? 0);
+  const notasAnterior = aggAnterior?._count._all ?? 0;
+  let lucroAnterior = 0;
+  for (const it of itensAnterior ?? []) {
+    const custoUnit = it.produto?.precoCusto == null ? null : Number(it.produto.precoCusto);
+    if (custoUnit == null || custoUnit <= 0) continue;
+    lucroAnterior += Number(it.valorTotal) - Number(it.quantidade) * custoUnit;
+  }
+
+  // Taxa de aprovação: das notas que chegaram à SEFAZ, quantas passaram.
+  // Rascunho fica de fora — nunca foi transmitido, não é acerto nem erro.
+  const contagemPorStatus = new Map(porStatus.map((s) => [s.status, s._count._all]));
+  const transmitidas =
+    (contagemPorStatus.get("AUTORIZADA") ?? 0) +
+    (contagemPorStatus.get("REJEITADA") ?? 0) +
+    (contagemPorStatus.get("DENEGADA") ?? 0) +
+    (contagemPorStatus.get("CANCELADA") ?? 0);
+  const taxaAprovacao = transmitidas > 0
+    ? (((contagemPorStatus.get("AUTORIZADA") ?? 0) + (contagemPorStatus.get("CANCELADA") ?? 0)) / transmitidas) * 100
+    : 0;
+
+  // Nome do cliente para o ranking (o groupBy só devolve o id).
+  const idsTop = topClientesRows.map((r) => r.clienteId).filter((id): id is string => !!id);
+  const nomesClientes = idsTop.length
+    ? new Map(
+        (await prisma.cliente.findMany({ where: { id: { in: idsTop } }, select: { id: true, nome: true } }))
+          .map((c) => [c.id, c.nome]),
+      )
+    : new Map<string, string>();
+
+  // Saldo devedor da caderneta: débitos − créditos por cliente. Só quem ainda
+  // deve entra na conta (crédito a mais não vira saldo negativo da empresa).
+  const saldoPorCliente = new Map<string, number>();
+  for (const r of fiadoRows) {
+    const v = Number(r._sum.valor ?? 0);
+    const atual = saldoPorCliente.get(r.clienteId) ?? 0;
+    saldoPorCliente.set(r.clienteId, atual + (r.tipo === "DEBITO" ? v : -v));
+  }
+  let fiadoSaldo = 0, fiadoClientes = 0;
+  for (const saldo of saldoPorCliente.values()) {
+    if (saldo > 0.005) { fiadoSaldo += saldo; fiadoClientes++; }
+  }
+
+  const estoqueCritico = produtosMinimo
+    .map((p) => ({ nome: p.nome, saldo: Number(p.estoque), minimo: Number(p.estoqueMinimo) }))
+    .filter((p) => p.saldo <= p.minimo)
+    .sort((a, b) => a.saldo - b.saldo || a.nome.localeCompare(b.nome, "pt-BR"))
+    .slice(0, 8);
+
   return {
+    anterior: {
+      faturado: faturadoAnterior,
+      lucro: lucroAnterior,
+      notas: notasAnterior,
+      ticketMedio: notasAnterior > 0 ? faturadoAnterior / notasAnterior : 0,
+    },
+    emitidasNoPeriodo: transmitidas,
+    taxaAprovacao,
+    porModelo: porModeloRows.map((r) => ({
+      modelo: r.modelo,
+      qtd: r._count._all,
+      faturado: Number(r._sum.valorTotal ?? 0),
+    })),
+    topClientes: topClientesRows.map((r) => ({
+      nome: (r.clienteId && nomesClientes.get(r.clienteId)) || "—",
+      faturado: Number(r._sum.valorTotal ?? 0),
+      notas: r._count._all,
+    })).filter((c) => c.faturado > 0),
+    vendasSemNota: {
+      qtd: aggVendas._count._all,
+      total: Number(aggVendas._sum.valorTotal ?? 0),
+    },
+    fiadoEmAberto: { saldo: fiadoSaldo, clientes: fiadoClientes },
+    estoqueCritico,
     serieMensal: buckets.map((b) => ({ mes: b.mes, notas: b.notas, faturado: b.faturado, lucro: b.lucro })),
     distribuicaoStatus: porStatus.map((s) => ({ status: STATUS_UI[s.status] ?? "rascunho", qtd: s._count._all })),
     produtos,

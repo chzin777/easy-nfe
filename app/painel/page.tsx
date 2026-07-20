@@ -8,16 +8,22 @@ import type { StatusNota } from "@/lib/types";
 import { resumoDashboard, type PeriodoFiltro } from "../dashboard-actions";
 import Graficos from "./Graficos";
 import FiltrosDashboard from "./FiltrosDashboard";
+import Bloco from "./Bloco";
+import { KpiDestaque, KpiSimples } from "./Kpis";
+import { num } from "./exportar";
 
 const PERIODOS_VALIDOS = ["30d", "90d", "6m", "12m", "ano", "tudo"];
 
 const tomStatus: Record<StatusNota, "success" | "danger" | "warning" | "neutral" | "primary"> = {
   autorizada: "success",
-  cancelada: "danger",
+  cancelada: "neutral",
   rejeitada: "danger",
   denegada: "warning",
   rascunho: "neutral",
 };
+
+// Mesma paleta validada usada nos gráficos (ver Graficos.tsx).
+const COR = { faturado: "#5227ff", lucro: "#008300", alerta: "#b45309" };
 
 export default async function Dashboard({
   searchParams,
@@ -30,6 +36,7 @@ export default async function Dashboard({
 
   const resumo = await resumoDashboard({ periodo, modelo });
   const faturado = resumo.faturado;
+  const temCusto = resumo.receitaComCusto > 0 || resumo.valorEstoqueCusto > 0;
 
   const cards: { titulo: string; valor: number; href: string; icon: ReactNode; cor: string }[] = [
     { titulo: "Produtos", valor: resumo.produtos, href: "/produtos", icon: <IBox />, cor: "from-violet-500 to-purple-600" },
@@ -38,8 +45,9 @@ export default async function Dashboard({
     { titulo: "Notas autorizadas", valor: resumo.notasAutorizadas, href: "/notas", icon: <IFile />, cor: "from-amber-500 to-orange-600" },
   ];
 
-  const recentes = resumo.recentes;
-  const temCusto = resumo.receitaComCusto > 0 || resumo.valorEstoqueCusto > 0;
+  const serieFaturado = resumo.serieMensal.map((s) => s.faturado);
+  const serieLucro = resumo.serieMensal.map((s) => s.lucro);
+  const serieNotas = resumo.serieMensal.map((s) => s.notas);
 
   return (
     <div className="space-y-6">
@@ -47,7 +55,9 @@ export default async function Dashboard({
         <div className="flex items-start justify-between gap-4">
           <div className="animate-fade-up">
             <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-            <p className="mt-1.5 text-sm text-[var(--muted)]">Visão geral do sistema de emissão de NF-e.</p>
+            <p className="mt-1.5 text-sm text-[var(--muted)]">
+              Visão geral do negócio. Cada bloco exporta os próprios dados em PDF ou planilha.
+            </p>
           </div>
           <Link
             href="/notas/nova"
@@ -59,6 +69,200 @@ export default async function Dashboard({
         <FiltrosDashboard periodo={periodo} modelo={modelo} />
       </div>
 
+      {/* Linha 1 — dinheiro. Os três números que respondem "como foi o período". */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <KpiDestaque
+          titulo="Faturamento bruto"
+          valor={faturado}
+          anterior={resumo.anterior.faturado}
+          serie={serieFaturado}
+          cor={COR.faturado}
+          sub="notas autorizadas no período"
+        />
+        <KpiDestaque
+          titulo="Lucro bruto"
+          valor={resumo.lucroBruto}
+          anterior={resumo.anterior.lucro}
+          serie={serieLucro}
+          cor={COR.lucro}
+          sub={temCusto ? `margem de ${resumo.margem.toFixed(1)}%` : "cadastre o custo dos produtos"}
+        />
+        <KpiDestaque
+          titulo="Ticket médio"
+          valor={resumo.ticketMedio}
+          anterior={resumo.anterior.ticketMedio}
+          serie={serieFaturado.map((v, i) => (serieNotas[i] > 0 ? v / serieNotas[i] : 0))}
+          cor="#2a78d6"
+          sub="por nota autorizada"
+        />
+      </div>
+
+      {/* Linha 2 — operação e caixa. */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <KpiSimples
+          titulo="Notas autorizadas"
+          valor={resumo.notasAutorizadas}
+          atualPara={resumo.notasAutorizadas}
+          anterior={resumo.anterior.notas}
+          sub={`${resumo.emitidasNoPeriodo} transmitida(s) à SEFAZ`}
+        />
+        <KpiSimples
+          titulo="Taxa de aprovação"
+          valor={Number(resumo.taxaAprovacao.toFixed(1))}
+          sufixo="%"
+          sub="do que foi transmitido, quanto a SEFAZ aceitou"
+          destaque={resumo.taxaAprovacao >= 95 ? COR.lucro : resumo.taxaAprovacao > 0 ? COR.alerta : undefined}
+        />
+        <KpiSimples
+          titulo="Vendas sem nota"
+          valor={resumo.vendasSemNota.total}
+          moeda
+          sub={`${resumo.vendasSemNota.qtd} venda(s) fora do faturamento fiscal`}
+        />
+        <KpiSimples
+          titulo="Fiado em aberto"
+          valor={resumo.fiadoEmAberto.saldo}
+          moeda
+          sub={`${resumo.fiadoEmAberto.clientes} cliente(s) devendo`}
+          destaque={resumo.fiadoEmAberto.saldo > 0 ? COR.alerta : undefined}
+        />
+      </div>
+
+      {resumo.itensSemCusto > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-[var(--warning-soft,#fef3c7)] px-4 py-3 text-sm text-[var(--warning)]">
+          <span className="mt-0.5">⚠</span>
+          <p>
+            {resumo.itensSemCusto} item(ns) vendido(s) no período <b>sem preço de custo</b> cadastrado — o lucro
+            e a margem consideram só os itens com custo. Cadastre o custo em <b>Produtos</b> para apurar tudo.
+          </p>
+        </div>
+      )}
+
+      {/* Linha 3 — estoque e custo. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card className="p-5">
+          <p className="text-sm text-[var(--muted)]">Custo da mercadoria vendida</p>
+          <p className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums">
+            <CountUp to={resumo.cmv} prefix="R$ " separator="." duration={1.4} delay={0.15} />
+          </p>
+          <p className="mt-1 text-xs text-[var(--muted)]">Custo dos produtos vendidos no período (itens com custo).</p>
+        </Card>
+        <Card className="p-5">
+          <p className="text-sm text-[var(--muted)]">Estoque a preço de custo</p>
+          <p className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums">
+            <CountUp to={resumo.valorEstoqueCusto} prefix="R$ " separator="." duration={1.4} delay={0.15} />
+          </p>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            {resumo.valorEstoqueVenda > 0
+              ? `${formatBRL(resumo.valorEstoqueVenda)} a preço de venda`
+              : "produtos que controlam estoque"}
+          </p>
+        </Card>
+        <Card className="p-5">
+          <p className="text-sm text-[var(--muted)]">Lucro potencial do estoque</p>
+          <p className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums" style={{ color: COR.lucro }}>
+            <CountUp
+              to={Math.max(0, resumo.valorEstoqueVenda - resumo.valorEstoqueCusto)}
+              prefix="R$ " separator="." duration={1.4} delay={0.15}
+            />
+          </p>
+          <p className="mt-1 text-xs text-[var(--muted)]">Se todo o estoque atual for vendido pelo preço de tabela.</p>
+        </Card>
+      </div>
+
+      <Graficos
+        serieMensal={resumo.serieMensal}
+        distribuicaoStatus={resumo.distribuicaoStatus}
+        topProdutosLucro={resumo.topProdutosLucro}
+        topClientes={resumo.topClientes}
+        porModelo={resumo.porModelo}
+      />
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Bloco
+          id="bloco-recentes"
+          titulo="Notas recentes"
+          subtitulo="Últimas notas emitidas nesta empresa."
+          nomeArquivo="notas-recentes"
+          linhas={resumo.recentes.map((n) => ({
+            Número: n.numero,
+            Cliente: n.clienteNome,
+            Tipo: rotulo(TIPOS_NOTA, n.tipoNota),
+            Emitida: formatData(n.emitidaEm),
+            Valor: num(n.valorTotal),
+            Status: n.status,
+          }))}
+          acao={
+            <Link href="/notas" className="mr-1 text-xs font-medium text-[var(--primary)] transition hover:underline">
+              Ver todas
+            </Link>
+          }
+        >
+          {resumo.recentes.length === 0 ? (
+            <p className="py-10 text-center text-sm text-[var(--muted)]">Nenhuma nota emitida ainda.</p>
+          ) : (
+            <ul className="divide-y divide-[var(--border)]">
+              {resumo.recentes.map((n) => (
+                <li key={n.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">Nº {n.numero} · {n.clienteNome}</p>
+                    <p className="text-xs text-[var(--muted)]">
+                      {rotulo(TIPOS_NOTA, n.tipoNota)} · {formatData(n.emitidaEm)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="text-sm font-medium tabular-nums">{formatBRL(n.valorTotal)}</span>
+                    <Badge tom={tomStatus[n.status]}>{n.status}</Badge>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Bloco>
+
+        <Bloco
+          id="bloco-estoque-critico"
+          titulo="Estoque no limite"
+          subtitulo="Produtos no mínimo ou abaixo dele. Só entram os que têm mínimo cadastrado."
+          nomeArquivo="estoque-critico"
+          linhas={resumo.estoqueCritico.map((p) => ({
+            Produto: p.nome,
+            Saldo: p.saldo,
+            Mínimo: p.minimo,
+            Faltam: num(Math.max(0, p.minimo - p.saldo)),
+          }))}
+          acao={
+            <Link href="/estoque" className="mr-1 text-xs font-medium text-[var(--primary)] transition hover:underline">
+              Ver estoque
+            </Link>
+          }
+        >
+          {resumo.estoqueCritico.length === 0 ? (
+            <p className="py-10 text-center text-sm text-[var(--muted)]">
+              Nenhum produto no limite. Defina o estoque mínimo em Produtos para monitorar aqui.
+            </p>
+          ) : (
+            <ul className="divide-y divide-[var(--border)]">
+              {resumo.estoqueCritico.map((p) => {
+                const zerado = p.saldo <= 0;
+                return (
+                  <li key={p.nome} className="flex items-center justify-between gap-3 py-2.5">
+                    <p className="min-w-0 truncate text-sm font-medium">{p.nome}</p>
+                    <div className="flex shrink-0 items-center gap-3 text-xs">
+                      <span className="tabular-nums text-[var(--muted)]">
+                        saldo <b className="text-[var(--foreground)]">{p.saldo}</b> · mín. {p.minimo}
+                      </span>
+                      <Badge tom={zerado ? "danger" : "warning"}>{zerado ? "zerado" : "no limite"}</Badge>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Bloco>
+      </div>
+
+      {/* Cadastros — atalhos de contagem. */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {cards.map((c, i) => (
           <Link key={c.titulo} href={c.href} className="animate-fade-up" style={{ animationDelay: `${i * 70}ms` }}>
@@ -76,99 +280,7 @@ export default async function Dashboard({
           </Link>
         ))}
       </div>
-
-      {/* Indicadores financeiros */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <FinCard titulo="Faturamento bruto" valor={faturado} sub="notas autorizadas no período" tom="success" />
-        <FinCard
-          titulo="Lucro bruto"
-          valor={resumo.lucroBruto}
-          sub={temCusto ? `margem ${resumo.margem.toFixed(1)}%` : "cadastre o custo dos produtos"}
-          tom="primary"
-        />
-        <FinCard titulo="Ticket médio" valor={resumo.ticketMedio} sub="por nota autorizada" />
-        <FinCard
-          titulo="Estoque (a custo)"
-          valor={resumo.valorEstoqueCusto}
-          sub={resumo.valorEstoqueVenda > 0 ? `${formatBRL(resumo.valorEstoqueVenda)} a preço de venda` : "produtos que controlam estoque"}
-        />
-      </div>
-
-      {resumo.itensSemCusto > 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-[var(--warning-soft,#fef3c7)] px-4 py-3 text-sm text-[var(--warning)]">
-          <span className="mt-0.5">⚠</span>
-          <p>
-            {resumo.itensSemCusto} item(ns) vendido(s) no período <b>sem preço de custo</b> cadastrado — o lucro
-            e a margem consideram só os itens com custo. Cadastre o custo em <b>Produtos</b> para apurar tudo.
-          </p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="relative overflow-hidden p-5 lg:col-span-1">
-          <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br from-[var(--primary)]/10 to-[var(--primary-2)]/10 blur-xl" />
-          <p className="text-sm text-[var(--muted)]">Custo da mercadoria vendida (CMV)</p>
-          <p className="mt-2 text-3xl font-semibold tracking-tight text-[var(--foreground)]">
-            <CountUp to={resumo.cmv} prefix="R$ " separator="." duration={1.6} delay={0.2} />
-          </p>
-          <p className="mt-1 text-xs text-[var(--muted)]">Custo dos produtos vendidos (itens com custo cadastrado).</p>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
-            <p className="text-sm font-semibold">Notas recentes</p>
-            <Link href="/notas" className="text-sm font-medium text-[var(--primary)] transition hover:underline">Ver todas</Link>
-          </div>
-          <ul className="divide-y divide-[var(--border)]">
-            {recentes.map((n, i) => (
-              <li
-                key={n.id}
-                className="flex animate-fade-up items-center justify-between px-5 py-3 transition-colors hover:bg-slate-50/70"
-                style={{ animationDelay: `${150 + i * 60}ms` }}
-              >
-                <div>
-                  <p className="text-sm font-medium">Nº {n.numero} · {n.clienteNome}</p>
-                  <p className="text-xs text-[var(--muted)]">{rotulo(TIPOS_NOTA, n.tipoNota)} · {formatData(n.emitidaEm)}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium">{formatBRL(n.valorTotal)}</span>
-                  <Badge tom={tomStatus[n.status]}>{n.status}</Badge>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
-
-      <Graficos serieMensal={resumo.serieMensal} distribuicaoStatus={resumo.distribuicaoStatus} topProdutosLucro={resumo.topProdutosLucro} />
     </div>
-  );
-}
-
-function FinCard({
-  titulo,
-  valor,
-  sub,
-  tom = "neutral",
-}: {
-  titulo: string;
-  valor: number;
-  sub?: string;
-  tom?: "neutral" | "success" | "primary";
-}) {
-  const cor = {
-    neutral: "text-[var(--foreground)]",
-    success: "text-[var(--success)]",
-    primary: "text-[var(--primary)]",
-  }[tom];
-  return (
-    <Card className="p-5">
-      <p className="text-sm text-[var(--muted)]">{titulo}</p>
-      <p className={"mt-2 text-2xl font-semibold tracking-tight tabular-nums " + cor}>
-        <CountUp to={valor} prefix="R$ " separator="." duration={1.4} delay={0.15} />
-      </p>
-      {sub && <p className="mt-1 text-xs text-[var(--muted)]">{sub}</p>}
-    </Card>
   );
 }
 
