@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { motion, AnimatePresence, type Variants } from "motion/react";
 import { Badge, Button, Card, DateBR, Field, Input, Select } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
@@ -11,7 +11,7 @@ import LightningLoader from "@/app/ui/LightningLoader";
 import { FEATURES } from "@/lib/features";
 import { formatBRL, formatData } from "@/lib/format";
 import {
-  listarUsuarios, criarUsuario, type UsuarioResumo,
+  listarUsuarios, criarUsuario, type UsuarioComEquipe,
   listarPlanos, salvarPlano, excluirPlano, type PlanoDados,
   listarBeneficios, type Beneficio,
   listarBeneficiosAdmin, salvarBeneficio, excluirBeneficio, type BeneficioDados,
@@ -95,45 +95,41 @@ export default function AdminPage() {
 }
 
 function AbaUsuarios() {
-  const [usuarios, setUsuarios] = useState<UsuarioResumo[]>([]);
+  const [usuarios, setUsuarios] = useState<UsuarioComEquipe[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [novo, setNovo] = useState(false);
   const [detalheId, setDetalheId] = useState<string | null>(null);
-  // Por padrão o painel lista só quem assina. Membros de equipe pertencem à
-  // empresa que os convidou e são geridos lá — aqui só sob demanda (suporte).
-  const [incluirEquipe, setIncluirEquipe] = useState(false);
+  // Titulares com a equipe expandida.
+  const [abertos, setAbertos] = useState<string[]>([]);
 
   async function recarregar() {
-    try { setUsuarios(await listarUsuarios(incluirEquipe)); }
+    try { setUsuarios(await listarUsuarios()); }
     finally { setCarregando(false); }
   }
 
-  useEffect(() => { void recarregar(); }, [incluirEquipe]);
+  useEffect(() => { void recarregar(); }, []);
+
+  function alternar(id: string) {
+    setAbertos((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  }
+
+  const totalMembros = usuarios.reduce((s, u) => s + u.membros.length, 0);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center justify-between">
         <p className="text-sm text-[var(--muted)]">
-          {usuarios.length} assinante(s){incluirEquipe && " + membros de equipe"}
+          {usuarios.length} assinante(s)
+          {totalMembros > 0 && <> · {totalMembros} membro(s) de equipe</>}
         </p>
-        <div className="flex items-center gap-4">
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--muted)]">
-            <input
-              type="checkbox"
-              checked={incluirEquipe}
-              onChange={(e) => { setCarregando(true); setIncluirEquipe(e.target.checked); }}
-              className="h-4 w-4 accent-[var(--primary)]"
-            />
-            Mostrar membros de equipe
-          </label>
-          <Button onClick={() => setNovo(true)}>+ Novo usuário</Button>
-        </div>
+        <Button onClick={() => setNovo(true)}>+ Novo usuário</Button>
       </div>
 
       <Card className="overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-slate-50 text-left text-xs uppercase tracking-wider text-[var(--muted)]">
+              <th className="w-10 px-4 py-2.5"></th>
               <th className="px-4 py-2.5">Usuário</th>
               <th className="px-4 py-2.5">Papel</th>
               <th className="px-4 py-2.5">Plano</th>
@@ -145,26 +141,82 @@ function AbaUsuarios() {
           </thead>
           <tbody>
             {carregando ? (
-              <tr><td colSpan={7} className="px-4 py-8"><LightningLoader texto="Carregando usuários…" /></td></tr>
+              <tr><td colSpan={8} className="px-4 py-8"><LightningLoader texto="Carregando usuários…" /></td></tr>
             ) : usuarios.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-[var(--muted)]">Nenhum usuário.</td></tr>
-            ) : usuarios.map((u) => (
-              <tr key={u.id} onClick={() => setDetalheId(u.id)} className="cursor-pointer border-b border-[var(--border)] last:border-0 hover:bg-slate-50">
-                <td className="px-4 py-3">
-                  <p className="flex items-center gap-2 font-medium">
-                    {u.nome || "—"}
-                    {u.equipe && <Badge tom="neutral">equipe</Badge>}
-                  </p>
-                  <p className="text-xs text-[var(--muted)]">{u.email}</p>
-                </td>
-                <td className="px-4 py-3"><Badge tom={u.role === "ADMIN" ? "primary" : u.role === "SUPORTE" ? "warning" : "neutral"}>{u.role}</Badge></td>
-                <td className="px-4 py-3">{u.plano ?? "—"}</td>
-                <td className="px-4 py-3">{u.statusLicenca ? <Badge tom={tomLicenca[u.statusLicenca] ?? "neutral"}>{u.statusLicenca}</Badge> : "—"}</td>
-                <td className="px-4 py-3 text-xs">{u.validadeEm ? formatData(u.validadeEm) : "—"}</td>
-                <td className="px-4 py-3 text-center">{u.empresas}</td>
-                <td className="px-4 py-3 text-center">{u.ativo ? "✓" : "✗"}</td>
-              </tr>
-            ))}
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-[var(--muted)]">Nenhum usuário.</td></tr>
+            ) : usuarios.map((u) => {
+              const aberto = abertos.includes(u.id);
+              return (
+                <Fragment key={u.id}>
+                  <tr onClick={() => setDetalheId(u.id)} className="cursor-pointer border-b border-[var(--border)] hover:bg-slate-50">
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      {u.membros.length > 0 && (
+                        <button
+                          onClick={() => alternar(u.id)}
+                          aria-label={aberto ? "Recolher equipe" : "Expandir equipe"}
+                          aria-expanded={aberto}
+                          title={`${u.membros.length} membro(s) de equipe`}
+                          className="flex h-6 w-6 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-[var(--primary)]"
+                        >
+                          <svg
+                            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                            className={"transition-transform " + (aberto ? "rotate-90" : "")}
+                          >
+                            <path d="m9 18 6-6-6-6" />
+                          </svg>
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="flex items-center gap-2 font-medium">
+                        {u.nome || "—"}
+                        {u.equipe && <Badge tom="neutral">equipe sem titular</Badge>}
+                        {u.membros.length > 0 && (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                            +{u.membros.length} na equipe
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">{u.email}</p>
+                    </td>
+                    <td className="px-4 py-3"><Badge tom={u.role === "ADMIN" ? "primary" : u.role === "SUPORTE" ? "warning" : "neutral"}>{u.role}</Badge></td>
+                    <td className="px-4 py-3">{u.plano ?? "—"}</td>
+                    <td className="px-4 py-3">{u.statusLicenca ? <Badge tom={tomLicenca[u.statusLicenca] ?? "neutral"}>{u.statusLicenca}</Badge> : "—"}</td>
+                    <td className="px-4 py-3 text-xs">{u.validadeEm ? formatData(u.validadeEm) : "—"}</td>
+                    <td className="px-4 py-3 text-center">{u.empresas}</td>
+                    <td className="px-4 py-3 text-center">{u.ativo ? "✓" : "✗"}</td>
+                  </tr>
+                  {aberto && u.membros.map((m) => (
+                    <tr
+                      key={`${u.id}:${m.id}`}
+                      onClick={() => setDetalheId(m.id)}
+                      className="cursor-pointer border-b border-[var(--border)] bg-slate-50/60 hover:bg-slate-100/70"
+                    >
+                      <td className="px-4 py-2.5"></td>
+                      <td className="py-2.5 pl-8 pr-4">
+                        <p className="flex items-center gap-2 font-medium">
+                          <span className="text-slate-300">└</span>
+                          {m.nome || "—"}
+                          <Badge tom="neutral">equipe</Badge>
+                        </p>
+                        <p className="pl-5 text-xs text-[var(--muted)]">
+                          {m.email}
+                          {m.empresasNomes.length > 0 && <> · {m.empresasNomes.join(", ")}</>}
+                        </p>
+                      </td>
+                      <td className="px-4 py-2.5"><Badge tom="neutral">{m.role}</Badge></td>
+                      {/* Plano, licença e validade do membro são os do titular. */}
+                      <td className="px-4 py-2.5 text-xs text-[var(--muted)]">{u.plano ?? "—"} <span className="text-slate-400">(do titular)</span></td>
+                      <td className="px-4 py-2.5">{u.statusLicenca ? <Badge tom={tomLicenca[u.statusLicenca] ?? "neutral"}>{u.statusLicenca}</Badge> : "—"}</td>
+                      <td className="px-4 py-2.5 text-xs">{u.validadeEm ? formatData(u.validadeEm) : "—"}</td>
+                      <td className="px-4 py-2.5 text-center">{m.empresas}</td>
+                      <td className="px-4 py-2.5 text-center">{m.ativo ? "✓" : "✗"}</td>
+                    </tr>
+                  ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </Card>

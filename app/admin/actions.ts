@@ -33,32 +33,42 @@ export type UsuarioResumo = {
   empresas: number;
   criadoEm: string;
   equipe: boolean;
+  // Empresas pelas quais o membro de equipe entrou (só preenchido p/ equipe).
+  empresasNomes: string[];
 };
 
-// Um usuário é "de equipe" quando foi convidado para a empresa de outra pessoa:
-// não assina nada (sem licença), não é dono de nenhuma empresa e não é staff.
-// Esses só devem aparecer nas configurações da empresa que os convidou — no
-// painel admin listamos só quem paga o plano.
-export async function listarUsuarios(incluirEquipe = false): Promise<UsuarioResumo[]> {
+// Assinante com a equipe dele pendurada — é assim que o painel lista.
+export type UsuarioComEquipe = UsuarioResumo & { membros: UsuarioResumo[] };
+
+// Quem assina é quem tem licença própria ou é dono do cadastro de alguma
+// empresa (Emitente.userId). Quem só foi convidado para a empresa de outro é
+// equipe: não aparece solto na lista, aparece dentro do titular dele.
+//
+// Atenção: o papel "dono" do AcessoEmpresa NÃO serve como critério — a empresa
+// pode ter vários donos operacionais, e um convidado promovido a dono continua
+// não sendo o assinante.
+export async function listarUsuarios(): Promise<UsuarioComEquipe[]> {
   await exigirAdmin();
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },
     include: {
       licenca: { include: { plano: true } },
       _count: { select: { acessos: true, empresas: true } },
-      acessos: { select: { papel: true } },
+      acessos: { select: { empresaId: true } },
     },
   });
-  const comFlag = users.map((u) => ({
-    ...u,
-    equipe:
-      u.role === "USER" &&
-      !u.licenca &&
-      u._count.empresas === 0 &&
-      !u.acessos.some((a) => a.papel === "dono") &&
-      u.acessos.length > 0,
-  }));
-  return (incluirEquipe ? comFlag : comFlag.filter((u) => !u.equipe)).map((u) => ({
+
+  // empresaId → titular (dono do cadastro) e nome, p/ ligar membro ao assinante.
+  const empresas = await prisma.emitente.findMany({
+    select: { id: true, userId: true, razaoSocial: true, nomeFantasia: true },
+  });
+  const titularDaEmpresa = new Map(empresas.map((e) => [e.id, e.userId]));
+  const nomeDaEmpresa = new Map(empresas.map((e) => [e.id, e.nomeFantasia || e.razaoSocial]));
+
+  const eEquipe = (u: (typeof users)[number]) =>
+    u.role === "USER" && !u.licenca && u._count.empresas === 0;
+
+  const resumo = (u: (typeof users)[number]): UsuarioResumo => ({
     id: u.id,
     email: u.email,
     nome: u.nome ?? "",
@@ -69,8 +79,36 @@ export async function listarUsuarios(incluirEquipe = false): Promise<UsuarioResu
     validadeEm: u.licenca?.validadeEm?.toISOString() ?? null,
     empresas: u._count.acessos,
     criadoEm: u.createdAt.toISOString(),
-    equipe: u.equipe,
-  }));
+    equipe: eEquipe(u),
+    empresasNomes: eEquipe(u)
+      ? [...new Set(u.acessos.map((a) => nomeDaEmpresa.get(a.empresaId)).filter((n): n is string => !!n))]
+      : [],
+  });
+
+  const assinantes = users.filter((u) => !eEquipe(u));
+  const membrosPorTitular = new Map<string, UsuarioResumo[]>();
+  // Membro sem titular identificável (empresa apagada, dado inconsistente) não
+  // pode sumir do painel — vira assinante solto, com a flag de equipe à mostra.
+  const orfaos: UsuarioResumo[] = [];
+
+  for (const u of users.filter(eEquipe)) {
+    const titulares = [...new Set(
+      u.acessos.map((a) => titularDaEmpresa.get(a.empresaId)).filter((id): id is string => !!id && id !== u.id),
+    )];
+    if (titulares.length === 0) {
+      orfaos.push(resumo(u));
+      continue;
+    }
+    // Acesso a empresas de titulares diferentes: aparece dentro de cada um.
+    for (const t of titulares) {
+      membrosPorTitular.set(t, [...(membrosPorTitular.get(t) ?? []), resumo(u)]);
+    }
+  }
+
+  return [
+    ...assinantes.map((u) => ({ ...resumo(u), membros: membrosPorTitular.get(u.id) ?? [] })),
+    ...orfaos.map((u) => ({ ...u, membros: [] })),
+  ];
 }
 
 export type UsuarioDetalhe = {

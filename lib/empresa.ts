@@ -79,11 +79,14 @@ export async function uidDaLicencaVigente(uid: string): Promise<string> {
   const empresaId = await empresaAtivaId();
   if (!empresaId) return uid;
 
-  const dono = await prisma.acessoEmpresa.findFirst({
-    where: { empresaId, papel: "dono" },
+  // O titular é o dono do cadastro da empresa (Emitente.userId), NÃO o papel
+  // "dono" do AcessoEmpresa: o app permite vários donos operacionais na mesma
+  // empresa, e um convidado promovido a dono continua não sendo quem assina.
+  const empresa = await prisma.emitente.findUnique({
+    where: { id: empresaId },
     select: { userId: true },
   });
-  return dono?.userId ?? uid;
+  return empresa?.userId ?? uid;
 }
 
 // Plano vigente do usuário (via licença) + quantas empresas ele já é DONO.
