@@ -12,6 +12,8 @@ import {
   Tabela,
   Textarea,
   EmptyState,
+  Paginacao,
+  paginar,
   formatBRL,
   type Coluna,
 } from "@/app/ui/primitives";
@@ -43,6 +45,11 @@ export default function EstoquePage() {
   const [busca, setBusca] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<StatusFiltro>("todos");
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
+  // A lista de produtos sem controle pagina por conta própria — não depende dos filtros acima.
+  const [paginaSem, setPaginaSem] = useState(1);
+  const [porPaginaSem, setPorPaginaSem] = useState(10);
   const [carregando, setCarregando] = useState(true);
   const [extratoId, setExtratoId] = useState<string | null>(null);
   const [ajusteId, setAjusteId] = useState<string | null>(null);
@@ -90,6 +97,9 @@ export default function EstoquePage() {
       );
     });
   }, [controlados, busca, filtroCategoria, filtroStatus]);
+
+  const pag = paginar(filtrados, pagina, porPagina);
+  const pagSem = paginar(semControle, paginaSem, porPaginaSem);
 
   const produtoAjuste = produtos.find((p) => p.id === ajusteId) ?? null;
   const produtoAtivar = produtos.find((p) => p.id === ativarId) ?? null;
@@ -168,13 +178,13 @@ export default function EstoquePage() {
           <Input
             placeholder="Buscar por nome, marca, código ou GTIN…"
             value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+            onChange={(e) => { setBusca(e.target.value); setPagina(1); }}
           />
           <Select
             placeholder="Todas as categorias"
             opcoes={categorias.map((c) => ({ value: c.id, label: c.nome }))}
             value={filtroCategoria}
-            onChange={(e) => setFiltroCategoria(e.target.value)}
+            onChange={(e) => { setFiltroCategoria(e.target.value); setPagina(1); }}
           />
           <Select
             opcoes={[
@@ -184,22 +194,33 @@ export default function EstoquePage() {
               { value: "zerado", label: "Zerados" },
             ]}
             value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value as StatusFiltro)}
+            onChange={(e) => { setFiltroStatus(e.target.value as StatusFiltro); setPagina(1); }}
           />
         </div>
         {carregando ? (
           <LightningLoader texto="Carregando estoque…" />
         ) : (
-          <Tabela
-            colunas={colunas}
-            dados={filtrados}
-            vazio={
-              <EmptyState
-                titulo="Nenhum produto no estoque"
-                descricao="Ative o controle de estoque nos produtos para acompanhar o saldo aqui."
-              />
-            }
-          />
+          <>
+            <Tabela
+              colunas={colunas}
+              dados={pag.fatia}
+              vazio={
+                <EmptyState
+                  titulo="Nenhum produto no estoque"
+                  descricao="Ative o controle de estoque nos produtos para acompanhar o saldo aqui."
+                />
+              }
+            />
+            <Paginacao
+              total={filtrados.length}
+              pagina={pag.pagina}
+              paginas={pag.paginas}
+              porPagina={porPagina}
+              onPagina={setPagina}
+              onPorPagina={(n) => { setPorPagina(n); setPagina(1); }}
+              rotulo="produto"
+            />
+          </>
         )}
       </Card>
 
@@ -213,7 +234,7 @@ export default function EstoquePage() {
             </div>
           </div>
           <ul className="divide-y divide-[var(--border)]">
-            {semControle.slice(0, 50).map((p) => (
+            {pagSem.fatia.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <p className="truncate font-medium">{p.nome}</p>
@@ -223,6 +244,15 @@ export default function EstoquePage() {
               </li>
             ))}
           </ul>
+          <Paginacao
+            total={semControle.length}
+            pagina={pagSem.pagina}
+            paginas={pagSem.paginas}
+            porPagina={porPaginaSem}
+            onPagina={setPaginaSem}
+            onPorPagina={(n) => { setPorPaginaSem(n); setPaginaSem(1); }}
+            rotulo="produto"
+          />
         </Card>
       )}
 

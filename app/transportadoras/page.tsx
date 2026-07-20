@@ -12,6 +12,8 @@ import {
   Select,
   Tabela,
   EmptyState,
+  Paginacao,
+  paginar,
   type Coluna,
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
@@ -41,6 +43,8 @@ const formVazio: Form = {
 export default function TransportadorasPage() {
   const [lista, setLista] = useState<Transportadora[]>([]);
   const [busca, setBusca] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
   const [modo, setModo] = useState<"novo" | "editar" | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Form>(formVazio);
@@ -69,6 +73,8 @@ export default function TransportadorasPage() {
         String(t.codigoInterno).includes(q),
     );
   }, [lista, busca]);
+
+  const pag = paginar(filtrados, pagina, porPagina);
 
   function abrirNovo() {
     setEditId(null);
@@ -164,19 +170,30 @@ export default function TransportadorasPage() {
           <Input
             placeholder="Buscar por nome, CPF/CNPJ ou código…"
             value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+            onChange={(e) => { setBusca(e.target.value); setPagina(1); }}
             className="max-w-md"
           />
         </div>
         {carregando ? (
           <LightningLoader texto="Carregando transportadoras…" />
         ) : (
-          <Tabela
-            colunas={colunas}
-            dados={filtrados}
-            onRowClick={abrirEdicao}
-            vazio={<EmptyState titulo="Nenhuma transportadora" descricao="Cadastre a primeira transportadora." />}
-          />
+          <>
+            <Tabela
+              colunas={colunas}
+              dados={pag.fatia}
+              onRowClick={abrirEdicao}
+              vazio={<EmptyState titulo="Nenhuma transportadora" descricao="Cadastre a primeira transportadora." />}
+            />
+            <Paginacao
+              total={filtrados.length}
+              pagina={pag.pagina}
+              paginas={pag.paginas}
+              porPagina={porPagina}
+              onPagina={setPagina}
+              onPorPagina={(n) => { setPorPagina(n); setPagina(1); }}
+              rotulo="transportadora"
+            />
+          </>
         )}
       </Card>
 

@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { motion, AnimatePresence, type Variants } from "motion/react";
-import { Badge, Button, Card, DateBR, Field, Input, Select } from "@/app/ui/primitives";
+import { Badge, Button, Card, DateBR, Field, Input, Paginacao, Select, paginar } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import StepperModal from "@/app/ui/StepperModal";
@@ -101,6 +101,8 @@ function AbaUsuarios() {
   const [detalheId, setDetalheId] = useState<string | null>(null);
   // Titulares com a equipe expandida.
   const [abertos, setAbertos] = useState<string[]>([]);
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
 
   async function recarregar() {
     try { setUsuarios(await listarUsuarios()); }
@@ -114,6 +116,10 @@ function AbaUsuarios() {
   }
 
   const totalMembros = usuarios.reduce((s, u) => s + u.membros.length, 0);
+
+  // Pagina só os titulares — os membros expandidos acompanham o titular e não
+  // contam como linhas da página.
+  const pag = paginar(usuarios, pagina, porPagina);
 
   return (
     <div className="space-y-4">
@@ -144,7 +150,7 @@ function AbaUsuarios() {
               <tr><td colSpan={8} className="px-4 py-8"><LightningLoader texto="Carregando usuários…" /></td></tr>
             ) : usuarios.length === 0 ? (
               <tr><td colSpan={8} className="px-4 py-10 text-center text-[var(--muted)]">Nenhum usuário.</td></tr>
-            ) : usuarios.map((u) => {
+            ) : pag.fatia.map((u) => {
               const aberto = abertos.includes(u.id);
               return (
                 <Fragment key={u.id}>
@@ -219,6 +225,15 @@ function AbaUsuarios() {
             })}
           </tbody>
         </table>
+        <Paginacao
+          total={usuarios.length}
+          pagina={pag.pagina}
+          paginas={pag.paginas}
+          porPagina={porPagina}
+          onPagina={setPagina}
+          onPorPagina={(n) => { setPorPagina(n); setPagina(1); }}
+          rotulo="usuário"
+        />
       </Card>
 
       <NovoUsuarioModal aberto={novo} onFechar={() => setNovo(false)} onCriado={() => { setNovo(false); recarregar(); }} />
@@ -746,6 +761,10 @@ function AbaBeneficios() {
   const [itens, setItens] = useState<Required<BeneficioDados>[]>([]);
   const [edit, setEdit] = useState<BeneficioDados | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
+
+  const pag = paginar(itens, pagina, porPagina);
 
   async function recarregar() {
     try { setItens(await listarBeneficiosAdmin()); }
@@ -779,7 +798,7 @@ function AbaBeneficios() {
               <tr><td colSpan={5} className="px-4 py-8"><LightningLoader texto="Carregando benefícios…" /></td></tr>
             ) : itens.length === 0 ? (
               <tr><td colSpan={5} className="px-4 py-10 text-center text-[var(--muted)]">Nenhum benefício.</td></tr>
-            ) : itens.map((b) => (
+            ) : pag.fatia.map((b) => (
               <tr key={b.id} onClick={() => setEdit(b)} className="cursor-pointer border-b border-[var(--border)] last:border-0 hover:bg-slate-50">
                 <td className="px-4 py-3">
                   <p className="font-medium">{b.nome}</p>
@@ -793,6 +812,15 @@ function AbaBeneficios() {
             ))}
           </tbody>
         </table>
+        <Paginacao
+          total={itens.length}
+          pagina={pag.pagina}
+          paginas={pag.paginas}
+          porPagina={porPagina}
+          onPagina={setPagina}
+          onPorPagina={(n) => { setPorPagina(n); setPagina(1); }}
+          rotulo="benefício"
+        />
       </Card>
 
       {edit && <BeneficioModal inicial={edit} onFechar={() => setEdit(null)} onSalvo={() => { setEdit(null); recarregar(); }} />}

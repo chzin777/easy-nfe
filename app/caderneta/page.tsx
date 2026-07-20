@@ -11,6 +11,8 @@ import {
   PageHeader,
   Tabela,
   EmptyState,
+  Paginacao,
+  paginar,
   type Coluna,
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
@@ -64,6 +66,8 @@ export default function CadernetaPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [busca, setBusca] = useState("");
   const [carregando, setCarregando] = useState(true);
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
 
   // modal de lançamento (novo / rápido)
   const [modalLanc, setModalLanc] = useState(false);
@@ -75,6 +79,7 @@ export default function CadernetaPage() {
   const [detalhe, setDetalhe] = useState<ContaFiado | null>(null);
   const [extrato, setExtrato] = useState<LancamentoFiado[]>([]);
   const [carregandoExtrato, setCarregandoExtrato] = useState(false);
+  const [paginaExtrato, setPaginaExtrato] = useState(1);
 
   async function recarregar() {
     try {
@@ -99,6 +104,11 @@ export default function CadernetaPage() {
       (c) => c.clienteNome.toLowerCase().includes(q) || c.documento.includes(q),
     );
   }, [contas, busca]);
+
+  // A tabela precisa de `id`; monta a lista já no formato antes de fatiar.
+  const linhas = useMemo(() => filtradas.map((c) => ({ ...c, id: c.clienteId })), [filtradas]);
+  const pag = paginar(linhas, pagina, porPagina);
+  const pagExtrato = paginar(extrato, paginaExtrato, 10);
 
   const devedores = contas.filter((c) => c.saldo > 0.005).length;
 
@@ -137,6 +147,9 @@ export default function CadernetaPage() {
 
   async function abrirDetalhe(clienteId: string) {
     const conta = contas.find((c) => c.clienteId === clienteId) ?? null;
+    // Só volta ao topo do extrato ao trocar de cliente — recarregar após excluir
+    // um lançamento mantém a página em que o usuário estava.
+    if (detalhe?.clienteId !== clienteId) setPaginaExtrato(1);
     setDetalhe(conta);
     setCarregandoExtrato(true);
     try {
@@ -228,23 +241,34 @@ export default function CadernetaPage() {
           <Input
             placeholder="Buscar por nome ou CPF/CNPJ…"
             value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+            onChange={(e) => { setBusca(e.target.value); setPagina(1); }}
           />
         </div>
         {carregando ? (
           <LightningLoader texto="Carregando caderneta…" />
         ) : (
-          <Tabela
-            colunas={colunas}
-            dados={filtradas.map((c) => ({ ...c, id: c.clienteId }))}
-            onRowClick={(c) => abrirDetalhe(c.clienteId)}
-            vazio={
-              <EmptyState
-                titulo="Caderneta vazia"
-                descricao="Registre a primeira compra fiado em “Novo lançamento”."
-              />
-            }
-          />
+          <>
+            <Tabela
+              colunas={colunas}
+              dados={pag.fatia}
+              onRowClick={(c) => abrirDetalhe(c.clienteId)}
+              vazio={
+                <EmptyState
+                  titulo="Caderneta vazia"
+                  descricao="Registre a primeira compra fiado em “Novo lançamento”."
+                />
+              }
+            />
+            <Paginacao
+              total={filtradas.length}
+              pagina={pag.pagina}
+              paginas={pag.paginas}
+              porPagina={porPagina}
+              onPagina={setPagina}
+              onPorPagina={(n) => { setPorPagina(n); setPagina(1); }}
+              rotulo="cliente"
+            />
+          </>
         )}
       </Card>
 
@@ -392,8 +416,9 @@ export default function CadernetaPage() {
             ) : extrato.length === 0 ? (
               <p className="py-6 text-center text-sm text-[var(--muted)]">Sem lançamentos.</p>
             ) : (
+              <>
               <ul className="divide-y divide-[var(--border)]">
-                {extrato.map((l) => (
+                {pagExtrato.fatia.map((l) => (
                   <li key={l.id} className="flex items-center gap-3 py-3">
                     <span
                       className={
@@ -430,6 +455,16 @@ export default function CadernetaPage() {
                   </li>
                 ))}
               </ul>
+              {/* Sem seletor de itens por página: o modal é estreito demais. */}
+              <Paginacao
+                total={extrato.length}
+                pagina={pagExtrato.pagina}
+                paginas={pagExtrato.paginas}
+                porPagina={10}
+                onPagina={setPaginaExtrato}
+                rotulo="lançamento"
+              />
+              </>
             )}
           </div>
         )}

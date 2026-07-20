@@ -12,6 +12,8 @@ import {
   Select,
   Tabela,
   EmptyState,
+  Paginacao,
+  paginar,
   type Coluna,
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
@@ -48,6 +50,8 @@ const formVazio: FornecedorInput = {
 export default function FornecedoresPage() {
   const [lista, setLista] = useState<Fornecedor[]>([]);
   const [busca, setBusca] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
   const [modo, setModo] = useState<"novo" | "editar" | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<FornecedorInput>(formVazio);
@@ -85,6 +89,8 @@ export default function FornecedoresPage() {
         String(f.codigoInterno).includes(q),
     );
   }, [lista, busca]);
+
+  const pag = paginar(filtrados, pagina, porPagina);
 
   function abrirNovo() {
     setEditId(null);
@@ -268,21 +274,32 @@ export default function FornecedoresPage() {
           <Input
             placeholder="Buscar por nome, CNPJ ou código…"
             value={busca}
-            onChange={(e) => { setBusca(e.target.value); setSelecionados([]); }}
+            onChange={(e) => { setBusca(e.target.value); setSelecionados([]); setPagina(1); }}
             className="max-w-md"
           />
         </div>
         {carregando ? (
           <LightningLoader texto="Carregando fornecedores…" />
         ) : (
-          <Tabela
-            colunas={colunas}
-            dados={filtrados}
-            onRowClick={abrirEdicao}
-            selecionados={selecionados}
-            onSelecionados={setSelecionados}
-            vazio={<EmptyState titulo="Nenhum fornecedor" descricao="Cadastre o primeiro fornecedor." />}
-          />
+          <>
+            <Tabela
+              colunas={colunas}
+              dados={pag.fatia}
+              onRowClick={abrirEdicao}
+              selecionados={selecionados}
+              onSelecionados={setSelecionados}
+              vazio={<EmptyState titulo="Nenhum fornecedor" descricao="Cadastre o primeiro fornecedor." />}
+            />
+            <Paginacao
+              total={filtrados.length}
+              pagina={pag.pagina}
+              paginas={pag.paginas}
+              porPagina={porPagina}
+              onPagina={setPagina}
+              onPorPagina={(n) => { setPorPagina(n); setPagina(1); }}
+              rotulo="fornecedor"
+            />
+          </>
         )}
       </Card>
 

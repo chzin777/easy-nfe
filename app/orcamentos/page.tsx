@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { PageHeader, Button, Badge, Input, Select, Tabela, EmptyState, SectionTitle, type Coluna } from "@/app/ui/primitives";
+import { PageHeader, Button, Badge, Card, Input, Select, Tabela, EmptyState, SectionTitle, Paginacao, paginar, type Coluna } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Tabs from "@/app/ui/Tabs";
 import { formatBRL } from "@/lib/format";
@@ -41,6 +41,8 @@ export default function OrcamentosPage() {
   const [view, setView] = useState<"lista" | "kanban">("lista");
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<string>("");
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
 
   const [editar, setEditar] = useState<OrcamentoCompleto | null>(null);
   const [criando, setCriando] = useState(false);
@@ -70,6 +72,8 @@ export default function OrcamentosPage() {
       (!q || o.clienteNome.toLowerCase().includes(q) || String(o.numero).includes(q)),
     );
   }, [orcamentos, busca, filtroStatus]);
+
+  const pag = paginar(filtrados, pagina, porPagina);
 
   const kpis = useMemo(() => {
     const abertos = orcamentos.filter((o) => !["fechado", "perdido", "cancelado"].includes(o.status));
@@ -119,11 +123,11 @@ export default function OrcamentosPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Input placeholder="Buscar cliente ou nº…" value={busca} onChange={(e) => setBusca(e.target.value)} className="w-56" />
+          <Input placeholder="Buscar cliente ou nº…" value={busca} onChange={(e) => { setBusca(e.target.value); setPagina(1); }} className="w-56" />
           <Select
             opcoes={[{ value: "", label: "Todos os status" }, ...Object.entries(STATUS_LABEL).map(([v, l]) => ({ value: v, label: l }))]}
             value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value)}
+            onChange={(e) => { setFiltroStatus(e.target.value); setPagina(1); }}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -136,12 +140,23 @@ export default function OrcamentosPage() {
       </div>
 
       {view === "lista" ? (
-        <Tabela
-          colunas={colunas}
-          dados={filtrados}
-          onRowClick={(o) => setDetalhe(o)}
-          vazio={<EmptyState titulo="Nenhum orçamento" descricao="Crie o primeiro orçamento para começar o funil." />}
-        />
+        <Card>
+          <Tabela
+            colunas={colunas}
+            dados={pag.fatia}
+            onRowClick={(o) => setDetalhe(o)}
+            vazio={<EmptyState titulo="Nenhum orçamento" descricao="Crie o primeiro orçamento para começar o funil." />}
+          />
+          <Paginacao
+            total={filtrados.length}
+            pagina={pag.pagina}
+            paginas={pag.paginas}
+            porPagina={porPagina}
+            onPagina={setPagina}
+            onPorPagina={(n) => { setPorPagina(n); setPagina(1); }}
+            rotulo="orçamento"
+          />
+        </Card>
       ) : (
         <Kanban orcamentos={orcamentos} onMover={mover} onAbrir={(o) => setDetalhe(o)} />
       )}

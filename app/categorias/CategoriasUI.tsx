@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/app/ui/Modal";
-import { Button, Input, Select } from "@/app/ui/primitives";
+import { Button, Input, Paginacao, Select, paginar } from "@/app/ui/primitives";
 import {
   listarCategorias,
   criarCategoria,
@@ -79,6 +79,9 @@ export function GerenciarCategoriasModal({
   const [editId, setEditId] = useState<string | null>(null);
   const [editNome, setEditNome] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  const [pagina, setPagina] = useState(1);
+
+  const pag = paginar(lista, pagina, 10);
 
   async function recarregar() {
     const l = await listarCategorias(tipo);
@@ -164,8 +167,9 @@ export function GerenciarCategoriasModal({
             Nenhuma categoria ainda. Crie a primeira acima.
           </p>
         ) : (
-          <ul className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
-            {lista.map((c) => (
+          <div className="rounded-lg border border-[var(--border)]">
+          <ul className="divide-y divide-[var(--border)]">
+            {pag.fatia.map((c) => (
               <li key={c.id} className="flex items-center gap-2 px-3 py-2.5">
                 {editId === c.id ? (
                   <>
@@ -201,6 +205,16 @@ export function GerenciarCategoriasModal({
               </li>
             ))}
           </ul>
+          {/* Sem seletor de itens por página: o modal é estreito demais. */}
+          <Paginacao
+            total={lista.length}
+            pagina={pag.pagina}
+            paginas={pag.paginas}
+            porPagina={10}
+            onPagina={setPagina}
+            rotulo="categoria"
+          />
+          </div>
         )}
         <p className="text-xs text-[var(--muted)]">
           Excluir uma categoria não apaga os {tipo === "produto" ? "produtos" : "clientes"} — eles apenas ficam sem categoria.

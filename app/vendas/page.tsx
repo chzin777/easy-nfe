@@ -12,6 +12,8 @@ import {
   Textarea,
   Tabela,
   EmptyState,
+  Paginacao,
+  paginar,
   formatBRL,
   formatData,
   type Coluna,
@@ -48,6 +50,8 @@ export default function VendasPage() {
   const [cancelarId, setCancelarId] = useState<string | null>(null);
   const [cancelando, setCancelando] = useState(false);
   const [detalhe, setDetalhe] = useState<VendaCompleta | null>(null);
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
 
   async function recarregar() {
     try {
@@ -68,6 +72,11 @@ export default function VendasPage() {
       })
       .reduce((s, v) => s + v.valorTotal, 0);
   }, [vendas]);
+
+  // A ordenação da Tabela só alcança as linhas que recebe; com paginação, a
+  // ordem padrão (mais recentes primeiro) precisa ser aplicada antes de fatiar.
+  const ordenadas = useMemo(() => [...vendas].sort((a, b) => b.numero - a.numero), [vendas]);
+  const pag = paginar(ordenadas, pagina, porPagina);
 
   async function confirmarCancelar() {
     if (!cancelarId) return;
@@ -139,13 +148,24 @@ export default function VendasPage() {
         {carregando ? (
           <LightningLoader texto="Carregando vendas…" />
         ) : (
-          <Tabela
-            colunas={colunas}
-            dados={vendas}
-            onRowClick={setDetalhe}
-            ordemInicial={{ chave: "numero", dir: "desc" }}
-            vazio={<EmptyState titulo="Nenhuma venda registrada" descricao="Registre a primeira venda sem nota para começar." />}
-          />
+          <>
+            <Tabela
+              colunas={colunas}
+              dados={pag.fatia}
+              onRowClick={setDetalhe}
+              ordemInicial={{ chave: "numero", dir: "desc" }}
+              vazio={<EmptyState titulo="Nenhuma venda registrada" descricao="Registre a primeira venda sem nota para começar." />}
+            />
+            <Paginacao
+              total={vendas.length}
+              pagina={pag.pagina}
+              paginas={pag.paginas}
+              porPagina={porPagina}
+              onPagina={setPagina}
+              onPorPagina={(n) => { setPorPagina(n); setPagina(1); }}
+              rotulo="venda"
+            />
+          </>
         )}
       </Card>
 

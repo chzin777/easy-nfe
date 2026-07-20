@@ -362,6 +362,7 @@ export function Tabela<T extends { id: string }>({
   onRowClick,
   selecionados,
   onSelecionados,
+  podeSelecionar,
   ordemInicial,
 }: {
   colunas: Coluna<T>[];
@@ -371,6 +372,10 @@ export function Tabela<T extends { id: string }>({
   // Presença de `onSelecionados` liga a coluna de checkboxes.
   selecionados?: string[];
   onSelecionados?: (ids: string[]) => void;
+  // Linhas que não podem ser selecionadas (registro fixo do sistema, por
+  // exemplo). Precisa ser declarado aqui, e não filtrado no handler da página:
+  // o "selecionar todos" tem que saber quem está fora da conta.
+  podeSelecionar?: (item: T) => boolean;
   ordemInicial?: Ordenacao;
 }) {
   const [ordem, setOrdem] = useState<Ordenacao | null>(ordemInicial ?? null);
@@ -400,9 +405,24 @@ export function Tabela<T extends { id: string }>({
     onSelecionados?.([...prox]);
   }
 
+  // Linhas que a página bloqueia (ex.: o cliente padrão do sistema) ficam de
+  // fora da conta do "selecionar todos" — senão ele nunca chega a "tudo
+  // marcado", trava no traço e o clique seguinte deixa de desmarcar.
   const idsVisiveis = lista.map((d) => d.id);
-  const todosMarcados = idsVisiveis.length > 0 && idsVisiveis.every((id) => selecao.has(id));
-  const algunsMarcados = !todosMarcados && idsVisiveis.some((id) => selecao.has(id));
+  const idsSelecionaveis = lista.filter((d) => podeSelecionar?.(d) ?? true).map((d) => d.id);
+  const todosMarcados = idsSelecionaveis.length > 0 && idsSelecionaveis.every((id) => selecao.has(id));
+  const algunsMarcados = !todosMarcados && idsSelecionaveis.some((id) => selecao.has(id));
+
+  // Com paginação, marcar/desmarcar tudo age só sobre a página visível: a
+  // seleção das outras páginas é preservada.
+  function alternarTodos() {
+    if (todosMarcados) {
+      const visiveis = new Set(idsVisiveis);
+      onSelecionados?.([...selecao].filter((id) => !visiveis.has(id)));
+    } else {
+      onSelecionados?.([...new Set([...selecao, ...idsSelecionaveis])]);
+    }
+  }
 
   if (dados.length === 0 && vazio) {
     return <>{vazio}</>;
@@ -419,9 +439,10 @@ export function Tabela<T extends { id: string }>({
                   type="checkbox"
                   aria-label="Selecionar todos"
                   checked={todosMarcados}
+                  disabled={idsSelecionaveis.length === 0}
                   ref={(el) => { if (el) el.indeterminate = algunsMarcados; }}
-                  onChange={() => onSelecionados?.(todosMarcados ? [] : idsVisiveis)}
-                  className="h-4 w-4 cursor-pointer accent-[var(--primary)]"
+                  onChange={alternarTodos}
+                  className="h-4 w-4 cursor-pointer accent-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-40"
                 />
               </th>
             )}
@@ -456,6 +477,7 @@ export function Tabela<T extends { id: string }>({
         <tbody>
           {lista.map((item, i) => {
             const marcado = selecao.has(item.id);
+            const selecionavelItem = podeSelecionar?.(item) ?? true;
             return (
               <motion.tr
                 key={item.id}
@@ -474,9 +496,11 @@ export function Tabela<T extends { id: string }>({
                     <input
                       type="checkbox"
                       aria-label="Selecionar linha"
-                      checked={marcado}
+                      checked={marcado && selecionavelItem}
+                      disabled={!selecionavelItem}
+                      title={selecionavelItem ? undefined : "Registro fixo do sistema — não pode ser alterado em massa"}
                       onChange={() => alternarItem(item.id)}
-                      className="h-4 w-4 cursor-pointer accent-[var(--primary)]"
+                      className="h-4 w-4 cursor-pointer accent-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </td>
                 )}

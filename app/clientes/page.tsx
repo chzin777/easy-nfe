@@ -13,6 +13,8 @@ import {
   Select,
   Tabela,
   EmptyState,
+  Paginacao,
+  paginar,
   type Coluna,
 } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
@@ -55,6 +57,8 @@ export default function ClientesPage() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [busca, setBusca] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
   const [modo, setModo] = useState<"novo" | "editar" | null>(null);
   const [importar, setImportar] = useState(false);
   const [gerenciarCat, setGerenciarCat] = useState(false);
@@ -97,6 +101,8 @@ export default function ClientesPage() {
     });
   }, [clientes, busca, filtroCategoria]);
 
+  const pag = paginar(filtrados, pagina, porPagina);
+
   function abrirNovo() {
     setEditId(null);
     setForm(formVazio);
@@ -138,8 +144,11 @@ export default function ClientesPage() {
     }
   }
 
-  // O Consumidor final (padrão) nunca entra na seleção — não pode ser excluído
-  // nem editado em massa.
+  // O Consumidor final (padrão) não entra na seleção — não pode ser excluído
+  // nem editado em massa. Quem tira ele da conta é a própria Tabela, via
+  // `podeSelecionar`: filtrar aqui deixava o "selecionar todos" preso no
+  // estado indeterminado, sem conseguir desmarcar. Este filtro fica como
+  // garantia de que nada o alcance por outro caminho.
   function marcar(ids: string[]) {
     const proibidos = new Set(clientes.filter((c) => c.padrao).map((c) => c.id));
     setSelecionados(ids.filter((id) => !proibidos.has(id)));
@@ -266,26 +275,38 @@ export default function ClientesPage() {
           <Input
             placeholder="Buscar por nome, CPF/CNPJ ou código…"
             value={busca}
-            onChange={(e) => { setBusca(e.target.value); setSelecionados([]); }}
+            onChange={(e) => { setBusca(e.target.value); setSelecionados([]); setPagina(1); }}
           />
           <Select
             placeholder="Todas as categorias"
             opcoes={categorias.map((c) => ({ value: c.id, label: c.nome }))}
             value={filtroCategoria}
-            onChange={(e) => { setFiltroCategoria(e.target.value); setSelecionados([]); }}
+            onChange={(e) => { setFiltroCategoria(e.target.value); setSelecionados([]); setPagina(1); }}
           />
         </div>
         {carregando ? (
           <LightningLoader texto="Carregando clientes…" />
         ) : (
-          <Tabela
-            colunas={colunas}
-            dados={filtrados}
-            onRowClick={abrirEdicao}
-            selecionados={selecionados}
-            onSelecionados={marcar}
-            vazio={<EmptyState titulo="Nenhum cliente" descricao="Cadastre o primeiro cliente." />}
-          />
+          <>
+            <Tabela
+              colunas={colunas}
+              dados={pag.fatia}
+              onRowClick={abrirEdicao}
+              selecionados={selecionados}
+              onSelecionados={marcar}
+            podeSelecionar={(c) => !c.padrao}
+              vazio={<EmptyState titulo="Nenhum cliente" descricao="Cadastre o primeiro cliente." />}
+            />
+            <Paginacao
+              total={filtrados.length}
+              pagina={pag.pagina}
+              paginas={pag.paginas}
+              porPagina={porPagina}
+              onPagina={setPagina}
+              onPorPagina={(n) => { setPorPagina(n); setPagina(1); }}
+              rotulo="cliente"
+            />
+          </>
         )}
       </Card>
 

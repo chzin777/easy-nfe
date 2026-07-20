@@ -13,6 +13,8 @@ import {
   Tabela,
   Textarea,
   EmptyState,
+  Paginacao,
+  paginar,
   formatBRL,
   type Coluna,
 } from "@/app/ui/primitives";
@@ -187,6 +189,8 @@ export default function ProdutosPage() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [busca, setBusca] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(10);
   const [modo, setModo] = useState<"novo" | "editar" | null>(null);
   const [importar, setImportar] = useState(false);
   const [bipagem, setBipagem] = useState(false);
@@ -246,6 +250,8 @@ export default function ProdutosPage() {
       );
     });
   }, [produtos, busca, filtroCategoria]);
+
+  const pag = paginar(filtrados, pagina, porPagina);
 
   function abrirNovo() {
     setEditId(null);
@@ -496,26 +502,37 @@ export default function ProdutosPage() {
           <Input
             placeholder="Buscar por nome, marca, código, GTIN ou NCM…"
             value={busca}
-            onChange={(e) => { setBusca(e.target.value); setSelecionados([]); }}
+            onChange={(e) => { setBusca(e.target.value); setSelecionados([]); setPagina(1); }}
           />
           <Select
             placeholder="Todas as categorias"
             opcoes={categorias.map((c) => ({ value: c.id, label: c.nome }))}
             value={filtroCategoria}
-            onChange={(e) => { setFiltroCategoria(e.target.value); setSelecionados([]); }}
+            onChange={(e) => { setFiltroCategoria(e.target.value); setSelecionados([]); setPagina(1); }}
           />
         </div>
         {carregando ? (
           <LightningLoader texto="Carregando produtos…" />
         ) : (
-          <Tabela
-            colunas={colunas}
-            dados={filtrados}
-            onRowClick={abrirEdicao}
-            selecionados={selecionados}
-            onSelecionados={setSelecionados}
-            vazio={<EmptyState titulo="Nenhum produto" descricao="Cadastre o primeiro produto para começar." />}
-          />
+          <>
+            <Tabela
+              colunas={colunas}
+              dados={pag.fatia}
+              onRowClick={abrirEdicao}
+              selecionados={selecionados}
+              onSelecionados={setSelecionados}
+              vazio={<EmptyState titulo="Nenhum produto" descricao="Cadastre o primeiro produto para começar." />}
+            />
+            <Paginacao
+              total={filtrados.length}
+              pagina={pag.pagina}
+              paginas={pag.paginas}
+              porPagina={porPagina}
+              onPagina={setPagina}
+              onPorPagina={(n) => { setPorPagina(n); setPagina(1); }}
+              rotulo="produto"
+            />
+          </>
         )}
       </Card>
 

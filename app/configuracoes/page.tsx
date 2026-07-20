@@ -1225,7 +1225,7 @@ function AbaCertificado() {
               <Linha rotulo="Válido até" valor={cert.validoAte ? `${formatData(cert.validoAte)} (${cert.diasRestantes} dias)` : "—"} />
             </dl>
             <div className="mt-4 flex items-center gap-3 border-t border-[var(--border)] pt-4">
-              <Button variante="secondary" onClick={() => { setErro(null); setEnvioAberto(true); }}>
+              <Button onClick={() => { setErro(null); setEnvioAberto(true); }}>
                 Substituir certificado
               </Button>
               <Button variante="ghost" className="text-[var(--danger)]" onClick={() => setConfirmarRemover(true)}>
