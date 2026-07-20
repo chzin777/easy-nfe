@@ -31,7 +31,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Licença bloqueada → tela cheia de bloqueio.
   if (estado?.bloqueado) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="flex min-h-dvh items-center justify-center bg-slate-50 px-4">
         <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-white p-8 text-center shadow-sm">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-[var(--danger)]">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
@@ -52,7 +52,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    // dvh (e não vh): no celular 100vh conta a barra de endereço, então quando
+    // ela recolhe sobra uma faixa do fundo do body no fim da página.
+    <div className="flex min-h-dvh flex-col">
       {estado?.aviso && (
         <AvisoLicenca
           competencia={estado.aviso.competencia}

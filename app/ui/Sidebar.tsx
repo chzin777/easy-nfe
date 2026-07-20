@@ -195,20 +195,28 @@ export default function Sidebar({
         )}
       </AnimatePresence>
 
+      {/* No desktop o <aside> estica junto com a coluna (self-stretch) e quem
+          gruda é o miolo. Antes o próprio aside era sticky com h-screen fixo:
+          como a linha do layout começa depois do banner de aviso de licença,
+          os 100vh transbordavam e sobrava uma faixa do fundo do body no fim
+          da página. No mobile ele é fixed inset-y-0, que já define a altura. */}
       <aside
         className={
-          "fixed inset-y-0 left-0 z-50 flex h-screen w-72 max-w-[85vw] shrink-0 flex-col bg-gradient-to-b from-[var(--sidebar)] to-[var(--sidebar-2)] text-slate-300 transition-transform duration-300 ease-in-out " +
-          "lg:sticky lg:top-0 lg:z-auto lg:w-64 lg:max-w-none lg:translate-x-0 " +
+          "fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] shrink-0 flex-col bg-gradient-to-b from-[var(--sidebar)] to-[var(--sidebar-2)] text-slate-300 transition-transform duration-300 ease-in-out " +
+          "lg:static lg:z-auto lg:h-auto lg:w-64 lg:max-w-none lg:translate-x-0 lg:self-stretch " +
           (aberto ? "translate-x-0 shadow-2xl" : "-translate-x-full")
         }
       >
         <button
           onClick={onFechar}
           aria-label="Fechar menu"
-          className="absolute right-3 top-3 rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
+          className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
         </button>
+
+      {/* Miolo: ocupa a tela e acompanha a rolagem sem esticar o documento. */}
+      <div className="flex h-full min-h-0 flex-col lg:sticky lg:top-0 lg:h-[100dvh]">
       <div className="flex items-center gap-3 px-5 pb-3 pt-5">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
@@ -323,6 +331,7 @@ export default function Sidebar({
             Sair
           </button>
         </form>
+      </div>
       </div>
     </aside>
     </>
