@@ -2,13 +2,15 @@
 
 import * as XLSX from "xlsx";
 import { baixarElementoPdf } from "@/app/ui/danfePdf";
+import type { LinhaExport } from "./dados";
 
 // Exportação por bloco do painel: cada indicador/gráfico exporta os PRÓPRIOS
 // dados (XLSX) ou a própria imagem (PDF). Exportar o painel inteiro daria um
 // arquivo que ninguém consegue usar em planilha.
-
-// Linha genérica: cabeçalho vem das chaves do primeiro objeto.
-export type LinhaExport = Record<string, string | number>;
+//
+// `num` e `LinhaExport` moram em ./dados (sem "use client") porque a página é
+// Server Component e precisa chamá-los durante o render.
+export type { LinhaExport };
 
 function carimbo(): string {
   // Data no nome do arquivo evita sobrescrever export anterior na pasta.
@@ -32,10 +34,4 @@ export function baixarXlsx(nome: string, linhas: LinhaExport[], aba = "Dados"): 
 
 export async function baixarPdf(elId: string, nome: string): Promise<void> {
   await baixarElementoPdf(elId, `${nome}-${carimbo()}`);
-}
-
-// Valor monetário para planilha: número puro, sem "R$" nem separador de
-// milhar — em texto o Excel não soma.
-export function num(v: number): number {
-  return Math.round(v * 100) / 100;
 }

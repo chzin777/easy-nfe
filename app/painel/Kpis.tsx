@@ -2,7 +2,6 @@
 
 import { Card } from "@/app/ui/primitives";
 import CountUp from "@/app/ui/CountUp";
-import { formatBRL } from "@/lib/format";
 
 // Um número sozinho não diz se está bom. Todo KPI sensível a período carrega a
 // variação contra o período anterior de mesma duração.
@@ -141,5 +140,3 @@ export function KpiSimples({
     </Card>
   );
 }
-
-export { formatBRL };

@@ -10,7 +10,7 @@ import Graficos from "./Graficos";
 import FiltrosDashboard from "./FiltrosDashboard";
 import Bloco from "./Bloco";
 import { KpiDestaque, KpiSimples } from "./Kpis";
-import { num } from "./exportar";
+import { num } from "./dados";
 
 const PERIODOS_VALIDOS = ["30d", "90d", "6m", "12m", "ano", "tudo"];
 

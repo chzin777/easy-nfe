@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import { formatBRL } from "@/lib/format";
 import Bloco from "./Bloco";
-import { num } from "./exportar";
+import { num } from "./dados";
 
 type Serie = { mes: string; notas: number; faturado: number; lucro: number };
 type Status = { status: string; qtd: number };
