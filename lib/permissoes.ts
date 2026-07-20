@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./prisma";
 import { lerSessaoCompleta } from "./auth";
-import { isAdminRole } from "./empresa";
+import { isAdminRole, uidDaLicencaVigente } from "./empresa";
 import { FEATURES } from "./features";
 
 const TODAS = FEATURES.map((f) => f.chave);
@@ -44,7 +44,9 @@ export async function featuresDoUsuario(): Promise<{ admin: boolean; features: S
   if (!s) return { admin: false, features: new Set() };
   if (isAdminRole(s.role)) return { admin: true, features: new Set(TODAS) };
 
-  const lic = await prisma.licenca.findUnique({ where: { userId: s.uid }, select: { planoId: true } });
+  // Membro de equipe herda o plano do dono da empresa que ele acessa.
+  const pagante = await uidDaLicencaVigente(s.uid);
+  const lic = await prisma.licenca.findUnique({ where: { userId: pagante }, select: { planoId: true } });
   if (!lic?.planoId) return { admin: false, features: new Set() };
   return { admin: false, features: await featuresDoPlano(lic.planoId) };
 }

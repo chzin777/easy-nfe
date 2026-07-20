@@ -32,15 +32,33 @@ export type UsuarioResumo = {
   validadeEm: string | null;
   empresas: number;
   criadoEm: string;
+  equipe: boolean;
 };
 
-export async function listarUsuarios(): Promise<UsuarioResumo[]> {
+// Um usuário é "de equipe" quando foi convidado para a empresa de outra pessoa:
+// não assina nada (sem licença), não é dono de nenhuma empresa e não é staff.
+// Esses só devem aparecer nas configurações da empresa que os convidou — no
+// painel admin listamos só quem paga o plano.
+export async function listarUsuarios(incluirEquipe = false): Promise<UsuarioResumo[]> {
   await exigirAdmin();
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },
-    include: { licenca: { include: { plano: true } }, _count: { select: { acessos: true } } },
+    include: {
+      licenca: { include: { plano: true } },
+      _count: { select: { acessos: true, empresas: true } },
+      acessos: { select: { papel: true } },
+    },
   });
-  return users.map((u) => ({
+  const comFlag = users.map((u) => ({
+    ...u,
+    equipe:
+      u.role === "USER" &&
+      !u.licenca &&
+      u._count.empresas === 0 &&
+      !u.acessos.some((a) => a.papel === "dono") &&
+      u.acessos.length > 0,
+  }));
+  return (incluirEquipe ? comFlag : comFlag.filter((u) => !u.equipe)).map((u) => ({
     id: u.id,
     email: u.email,
     nome: u.nome ?? "",
@@ -51,6 +69,7 @@ export async function listarUsuarios(): Promise<UsuarioResumo[]> {
     validadeEm: u.licenca?.validadeEm?.toISOString() ?? null,
     empresas: u._count.acessos,
     criadoEm: u.createdAt.toISOString(),
+    equipe: u.equipe,
   }));
 }
 

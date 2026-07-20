@@ -99,19 +99,35 @@ function AbaUsuarios() {
   const [carregando, setCarregando] = useState(true);
   const [novo, setNovo] = useState(false);
   const [detalheId, setDetalheId] = useState<string | null>(null);
+  // Por padrão o painel lista só quem assina. Membros de equipe pertencem à
+  // empresa que os convidou e são geridos lá — aqui só sob demanda (suporte).
+  const [incluirEquipe, setIncluirEquipe] = useState(false);
 
   async function recarregar() {
-    try { setUsuarios(await listarUsuarios()); }
+    try { setUsuarios(await listarUsuarios(incluirEquipe)); }
     finally { setCarregando(false); }
   }
-   
-  useEffect(() => { void recarregar(); }, []);
+
+  useEffect(() => { void recarregar(); }, [incluirEquipe]);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-[var(--muted)]">{usuarios.length} usuário(s) cadastrado(s)</p>
-        <Button onClick={() => setNovo(true)}>+ Novo usuário</Button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-[var(--muted)]">
+          {usuarios.length} assinante(s){incluirEquipe && " + membros de equipe"}
+        </p>
+        <div className="flex items-center gap-4">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--muted)]">
+            <input
+              type="checkbox"
+              checked={incluirEquipe}
+              onChange={(e) => { setCarregando(true); setIncluirEquipe(e.target.checked); }}
+              className="h-4 w-4 accent-[var(--primary)]"
+            />
+            Mostrar membros de equipe
+          </label>
+          <Button onClick={() => setNovo(true)}>+ Novo usuário</Button>
+        </div>
       </div>
 
       <Card className="overflow-hidden">
@@ -135,7 +151,10 @@ function AbaUsuarios() {
             ) : usuarios.map((u) => (
               <tr key={u.id} onClick={() => setDetalheId(u.id)} className="cursor-pointer border-b border-[var(--border)] last:border-0 hover:bg-slate-50">
                 <td className="px-4 py-3">
-                  <p className="font-medium">{u.nome || "—"}</p>
+                  <p className="flex items-center gap-2 font-medium">
+                    {u.nome || "—"}
+                    {u.equipe && <Badge tom="neutral">equipe</Badge>}
+                  </p>
                   <p className="text-xs text-[var(--muted)]">{u.email}</p>
                 </td>
                 <td className="px-4 py-3"><Badge tom={u.role === "ADMIN" ? "primary" : u.role === "SUPORTE" ? "warning" : "neutral"}>{u.role}</Badge></td>

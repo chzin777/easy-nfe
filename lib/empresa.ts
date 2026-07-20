@@ -66,6 +66,26 @@ export async function exigirEmpresa(): Promise<string> {
   return id;
 }
 
+// Quem paga a conta que rege este usuário.
+//
+// Membro de equipe não assina nada: ele foi convidado para a empresa de outra
+// pessoa. Então plano, features e bloqueio por inadimplência dele têm que sair
+// da licença do DONO da empresa ativa — senão a equipe fica sem nenhuma feature
+// (e, pior, continuaria emitindo com o dono bloqueado por fatura atrasada).
+export async function uidDaLicencaVigente(uid: string): Promise<string> {
+  const propria = await prisma.licenca.findUnique({ where: { userId: uid }, select: { userId: true } });
+  if (propria) return propria.userId;
+
+  const empresaId = await empresaAtivaId();
+  if (!empresaId) return uid;
+
+  const dono = await prisma.acessoEmpresa.findFirst({
+    where: { empresaId, papel: "dono" },
+    select: { userId: true },
+  });
+  return dono?.userId ?? uid;
+}
+
 // Plano vigente do usuário (via licença) + quantas empresas ele já é DONO.
 // Usado p/ limitar quantas empresas próprias o usuário pode cadastrar.
 export async function limiteEmpresasDoUsuario(
@@ -87,7 +107,11 @@ export async function limiteEquipe(
   uid: string,
   empresaId: string,
 ): Promise<{ limite: number; usados: number; podeAdicionar: boolean }> {
-  const licenca = await prisma.licenca.findUnique({ where: { userId: uid }, include: { plano: true } });
+  // O limite é o do plano de quem paga (o dono), não o de quem está olhando.
+  const licenca = await prisma.licenca.findUnique({
+    where: { userId: await uidDaLicencaVigente(uid) },
+    include: { plano: true },
+  });
   const limite = licenca?.plano?.limiteUsuarios ?? 1;
   // Conta membros (papel != dono) com acesso à empresa.
   const usados = await prisma.acessoEmpresa.count({ where: { empresaId, papel: { not: "dono" } } });
