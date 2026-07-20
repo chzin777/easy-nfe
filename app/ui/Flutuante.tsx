@@ -43,10 +43,28 @@ export default function Flutuante({
 
   if (!aberto || !rect) return null;
 
+  // Como o painel é position:fixed, o que passar do viewport fica inacessível
+  // (rolar a página só reposiciona a âncora). Então: escolhe o lado com mais
+  // espaço e limita a altura ao que sobra, deixando o próprio painel rolar.
+  const vh = typeof window !== "undefined" ? window.innerHeight : 0;
+  const margem = 12;
+  const abaixo = vh - rect.bottom - margem;
+  const acima = rect.top - margem;
+  const paraCima = abaixo < 240 && acima > abaixo;
+
   return createPortal(
     <div
       ref={panelRef}
-      style={{ position: "fixed", left: rect.left, top: rect.bottom + 4, width: rect.width, zIndex: 1000 }}
+      className="overscroll-contain"
+      style={{
+        position: "fixed",
+        left: rect.left,
+        width: rect.width,
+        zIndex: 1000,
+        maxHeight: Math.max(160, paraCima ? acima : abaixo),
+        overflowY: "auto",
+        ...(paraCima ? { bottom: vh - rect.top + 4 } : { top: rect.bottom + 4 }),
+      }}
     >
       {children}
     </div>,

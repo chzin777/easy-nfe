@@ -71,7 +71,16 @@ export type EmitirInput = {
   tipoNota: string;
   modFrete: string; // 0-4, 9 (NT 2016.002)
   infCpl?: string;
-  itens: { produtoId: string; quantidade: number; descTipo?: DescontoTipo; descValor?: number }[];
+  // precoUnitario: preço praticado nesta nota. Ausente = usa o do cadastro.
+  // salvarPreco: além de emitir com o novo preço, grava no cadastro do produto.
+  itens: {
+    produtoId: string;
+    quantidade: number;
+    descTipo?: DescontoTipo;
+    descValor?: number;
+    precoUnitario?: number;
+    salvarPreco?: boolean;
+  }[];
   // Desconto geral da nota (rateado entre os itens). % ou R$.
   descontoNota?: { tipo: DescontoTipo; valor: number };
   // Emissão em contingência SVC (só NF-e 55), quando a autorizadora da UF está fora.
@@ -236,6 +245,14 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     let numero = nfce ? empresa.proximoNumeroNFCe : empresa.proximoNumero;
     const serieDoc = nfce ? empresa.serieNFCe : empresa.serie;
 
+    // Preço da nota: o operador pode sobrescrever na hora da emissão (mercado
+    // com preço volátil). Só aceita valor positivo e finito — qualquer outra
+    // coisa cai no preço do cadastro.
+    const precoDoItem = (i: EmitirInput["itens"][number], padrao: number) =>
+      typeof i.precoUnitario === "number" && Number.isFinite(i.precoUnitario) && i.precoUnitario > 0
+        ? Number(i.precoUnitario.toFixed(2))
+        : padrao;
+
     const itensNFe = input.itens.map((i) => {
       const p = porId.get(i.produtoId);
       if (!p) throw new Error("Produto não encontrado na empresa.");
@@ -247,7 +264,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
         cfop: p.cfopPadrao || "5102",
         uCom: p.unidade,
         qCom: i.quantidade,
-        vUnCom: Number(p.preco),
+        vUnCom: precoDoItem(i, Number(p.preco)),
         vDesc: 0,
         orig: p.origem,
         cest: p.cest || undefined,
@@ -460,6 +477,22 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           avisoPersistencia = `Nota autorizada e gravada, mas falhou ao baixar o estoque: ${msg}`;
+        }
+        // Preços ajustados na emissão e marcados p/ salvar viram o novo preço do
+        // cadastro. Falha aqui também não invalida a nota.
+        try {
+          const paraSalvar = input.itens.filter(
+            (i, idx) => i.salvarPreco && itensNFe[idx].vUnCom !== Number(porId.get(i.produtoId)?.preco),
+          );
+          for (const i of paraSalvar) {
+            const idx = input.itens.indexOf(i);
+            await prisma.produto.updateMany({
+              where: { id: i.produtoId, empresaId },
+              data: { preco: itensNFe[idx].vUnCom },
+            });
+          }
+        } catch {
+          // Preço no cadastro é conveniência — nunca derruba a emissão.
         }
       }
       // Envio por WhatsApp ao cliente — só quando autorizada. Roda após a

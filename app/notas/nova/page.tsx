@@ -17,7 +17,14 @@ import { TIPOS_NOTA, MODALIDADES_FRETE, rotulo } from "@/lib/mock-data";
 import type { ItemNota, Cliente, Produto, Transportadora } from "@/lib/types";
 
 // Item da nota com desconto opcional (não persiste no tipo base).
-type LinhaItem = ItemNota & { descTipo: DescontoTipo; descValor: number };
+// precoOriginal guarda o preço do cadastro p/ mostrar "desfazer" quando o
+// operador ajusta o preço na hora; salvarPreco pede p/ gravar o novo no produto.
+type LinhaItem = ItemNota & {
+  descTipo: DescontoTipo;
+  descValor: number;
+  precoOriginal: number;
+  salvarPreco: boolean;
+};
 
 // Desconto aplicado a um valor base (R$ ou %), limitado ao próprio valor.
 function calcDesc(base: number, tipo: DescontoTipo, valor: number): number {
@@ -38,7 +45,8 @@ import TourEmissao from "./TourEmissao";
 import { listarProdutos } from "@/app/produtos/actions";
 import { listarTransportadoras } from "@/app/transportadoras/actions";
 import { obterCasasDecimaisQtd, obterPadroesEmissao, type PadroesEmissao } from "@/app/configuracoes/actions";
-import { QtyStepper, DescInput } from "@/app/ui/ItensFields";
+import { QtyStepper, DescInput, PrecoInput } from "@/app/ui/ItensFields";
+import { lerRascunho, limparRascunho, salvarRascunho, reidratarItens, type Rascunho } from "./rascunho";
 
 // Arredonda para N casas decimais (evita lixo de ponto flutuante).
 function arred(v: number, casas: number) {
@@ -84,6 +92,9 @@ export default function NovaNotaPage() {
   const [formKey, setFormKey] = useState(0);
   // Passo em que o Stepper monta (1 ao recomeçar; 4 ao voltar de uma correção).
   const [passoEmissao, setPassoEmissao] = useState(1);
+  // Rascunho encontrado ao abrir a página (emissão interrompida). Enquanto ele
+  // estiver pendente de resposta, nada é salvo por cima.
+  const [rascunho, setRascunho] = useState<Rascunho | null>(null);
 
   // Limpa todos os campos e volta ao passo 1 (mantém listas já carregadas).
   function resetarFormulario() {
@@ -119,9 +130,61 @@ export default function NovaNotaPage() {
       setModFrete(pad.modFretePadrao);
       setInfo(pad.infoComplementarPadrao);
       if (pad.clientePadraoId) setClienteId(pad.clientePadraoId);
+      // Emissão interrompida antes de concluir: oferece retomar (com os dados
+      // do catálogo já atualizados). Só depois da resposta o auto-save religa.
+      setRascunho(lerRascunho());
       setCarregando(false);
     })();
   }, []);
+
+  // Auto-save do que já foi montado. Não salva enquanto carrega, enquanto há um
+  // rascunho aguardando resposta, nem depois de emitir (aí o rascunho morre).
+  useEffect(() => {
+    if (carregando || rascunho || emitindo || resultado) return;
+    if (itens.length === 0) {
+      limparRascunho();
+      return;
+    }
+    salvarRascunho({
+      tipoNota,
+      clienteId,
+      transportadoraId,
+      modFrete,
+      info,
+      descNota,
+      itens: itens.map((i) => ({
+        produtoId: i.produtoId,
+        quantidade: i.quantidade,
+        descTipo: i.descTipo,
+        descValor: i.descValor,
+        precoAjustado: i.precoUnitario !== i.precoOriginal ? i.precoUnitario : undefined,
+        salvarPreco: i.salvarPreco,
+        precoVisto: i.precoOriginal,
+      })),
+    });
+  }, [carregando, rascunho, emitindo, resultado, tipoNota, clienteId, transportadoraId, modFrete, info, descNota, itens]);
+
+  // Retoma o rascunho reidratando os itens contra o catálogo atual.
+  function retomarRascunho() {
+    if (!rascunho) return;
+    const { itens: recuperados } = reidratarItens(rascunho.itens, produtos);
+    setTipoNota(rascunho.tipoNota);
+    if (clientes.some((c) => c.id === rascunho.clienteId)) setClienteId(rascunho.clienteId);
+    if (transportadoras.some((t) => t.id === rascunho.transportadoraId)) setTransportadoraId(rascunho.transportadoraId);
+    setModFrete(rascunho.modFrete);
+    setInfo(rascunho.info);
+    setDescNota(rascunho.descNota);
+    setItens(recuperados);
+    setRascunho(null);
+    // Volta direto para o passo de produtos — é onde a conferência acontece.
+    setPassoEmissao(pularDest ? 1 : 2);
+    setFormKey((k) => k + 1);
+  }
+
+  function descartarRascunho() {
+    limparRascunho();
+    setRascunho(null);
+  }
 
 
   const totais = useMemo(() => {
@@ -153,7 +216,16 @@ export default function NovaNotaPage() {
           i.produtoId === prod.id ? { ...i, quantidade: arred(i.quantidade + q, casas) } : i,
         );
       }
-      return [...lista, { produtoId: prod.id, nome: prod.nome, quantidade: q, precoUnitario: prod.preco, descTipo: "valor" as DescontoTipo, descValor: 0 }];
+      return [...lista, {
+        produtoId: prod.id,
+        nome: prod.nome,
+        quantidade: q,
+        precoUnitario: prod.preco,
+        precoOriginal: prod.preco,
+        salvarPreco: false,
+        descTipo: "valor" as DescontoTipo,
+        descValor: 0,
+      }];
     });
     setProdutoSel("");
     setQtd(1);
@@ -166,6 +238,24 @@ export default function NovaNotaPage() {
       lista.map((i) =>
         i.produtoId === produtoId ? { ...i, quantidade: Math.max(menorQtd, arred(valor, casas)) } : i,
       ),
+    );
+  }
+
+  // Preço praticado nesta nota. Zerar volta ao preço do cadastro (e some a
+  // marcação de "salvar no cadastro", que não faria sentido sem alteração).
+  function definirPreco(produtoId: string, valor: number) {
+    setItens((lista) =>
+      lista.map((i) => {
+        if (i.produtoId !== produtoId) return i;
+        const preco = Math.max(0, arred(valor, 2));
+        return { ...i, precoUnitario: preco, salvarPreco: preco === i.precoOriginal ? false : i.salvarPreco };
+      }),
+    );
+  }
+
+  function alternarSalvarPreco(produtoId: string) {
+    setItens((lista) =>
+      lista.map((i) => (i.produtoId === produtoId ? { ...i, salvarPreco: !i.salvarPreco } : i)),
     );
   }
 
@@ -187,6 +277,13 @@ export default function NovaNotaPage() {
       setResultado({ ok: false, erro: "Escolha uma transportadora para a modalidade de frete selecionada." });
       return;
     }
+    // Preço zerado quase sempre é campo esvaziado sem querer. Barra aqui em vez
+    // de deixar o servidor cair no preço do cadastro sem o operador perceber.
+    const semPreco = itens.find((i) => !(i.precoUnitario > 0));
+    if (semPreco) {
+      setResultado({ ok: false, erro: `Informe o preço unitário de "${semPreco.nome}".` });
+      return;
+    }
 
     const input: EmitirInput = {
       clienteId,
@@ -199,6 +296,8 @@ export default function NovaNotaPage() {
         quantidade: i.quantidade,
         descTipo: i.descTipo,
         descValor: i.descValor || 0,
+        precoUnitario: i.precoUnitario,
+        salvarPreco: i.salvarPreco,
       })),
       descontoNota: descNota.valor > 0 ? descNota : undefined,
       contingencia,
@@ -208,6 +307,8 @@ export default function NovaNotaPage() {
     setResultado(null);
     setNotaEmitida(null);
     const r = await emitirNota(input);
+    // Emitiu: o rascunho cumpriu o papel e não pode ressuscitar depois.
+    if (r.ok && r.autorizada) limparRascunho();
     // Autorizada e gravada: abre a visualização do DANFE p/ baixar PDF/XML.
     if (r.ok && r.autorizada && r.notaId) {
       const nota = await obterNota(r.notaId);
@@ -256,6 +357,8 @@ export default function NovaNotaPage() {
         titulo="Emitir nova nota fiscal"
         subtitulo="Monte a nota em etapas: tipo, produtos, transporte e finalização."
       />
+
+      {rascunho && <RetomarRascunho rascunho={rascunho} produtos={produtos} clientes={clientes} onRetomar={retomarRascunho} onDescartar={descartarRascunho} />}
 
       {carregando ? (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-10">
@@ -367,7 +470,7 @@ export default function NovaNotaPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate font-medium">{i.nome}</p>
-                        <p className="text-xs text-[var(--muted)]">{formatBRL(i.precoUnitario)}/un</p>
+                        <p className="text-xs text-[var(--muted)]">preço unitário</p>
                       </div>
                       <button
                         onClick={() => removerItem(i.produtoId)}
@@ -377,6 +480,25 @@ export default function NovaNotaPage() {
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
                       </button>
                     </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-xs text-[var(--muted)]">Preço un.</span>
+                      <PrecoInput
+                        valor={i.precoUnitario}
+                        original={i.precoOriginal}
+                        onChange={(v) => definirPreco(i.produtoId, v)}
+                      />
+                    </div>
+                    {i.precoUnitario !== i.precoOriginal && (
+                      <label className="mt-1.5 flex cursor-pointer items-center justify-end gap-1.5 text-[11px] text-[var(--muted)]">
+                        <input
+                          type="checkbox"
+                          checked={i.salvarPreco}
+                          onChange={() => alternarSalvarPreco(i.produtoId)}
+                          className="h-3.5 w-3.5 accent-[var(--primary)]"
+                        />
+                        salvar este preço no cadastro
+                      </label>
+                    )}
                     <div className="mt-3 flex items-center justify-between">
                       <QtyStepper valor={i.quantidade} onChange={(v) => definirQtd(i.produtoId, v)} casas={casas} />
                       <span className="text-base font-semibold">
@@ -431,7 +553,27 @@ export default function NovaNotaPage() {
                           <QtyStepper valor={i.quantidade} onChange={(v) => definirQtd(i.produtoId, v)} casas={casas} compacto />
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right">{formatBRL(i.precoUnitario)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col items-end gap-1">
+                          <PrecoInput
+                            valor={i.precoUnitario}
+                            original={i.precoOriginal}
+                            onChange={(v) => definirPreco(i.produtoId, v)}
+                            compacto
+                          />
+                          {i.precoUnitario !== i.precoOriginal && (
+                            <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-[var(--muted)]">
+                              <input
+                                type="checkbox"
+                                checked={i.salvarPreco}
+                                onChange={() => alternarSalvarPreco(i.produtoId)}
+                                className="h-3 w-3 accent-[var(--primary)]"
+                              />
+                              salvar no cadastro
+                            </label>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-center">
                           <DescInput
@@ -763,6 +905,73 @@ export default function NovaNotaPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// Convite para retomar uma emissão interrompida. Mostra o que será recuperado
+// já reidratado contra o catálogo atual — inclusive avisando quando um preço
+// mudou ou um produto sumiu desde que o rascunho foi salvo.
+function RetomarRascunho({
+  rascunho,
+  produtos,
+  clientes,
+  onRetomar,
+  onDescartar,
+}: {
+  rascunho: Rascunho;
+  produtos: Produto[];
+  clientes: Cliente[];
+  onRetomar: () => void;
+  onDescartar: () => void;
+}) {
+  const { itens, descartados, precosMudaram } = reidratarItens(rascunho.itens, produtos);
+  const total = itens.reduce(
+    (s, i) => s + (i.quantidade * i.precoUnitario - calcDesc(i.quantidade * i.precoUnitario, i.descTipo, i.descValor)),
+    0,
+  );
+  const cliente = clientes.find((c) => c.id === rascunho.clienteId);
+  const quando = new Date(rascunho.em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+  // Nada sobrou do rascunho (produtos excluídos ou troca de empresa): não há
+  // o que retomar, descarta em silêncio.
+  const vazio = itens.length === 0;
+  useEffect(() => {
+    if (vazio) onDescartar();
+  }, [vazio, onDescartar]);
+  if (vazio) return null;
+
+  return (
+    <div className="animate-fade-up rounded-xl border border-[var(--primary)]/30 bg-[var(--primary-soft)]/50 p-4 sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 font-semibold">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--primary)]">
+              <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
+            </svg>
+            Continuar de onde parou?
+          </p>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Emissão iniciada em {quando} · {itens.length} {itens.length === 1 ? "item" : "itens"} ·{" "}
+            <span className="font-medium text-[var(--foreground)]">{formatBRL(total)}</span>
+            {cliente && <> · {cliente.nome}</>}
+          </p>
+          {(precosMudaram > 0 || descartados > 0) && (
+            <ul className="mt-2 space-y-0.5 text-xs text-[var(--muted)]">
+              {precosMudaram > 0 && (
+                <li>{precosMudaram} {precosMudaram === 1 ? "item teve o preço atualizado" : "itens tiveram o preço atualizado"} pelo cadastro.</li>
+              )}
+              {descartados > 0 && (
+                <li>{descartados} {descartados === 1 ? "item não está mais disponível e será removido" : "itens não estão mais disponíveis e serão removidos"}.</li>
+              )}
+            </ul>
+          )}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button variante="secondary" onClick={onDescartar}>Começar do zero</Button>
+          <Button onClick={onRetomar}>Continuar</Button>
+        </div>
+      </div>
     </div>
   );
 }
