@@ -116,14 +116,15 @@ export async function listarUsuarios(): Promise<UsuarioComEquipe[]> {
 // quanto cabe a cada sócio (rateio configurável, por padrão 50/50).
 // ----------------------------------------------------------------------------
 export type ReceitaKpis = {
-  // Receita recorrente mensal — soma dos planos das licenças ATIVAS, com desconto
-  // e normalizada p/ mês (plano anual conta /12).
+  // Receita recorrente mensal — soma dos planos das licenças ATIVAS de assinantes
+  // reais (exclui ADMIN/SUPORTE), com desconto e normalizada p/ mês (anual /12).
   mrr: number;
-  // Recebido de fato no mês corrente (faturas PAGA na competência atual).
+  // Caixa recebido no mês corrente — faturas PAGA por DATA DE PAGAMENTO (pagaEm),
+  // não por competência (uma fatura da competência anterior paga agora conta aqui).
   recebidoMes: number;
-  // Ainda em aberto no mês corrente (PENDENTE + ATRASADA).
+  // Ainda em aberto no mês corrente (PENDENTE + ATRASADA) dos assinantes ativos.
   emAbertoMes: number;
-  // Recebido no mês anterior — base de comparação.
+  // Caixa recebido no mês anterior — base de comparação.
   recebidoMesAnterior: number;
   competencia: string; // "2026-07"
   assinantesAtivos: number;
@@ -136,15 +137,20 @@ export async function kpisReceita(): Promise<ReceitaKpis> {
   const agora = new Date();
   const comp = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   const compAtual = comp(agora);
-  const compAnterior = comp(new Date(agora.getFullYear(), agora.getMonth() - 1, 1));
+  // Limites do mês por data de pagamento (caixa).
+  const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+  const inicioProxMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 1);
+  const inicioMesAnt = new Date(agora.getFullYear(), agora.getMonth() - 1, 1);
 
-  // MRR: licenças ativas × preço mensal (com desconto). Plano anual dividido por 12.
+  // Base: licenças ATIVAS de assinantes reais. Exclui ADMIN/SUPORTE (ex.: admin@easy)
+  // — contas internas não entram no faturamento.
   const ativas = await prisma.licenca.findMany({
-    where: { status: "ATIVA", plano: { isNot: null } },
+    where: { status: "ATIVA", plano: { isNot: null }, user: { role: { notIn: ["ADMIN", "SUPORTE"] } } },
     include: { plano: true },
   });
   let mrr = 0;
   let assinantesAtivos = 0;
+  const assinanteIds: string[] = [];
   for (const l of ativas) {
     if (!l.plano) continue;
     // Planos "sob consulta" têm preço negociado por licença (preço base − desconto).
@@ -154,6 +160,7 @@ export async function kpisReceita(): Promise<ReceitaKpis> {
     if (l.plano.periodicidade === "anual") mensal = mensal / 12;
     mrr += mensal;
     assinantesAtivos++;
+    assinanteIds.push(l.userId);
   }
 
   const somaFaturas = async (where: object) => {
@@ -161,10 +168,12 @@ export async function kpisReceita(): Promise<ReceitaKpis> {
     return Number(r._sum.valor ?? 0);
   };
 
+  // Recebido/a receber restritos aos assinantes ativos — faturas soltas de trials
+  // ou contas internas não distorcem os números.
   const [recebidoMes, emAbertoMes, recebidoMesAnterior] = await Promise.all([
-    somaFaturas({ status: "PAGA", competencia: compAtual }),
-    somaFaturas({ status: { in: ["PENDENTE", "ATRASADA"] }, competencia: compAtual }),
-    somaFaturas({ status: "PAGA", competencia: compAnterior }),
+    somaFaturas({ userId: { in: assinanteIds }, status: "PAGA", pagaEm: { gte: inicioMes, lt: inicioProxMes } }),
+    somaFaturas({ userId: { in: assinanteIds }, status: { in: ["PENDENTE", "ATRASADA"] }, competencia: compAtual }),
+    somaFaturas({ userId: { in: assinanteIds }, status: "PAGA", pagaEm: { gte: inicioMesAnt, lt: inicioMes } }),
   ]);
 
   return {
