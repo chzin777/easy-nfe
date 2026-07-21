@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, type Variants } from "motion/react";
 import { Badge, Button, Card, DateBR, Field, Input, Paginacao, Select, paginar } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
@@ -12,6 +12,7 @@ import { FEATURES } from "@/lib/features";
 import { formatBRL, formatData } from "@/lib/format";
 import {
   listarUsuarios, criarUsuario, type UsuarioComEquipe,
+  kpisReceita, type ReceitaKpis,
   listarPlanos, salvarPlano, excluirPlano, type PlanoDados,
   listarBeneficios, type Beneficio,
   listarBeneficiosAdmin, salvarBeneficio, excluirBeneficio, type BeneficioDados,
@@ -94,6 +95,77 @@ export default function AdminPage() {
   );
 }
 
+// Rótulo "jul/2026" a partir de "2026-07".
+const MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+function rotuloCompetencia(comp: string): string {
+  const [ano, mes] = comp.split("-");
+  return `${MESES_ABREV[Number(mes) - 1] ?? mes}/${ano}`;
+}
+
+function CardKpi({ titulo, valor, destaque, sub }: { titulo: string; valor: string; destaque?: boolean; sub?: ReactNode }) {
+  return (
+    <Card className={"p-4 " + (destaque ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "")}>
+      <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">{titulo}</p>
+      <p className={"mt-1 text-2xl font-bold " + (destaque ? "text-[var(--primary)]" : "")}>{valor}</p>
+      {sub && <p className="mt-0.5 text-xs text-[var(--muted)]">{sub}</p>}
+    </Card>
+  );
+}
+
+function KpisReceita({ kpis }: { kpis: ReceitaKpis | null }) {
+  if (!kpis) {
+    return (
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Card key={i} className="p-4"><div className="h-14 animate-pulse rounded bg-slate-100" /></Card>
+        ))}
+      </div>
+    );
+  }
+
+  const mes = rotuloCompetencia(kpis.competencia);
+  const delta = kpis.recebidoMes - kpis.recebidoMesAnterior;
+  const porSocioRecebido = kpis.recebidoMes / kpis.socios;
+  const porSocioMrr = kpis.mrr / kpis.socios;
+  const pct = 100 / kpis.socios; // 50 quando 2 sócios
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <CardKpi
+          titulo="Receita recorrente (MRR)"
+          valor={formatBRL(kpis.mrr)}
+          sub={`${kpis.assinantesAtivos} assinante(s) ativo(s) · /mês`}
+        />
+        <CardKpi
+          titulo={`Recebido · ${mes}`}
+          valor={formatBRL(kpis.recebidoMes)}
+          sub={
+            <span className={delta >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}>
+              {delta >= 0 ? "▲" : "▼"} {formatBRL(Math.abs(delta))} vs. mês anterior
+            </span>
+          }
+        />
+        <CardKpi
+          titulo={`A receber · ${mes}`}
+          valor={formatBRL(kpis.emAbertoMes)}
+          sub="faturas em aberto no mês"
+        />
+        <CardKpi
+          titulo={`Por sócio (${pct.toFixed(0)}%)`}
+          valor={formatBRL(porSocioRecebido)}
+          destaque
+          sub={`recorrente: ${formatBRL(porSocioMrr)}/mês`}
+        />
+      </div>
+      <p className="text-[11px] text-[var(--muted)]">
+        Rateio {kpis.socios === 2 ? "50/50" : `${pct.toFixed(0)}% cada`} entre os sócios. &quot;Por sócio&quot; usa o caixa recebido no mês;
+        o valor recorrente é o MRR dividido igualmente.
+      </p>
+    </div>
+  );
+}
+
 function AbaUsuarios() {
   const [usuarios, setUsuarios] = useState<UsuarioComEquipe[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -103,6 +175,7 @@ function AbaUsuarios() {
   const [abertos, setAbertos] = useState<string[]>([]);
   const [pagina, setPagina] = useState(1);
   const [porPagina, setPorPagina] = useState(10);
+  const [kpis, setKpis] = useState<ReceitaKpis | null>(null);
 
   async function recarregar() {
     try { setUsuarios(await listarUsuarios()); }
@@ -110,6 +183,7 @@ function AbaUsuarios() {
   }
 
   useEffect(() => { void recarregar(); }, []);
+  useEffect(() => { kpisReceita().then(setKpis).catch(() => {}); }, []);
 
   function alternar(id: string) {
     setAbertos((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -123,6 +197,8 @@ function AbaUsuarios() {
 
   return (
     <div className="space-y-4">
+      <KpisReceita kpis={kpis} />
+
       <div className="flex items-center justify-between">
         <p className="text-sm text-[var(--muted)]">
           {usuarios.length} assinante(s)

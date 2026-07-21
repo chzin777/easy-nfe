@@ -111,6 +111,68 @@ export async function listarUsuarios(): Promise<UsuarioComEquipe[]> {
   ];
 }
 
+// ----------------------------------------------------------------------------
+// KPIs de receita (aba Usuários & Licenças) — quanto o Easy fatura por mês e
+// quanto cabe a cada sócio (rateio configurável, por padrão 50/50).
+// ----------------------------------------------------------------------------
+export type ReceitaKpis = {
+  // Receita recorrente mensal — soma dos planos das licenças ATIVAS, com desconto
+  // e normalizada p/ mês (plano anual conta /12).
+  mrr: number;
+  // Recebido de fato no mês corrente (faturas PAGA na competência atual).
+  recebidoMes: number;
+  // Ainda em aberto no mês corrente (PENDENTE + ATRASADA).
+  emAbertoMes: number;
+  // Recebido no mês anterior — base de comparação.
+  recebidoMesAnterior: number;
+  competencia: string; // "2026-07"
+  assinantesAtivos: number;
+  socios: number; // qtd de sócios no rateio
+};
+
+export async function kpisReceita(): Promise<ReceitaKpis> {
+  await exigirAdmin();
+
+  const agora = new Date();
+  const comp = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const compAtual = comp(agora);
+  const compAnterior = comp(new Date(agora.getFullYear(), agora.getMonth() - 1, 1));
+
+  // MRR: licenças ativas × preço mensal (com desconto). Plano anual dividido por 12.
+  const ativas = await prisma.licenca.findMany({
+    where: { status: "ATIVA", plano: { isNot: null } },
+    include: { plano: true },
+  });
+  let mrr = 0;
+  for (const l of ativas) {
+    if (!l.plano || l.plano.sobConsulta) continue;
+    let mensal = precoComDesconto(Number(l.plano.preco), l.descontoTipo, Number(l.descontoValor));
+    if (l.plano.periodicidade === "anual") mensal = mensal / 12;
+    mrr += mensal;
+  }
+
+  const somaFaturas = async (where: object) => {
+    const r = await prisma.fatura.aggregate({ _sum: { valor: true }, where });
+    return Number(r._sum.valor ?? 0);
+  };
+
+  const [recebidoMes, emAbertoMes, recebidoMesAnterior] = await Promise.all([
+    somaFaturas({ status: "PAGA", competencia: compAtual }),
+    somaFaturas({ status: { in: ["PENDENTE", "ATRASADA"] }, competencia: compAtual }),
+    somaFaturas({ status: "PAGA", competencia: compAnterior }),
+  ]);
+
+  return {
+    mrr,
+    recebidoMes,
+    emAbertoMes,
+    recebidoMesAnterior,
+    competencia: compAtual,
+    assinantesAtivos: ativas.length,
+    socios: 2, // rateio 50/50 entre os dois sócios
+  };
+}
+
 export type UsuarioDetalhe = {
   id: string;
   email: string;
