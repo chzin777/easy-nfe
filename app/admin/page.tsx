@@ -125,8 +125,8 @@ function KpisReceita({ kpis }: { kpis: ReceitaKpis | null }) {
 
   const mes = rotuloCompetencia(kpis.competencia);
   const delta = kpis.recebidoMes - kpis.recebidoMesAnterior;
-  const porSocioRecebido = kpis.recebidoMes / kpis.socios;
   const porSocioMrr = kpis.mrr / kpis.socios;
+  const porSocioRecebido = kpis.recebidoMes / kpis.socios;
   const pct = 100 / kpis.socios; // 50 quando 2 sócios
 
   return (
@@ -153,14 +153,14 @@ function KpisReceita({ kpis }: { kpis: ReceitaKpis | null }) {
         />
         <CardKpi
           titulo={`Por sócio (${pct.toFixed(0)}%)`}
-          valor={formatBRL(porSocioRecebido)}
+          valor={formatBRL(porSocioMrr)}
           destaque
-          sub={`recorrente: ${formatBRL(porSocioMrr)}/mês`}
+          sub={`recebido no mês: ${formatBRL(porSocioRecebido)}`}
         />
       </div>
       <p className="text-[11px] text-[var(--muted)]">
-        Rateio {kpis.socios === 2 ? "50/50" : `${pct.toFixed(0)}% cada`} entre os sócios. &quot;Por sócio&quot; usa o caixa recebido no mês;
-        o valor recorrente é o MRR dividido igualmente.
+        Rateio {kpis.socios === 2 ? "50/50" : `${pct.toFixed(0)}% cada`} entre os sócios. &quot;Por sócio&quot; divide o MRR (receita
+        recorrente); a legenda mostra o caixa efetivamente recebido no mês, também rateado.
       </p>
     </div>
   );

@@ -144,11 +144,16 @@ export async function kpisReceita(): Promise<ReceitaKpis> {
     include: { plano: true },
   });
   let mrr = 0;
+  let assinantesAtivos = 0;
   for (const l of ativas) {
-    if (!l.plano || l.plano.sobConsulta) continue;
+    if (!l.plano) continue;
+    // Planos "sob consulta" têm preço negociado por licença (preço base − desconto).
+    // Não pulamos: o valor efetivo é receita real. Pulamos só quando dá zero.
     let mensal = precoComDesconto(Number(l.plano.preco), l.descontoTipo, Number(l.descontoValor));
+    if (mensal <= 0) continue;
     if (l.plano.periodicidade === "anual") mensal = mensal / 12;
     mrr += mensal;
+    assinantesAtivos++;
   }
 
   const somaFaturas = async (where: object) => {
@@ -168,7 +173,7 @@ export async function kpisReceita(): Promise<ReceitaKpis> {
     emAbertoMes,
     recebidoMesAnterior,
     competencia: compAtual,
-    assinantesAtivos: ativas.length,
+    assinantesAtivos,
     socios: 2, // rateio 50/50 entre os dois sócios
   };
 }
