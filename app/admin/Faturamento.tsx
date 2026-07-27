@@ -32,6 +32,13 @@ const PERIODOS = [3, 6, 12, 24];
 
 const pct = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 
+// Rótulo "jul/2026" a partir de "2026-07".
+const MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+function rotuloCompetencia(comp: string): string {
+  const [ano, mes] = comp.split("-");
+  return `${MESES_ABREV[Number(mes) - 1] ?? mes}/${ano}`;
+}
+
 // ----------------------------------------------------------------------------
 // Cartões de KPI
 // ----------------------------------------------------------------------------
@@ -186,6 +193,39 @@ export default function Faturamento() {
         {dados.semTaxa > 0 && <Badge tom="neutral">{dados.semTaxa} sem taxa registrada</Badge>}
         <span>A taxa real vem do <code className="font-mono">netValue</code> do Asaas; use “Sincronizar taxas reais” para trocar estimativa por valor de fato.</span>
       </div>
+
+      {/* Mês corrente — parte do mesmo bruto que a aba "Usuários & Licenças"
+          mostra e desce até o que sobra por sócio depois da taxa. */}
+      <Card className="p-5">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-base font-semibold">Caixa de {rotuloCompetencia(dados.competencia)}</h3>
+          <p className="text-xs text-[var(--muted)]">
+            Mesma base do KPI de receita em “Usuários &amp; Licenças”: assinantes ativos, contas internas de fora.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-xl border border-[var(--border)] p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">Recebido (bruto)</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums">{formatBRL(dados.recebidoMes)}</p>
+          </div>
+          <div className="rounded-xl border border-[var(--border)] p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">− Taxas do gateway</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: COR.taxa }}>{formatBRL(dados.taxaMes)}</p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">{pct(percentEfetivo(dados.recebidoMes, dados.taxaMes))} do bruto</p>
+          </div>
+          <div className="rounded-xl border border-[var(--border)] p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">= Líquido</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: COR.liquido }}>{formatBRL(dados.recebidoMesLiquido)}</p>
+          </div>
+          <div className="rounded-xl border-2 border-[var(--primary)] bg-[var(--primary-soft)] p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">
+              Por sócio ({(100 / dados.socios).toFixed(0)}%) · líquido
+            </p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--primary)]">{formatBRL(dados.recebidoMesLiquido / dados.socios)}</p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">bruto: {formatBRL(dados.recebidoMes / dados.socios)}</p>
+          </div>
+        </div>
+      </Card>
 
       {/* KPIs principais */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

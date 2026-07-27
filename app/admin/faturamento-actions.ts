@@ -91,6 +91,15 @@ export type ResumoFaturamento = {
   arpu: number;
   custoAnualProjetado: number;
 
+  // Mês corrente — mesma base do KPI de receita da aba "Usuários & Licenças"
+  // (assinantes ativos, contas internas fora), agora com a taxa descontada.
+  // O bruto daqui TEM que bater com o de lá; o que muda é a camada de custo.
+  competencia: string;
+  recebidoMes: number;
+  taxaMes: number;
+  recebidoMesLiquido: number;
+  socios: number;
+
   // Confiabilidade do dado
   comTaxaReal: number;
   comTaxaEstimada: number;
@@ -98,6 +107,10 @@ export type ResumoFaturamento = {
 
   tabela: TabelaTaxas;
 };
+
+// Rateio da sociedade — mesmo número usado no KPI de receita da aba
+// "Usuários & Licenças".
+const SOCIOS = 2;
 
 const chaveMes = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const rotuloMes = (d: Date) =>
@@ -127,20 +140,27 @@ export async function resumoFaturamento(meses = 6): Promise<ResumoFaturamento> {
   const inicioAnterior = new Date(agora);
   inicioAnterior.setMonth(inicioAnterior.getMonth() - janela * 2);
 
+  // Contas internas (ADMIN/SUPORTE) ficam de fora — mesmo recorte do KPI de
+  // receita da aba "Usuários & Licenças", para os dois números conversarem.
+  const semContasInternas = { user: { role: { notIn: ["ADMIN" as const, "SUPORTE" as const] } } };
+
   const [faturas, licencas] = await Promise.all([
     prisma.fatura.findMany({
+      where: semContasInternas,
       select: {
+        userId: true,
         valor: true, taxa: true, taxaOrigem: true, status: true,
         pagaEm: true, vencimento: true, metodo: true, asaasPaymentId: true,
       },
     }),
     prisma.licenca.findMany({
-      where: { status: { in: ["ATIVA", "TRIAL"] } },
+      where: { status: { in: ["ATIVA", "TRIAL"] }, ...semContasInternas },
       select: {
+        userId: true,
         status: true,
         descontoTipo: true,
         descontoValor: true,
-        plano: { select: { preco: true, periodicidade: true, sobConsulta: true } },
+        plano: { select: { preco: true, periodicidade: true } },
         user: { select: { faturas: { where: { status: "PAGA" }, orderBy: { pagaEm: "desc" }, take: 1, select: { metodo: true } } } },
       },
     }),
@@ -212,13 +232,19 @@ export async function resumoFaturamento(meses = 6): Promise<ResumoFaturamento> {
 
   // ---- MRR -----------------------------------------------------------------
   let mrr = 0, mrrTaxa = 0, assinantesAtivos = 0, trials = 0;
+  // Assinantes que sustentam o MRR — mesma lista que a aba "Usuários & Licenças"
+  // usa para o recebido do mês.
+  const assinanteIds = new Set<string>();
   for (const l of licencas) {
     if (l.status === "TRIAL") { trials += 1; continue; }
     const p = l.plano;
-    if (!p || p.sobConsulta) continue;
+    if (!p) continue;
+    // Plano "sob consulta" tem preço negociado por licença; o valor efetivo é
+    // receita real. Só fica de fora quando zera.
     const cobranca = precoComDesconto(Number(p.preco), l.descontoTipo, Number(l.descontoValor));
     if (cobranca <= 0) continue;
     assinantesAtivos += 1;
+    assinanteIds.add(l.userId);
     const anual = p.periodicidade === "anual";
     // O método da última fatura paga é o melhor palpite do próximo ciclo.
     const metodo = metodoTarifado(l.user?.faturas[0]?.metodo) ?? "pix";
@@ -228,6 +254,21 @@ export async function resumoFaturamento(meses = 6): Promise<ResumoFaturamento> {
   }
   mrr = arred(mrr);
   mrrTaxa = arred(mrrTaxa);
+
+  // ---- mês corrente (espelha kpisReceita, + taxa) --------------------------
+  const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+  const inicioProxMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 1);
+  let recebidoMes = 0, taxaMes = 0;
+  for (const f of pagas) {
+    const quando = f.pagaEm as Date;
+    if (quando < inicioMes || quando >= inicioProxMes) continue;
+    if (!assinanteIds.has(f.userId)) continue;
+    const { bruto: b, taxa: t } = custoFatura(f, tabela);
+    recebidoMes += b;
+    taxaMes += t;
+  }
+  recebidoMes = arred(recebidoMes);
+  taxaMes = arred(taxaMes);
 
   const brutoRecebido = arred(bruto);
   const totalTaxas = arred(taxas);
@@ -265,6 +306,12 @@ export async function resumoFaturamento(meses = 6): Promise<ResumoFaturamento> {
     trials,
     arpu: assinantesAtivos ? arred(mrr / assinantesAtivos) : 0,
     custoAnualProjetado: arred(mrrTaxa * 12),
+
+    competencia: chaveMes(agora),
+    recebidoMes,
+    taxaMes,
+    recebidoMesLiquido: arred(recebidoMes - taxaMes),
+    socios: SOCIOS,
 
     comTaxaReal,
     comTaxaEstimada,
