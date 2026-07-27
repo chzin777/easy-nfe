@@ -312,9 +312,137 @@ export default function Faturamento() {
         </table>
       </Card>
 
+      <Projecao dados={dados} />
       <Simulador tabela={dados.tabela} />
       <TabelaTaxasCard inicial={dados.tabela} onSalvo={() => recarregar()} />
     </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Projeção — para onde o run-rate atual leva nos próximos 12 meses
+// ----------------------------------------------------------------------------
+function Projecao({ dados }: { dados: ResumoFaturamento }) {
+  const [crescimento, setCrescimento] = useState("0");
+  const g = Number(crescimento.replace(",", ".")) || 0;
+
+  // Base = MRR de hoje. Sem cenário de crescimento (0%) isto é run-rate puro:
+  // "se nada mudar, é isso". A taxa acompanha a receita porque o custo por
+  // assinante é o mesmo — o mix de métodos é o de hoje.
+  const [ano, mes] = dados.competencia.split("-").map(Number);
+  const linhas = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(ano, mes - 1 + i + 1, 1);
+    const fator = Math.pow(1 + g / 100, i + 1);
+    const bruto = dados.mrr * fator;
+    const taxa = dados.mrrTaxa * fator;
+    return {
+      rotulo: d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).replace(".", ""),
+      bruto,
+      taxa,
+      liquido: bruto - taxa,
+    };
+  });
+
+  const totalBruto = linhas.reduce((s, l) => s + l.bruto, 0);
+  const totalTaxa = linhas.reduce((s, l) => s + l.taxa, 0);
+  const totalLiquido = totalBruto - totalTaxa;
+
+  // Histórico realizado + projeção no mesmo eixo: séries separadas para a linha
+  // projetada sair tracejada e não se confundir com o que já aconteceu.
+  const ultimoReal = dados.serie.length - 1;
+  const grafico = [
+    // O último mês realizado também alimenta a série projetada — sem isso a
+    // linha tracejada começa solta, sem ligação com o histórico.
+    ...dados.serie.map((s, i) => ({
+      rotulo: s.rotulo,
+      real: s.liquido as number | null,
+      proj: i === ultimoReal ? s.liquido : (null as number | null),
+    })),
+    ...linhas.map((l) => ({ rotulo: l.rotulo, real: null as number | null, proj: l.liquido })),
+  ];
+
+  return (
+    <Card className="p-5">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h3 className="text-base font-semibold">Projeção — próximos 12 meses</h3>
+          <p className="max-w-2xl text-sm text-[var(--muted)]">
+            Parte do MRR atual ({formatBRL(dados.mrr)}/mês, {dados.assinantesAtivos} assinante(s)) e desconta a taxa do
+            gateway. Com 0% é run-rate puro: o que entra se nada mudar.
+          </p>
+        </div>
+        <Field label="Crescimento (% ao mês)" className="w-44">
+          <Input value={crescimento} onChange={(e) => setCrescimento(e.target.value)} inputMode="decimal" />
+        </Field>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-xl border border-[var(--border)] p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">Bruto em 12 meses</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums">{formatBRL(totalBruto)}</p>
+        </div>
+        <div className="rounded-xl border border-[var(--border)] p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">− Taxas</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: COR.taxa }}>{formatBRL(totalTaxa)}</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">{pct(percentEfetivo(totalBruto, totalTaxa))} do bruto</p>
+        </div>
+        <div className="rounded-xl border border-[var(--border)] p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">= Líquido em 12 meses</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: COR.liquido }}>{formatBRL(totalLiquido)}</p>
+        </div>
+        <div className="rounded-xl border-2 border-[var(--primary)] bg-[var(--primary-soft)] p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">
+            Por sócio ({(100 / dados.socios).toFixed(0)}%) · líquido
+          </p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--primary)]">{formatBRL(totalLiquido / dados.socios)}</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">média de {formatBRL(totalLiquido / dados.socios / 12)}/mês</p>
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <ResponsiveContainer width="100%" height={240}>
+          <ComposedChart data={grafico} margin={{ left: 4, right: 12, top: 8 }}>
+            <CartesianGrid stroke={COR.grid} vertical={false} />
+            <XAxis dataKey="rotulo" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: COR.eixo }} interval="preserveStartEnd" />
+            <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: COR.eixo }} tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))} />
+            <Tooltip formatter={(v) => formatBRL(Number(v))} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Line dataKey="real" name="Líquido realizado" stroke={COR.liquido} strokeWidth={2} dot={false} connectNulls={false} />
+            <Line dataKey="proj" name="Líquido projetado" stroke={COR.bruto} strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls={false} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
+              <th className="py-2 pr-4">Mês</th>
+              <th className="py-2 pr-4 text-right">Bruto</th>
+              <th className="py-2 pr-4 text-right">Taxa</th>
+              <th className="py-2 pr-4 text-right">Líquido</th>
+              <th className="py-2 text-right">Por sócio</th>
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map((l) => (
+              <tr key={l.rotulo} className="border-b border-[var(--border)] last:border-0">
+                <td className="py-2 pr-4 font-medium">{l.rotulo}</td>
+                <td className="py-2 pr-4 text-right tabular-nums">{formatBRL(l.bruto)}</td>
+                <td className="py-2 pr-4 text-right tabular-nums text-[var(--danger)]">{formatBRL(l.taxa)}</td>
+                <td className="py-2 pr-4 text-right tabular-nums">{formatBRL(l.liquido)}</td>
+                <td className="py-2 text-right tabular-nums font-semibold">{formatBRL(l.liquido / dados.socios)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-3 text-[11px] text-[var(--muted)]">
+        Projeção não considera churn nem renovação de anuais fora do ciclo — é o MRR de hoje projetado adiante. Trials
+        ({dados.trials}) só entram quando viram assinatura.
+      </p>
+    </Card>
   );
 }
 
