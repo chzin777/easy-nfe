@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
-import { exigirFeature } from "@/lib/permissoes";
+import { exigirAlgumaFeature } from "@/lib/permissoes";
 
 // ---------------------------------------------------------------------------
 // Fonte de dados dos relatórios PDF. Cada dataset devolve linhas já
@@ -31,7 +31,7 @@ function intervalo(f: FiltroRelatorio): { gte?: Date; lte?: Date } {
 }
 
 export async function dadosRelatorio(dataset: Dataset, filtro: FiltroRelatorio = {}): Promise<LinhaRelatorio[]> {
-  await exigirFeature("dashboard");
+  await exigirAlgumaFeature(["relatorios", "dashboard"]);
   const empresaId = await exigirEmpresa();
 
   switch (dataset) {

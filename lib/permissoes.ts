@@ -82,6 +82,15 @@ export async function exigirFeature(chave: string): Promise<void> {
   }
 }
 
+// Basta UMA das chaves. Existe porque um mesmo recurso pode ser vendido por
+// benefícios diferentes — os relatórios, por exemplo, saem tanto no benefício
+// "Dashboard e gráficos" quanto no "Relatórios fiscais".
+export async function exigirAlgumaFeature(chaves: string[]): Promise<void> {
+  const { admin, features } = await featuresDoUsuario();
+  if (admin || chaves.some((c) => features.has(c))) return;
+  throw new Error("Seu plano não inclui este recurso. Faça upgrade para utilizá-lo.");
+}
+
 // Lista (array) das features do usuário — para a UI (sidebar etc).
 export async function minhasFeatures(): Promise<string[]> {
   const { features } = await featuresDoUsuario();

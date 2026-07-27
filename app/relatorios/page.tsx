@@ -11,12 +11,10 @@ import {
   formatBRL,
 } from "@/app/ui/primitives";
 import LightningLoader from "@/app/ui/LightningLoader";
-import { baixarElementoPdf } from "@/app/ui/danfePdf";
 import { obterEmpresaAtiva, type EmpresaDados } from "@/app/configuracoes/actions";
-import { dadosRelatorio, type Dataset, type LinhaRelatorio } from "./actions";
+import { dadosRelatorio, type Dataset } from "./actions";
+import { baixarRelatorioPdf, type ColDef, type Fmt } from "./pdf";
 
-type Fmt = "money" | "percent" | "number" | "text";
-type ColDef = { chave: string; label: string; fmt?: Fmt };
 type DatasetDef = { chave: Dataset; nome: string; descricao: string; temData: boolean; colunas: ColDef[] };
 
 // Catálogo de datasets e colunas disponíveis. As chaves batem com o que
@@ -110,14 +108,6 @@ function formatarCelula(valor: string | number, fmt?: Fmt): string {
   return String(valor ?? "");
 }
 
-type PdfPayload = {
-  titulo: string;
-  subtitulo: string;
-  colunas: ColDef[];
-  rows: LinhaRelatorio[];
-  empresa: EmpresaDados | null;
-};
-
 export default function RelatoriosPage() {
   const [empresa, setEmpresa] = useState<EmpresaDados | null>(null);
   const [datasetChave, setDatasetChave] = useState<Dataset>("produtos");
@@ -127,7 +117,6 @@ export default function RelatoriosPage() {
   const [titulo, setTitulo] = useState("");
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [pdf, setPdf] = useState<PdfPayload | null>(null);
 
   const dataset = useMemo(() => DATASETS.find((d) => d.chave === datasetChave)!, [datasetChave]);
 
@@ -146,7 +135,8 @@ export default function RelatoriosPage() {
     setColsSel((prev) => prev.includes(chave) ? prev.filter((c) => c !== chave) : [...prev, chave]);
   }
 
-  // Gera o PDF: busca as linhas, monta o payload e dispara a captura no efeito.
+  // Busca as linhas e desenha o PDF direto no jsPDF — sem passar pelo DOM, o
+  // relatório aguenta milhares de registros sem estourar o canvas.
   async function gerar() {
     setErro(null);
     if (!colsSel.length) { setErro("Selecione ao menos uma coluna."); return; }
@@ -158,35 +148,27 @@ export default function RelatoriosPage() {
       const periodo = dataset.temData && (de || ate)
         ? `Período: ${de ? de.split("-").reverse().join("/") : "início"} a ${ate ? ate.split("-").reverse().join("/") : "hoje"}`
         : "";
-      setPdf({
+      await baixarRelatorioPdf({
+        nomeArquivo: `relatorio-${datasetChave}`,
         titulo: titulo.trim() || `Relatório de ${dataset.nome}`,
         subtitulo: [periodo, `${rows.length} registro(s)`].filter(Boolean).join(" · "),
         colunas,
         rows,
-        empresa,
+        empresa: empresa
+          ? {
+              nome: empresa.nomeFantasia || empresa.razaoSocial || "Relatório",
+              cnpj: empresa.cnpj,
+              ie: empresa.inscricaoEstadual,
+            }
+          : null,
+        formatar: formatarCelula,
       });
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
+    } finally {
       setGerando(false);
     }
   }
-
-  // Após o layout imprimível montar no DOM, captura em PDF e limpa.
-  useEffect(() => {
-    if (!pdf) return;
-    let cancelado = false;
-    const t = setTimeout(async () => {
-      try {
-        await baixarElementoPdf("relatorio-pdf", `relatorio-${datasetChave}`);
-      } catch (e) {
-        if (!cancelado) setErro(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (!cancelado) { setGerando(false); setPdf(null); }
-      }
-    }, 60);
-    return () => { cancelado = true; clearTimeout(t); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdf]);
 
   return (
     <div className="space-y-6">
@@ -268,72 +250,6 @@ export default function RelatoriosPage() {
           </div>
           {gerando && <LightningLoader texto="Montando relatório…" />}
         </div>
-      </div>
-
-      {/* Layout imprimível (off-screen) — capturado por baixarElementoPdf */}
-      {pdf && <RelatorioPdf {...pdf} />}
-    </div>
-  );
-}
-
-function RelatorioPdf({ titulo, subtitulo, colunas, rows, empresa }: PdfPayload) {
-  const e = empresa;
-  const hoje = new Date().toLocaleDateString("pt-BR");
-  return (
-    <div
-      id="relatorio-pdf"
-      style={{
-        position: "fixed", left: -10000, top: 0, width: 794,
-        background: "#ffffff", color: "#0f172a", fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: 11, padding: 40, boxSizing: "border-box",
-      }}
-      aria-hidden
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "2px solid #1e293b", paddingBottom: 14, marginBottom: 16 }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{e?.nomeFantasia || e?.razaoSocial || "Relatório"}</div>
-          {e?.cnpj && <div style={{ color: "#475569", fontSize: 10 }}>CNPJ {e.cnpj}{e.inscricaoEstadual ? ` · IE ${e.inscricaoEstadual}` : ""}</div>}
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#64748b" }}>Gerado em</div>
-          <div style={{ fontWeight: 600 }}>{hoje}</div>
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: "#5227ff" }}>{titulo}</div>
-        {subtitulo && <div style={{ color: "#64748b", fontSize: 10 }}>{subtitulo}</div>}
-      </div>
-
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10 }}>
-        <thead>
-          <tr style={{ background: "#f1f5f9" }}>
-            {colunas.map((c) => (
-              <th key={c.chave} style={{ padding: "6px 8px", textAlign: c.fmt === "money" || c.fmt === "percent" || c.fmt === "number" ? "right" : "left", fontSize: 9, textTransform: "uppercase", letterSpacing: 0.4, color: "#64748b", borderBottom: "1px solid #cbd5e1" }}>
-                {c.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr><td colSpan={colunas.length} style={{ padding: "16px 8px", textAlign: "center", color: "#94a3b8" }}>Sem dados para os filtros selecionados.</td></tr>
-          ) : (
-            rows.map((r, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #e2e8f0", background: i % 2 ? "#fafafa" : "#ffffff" }}>
-                {colunas.map((c) => (
-                  <td key={c.chave} style={{ padding: "5px 8px", textAlign: c.fmt === "money" || c.fmt === "percent" || c.fmt === "number" ? "right" : "left" }}>
-                    {formatarCelula(r[c.chave], c.fmt)}
-                  </td>
-                ))}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-
-      <div style={{ marginTop: 20, fontSize: 9, color: "#94a3b8", textAlign: "center" }}>
-        Gerado por easy-nfe · {rows.length} registro(s)
       </div>
     </div>
   );

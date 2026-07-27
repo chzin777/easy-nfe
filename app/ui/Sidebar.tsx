@@ -9,7 +9,9 @@ import { listarEmpresas, trocarEmpresa, type EmpresaResumo } from "@/app/configu
 import { sair, papelAtual } from "@/app/auth/actions";
 import { obterMinhasFeatures } from "@/app/permissoes-actions";
 
-type Item = { href: string; label: string; icon: ReactNode; feature?: string };
+// feature aceita lista quando o item é liberado por mais de um benefício —
+// basta o plano ter uma delas.
+type Item = { href: string; label: string; icon: ReactNode; feature?: string | string[] };
 // flat = grupo renderiza itens direto, sem header colapsável (corta ruído de
 // grupos pequenos). Ordem segue o fluxo de uso: início → saída fiscal →
 // comercial → entrada fiscal → cadastros → sistema.
@@ -21,7 +23,7 @@ const grupos: Grupo[] = [
     flat: true,
     itens: [
       { href: "/painel", label: "Dashboard", icon: <IconGrid />, feature: "dashboard" },
-      { href: "/relatorios", label: "Relatórios", icon: <IconReport />, feature: "dashboard" },
+      { href: "/relatorios", label: "Relatórios", icon: <IconReport />, feature: ["relatorios", "dashboard"] },
     ],
   },
   // Só o que gera documento fiscal de saída.
@@ -157,8 +159,12 @@ export default function Sidebar({
   // Filtra itens pelas features do plano. Acesso total vê tudo. Enquanto carrega
   // (features === null, sem cache) esconde os itens com feature — evita flash de
   // item bloqueado no F5; é melhor aparecer depois do que sumir depois.
-  const podeVer = (it: Item) =>
-    acessoTotal || !it.feature || (features !== null && features.includes(it.feature));
+  const podeVer = (it: Item) => {
+    if (acessoTotal || !it.feature) return true;
+    if (features === null) return false;
+    const exigidas = Array.isArray(it.feature) ? it.feature : [it.feature];
+    return exigidas.some((f) => features.includes(f));
+  };
 
   // Suporte via WhatsApp: só planos com o benefício "suporte_prioritário".
   const temSuportePrioritario = acessoTotal || (features?.includes("suporte_prioritario") ?? false);
