@@ -35,6 +35,13 @@ export type AsaasCobranca = {
   id: string;
   status: string;
   value: number;
+  // Valor que de fato cai na conta — `value` menos a taxa do Asaas. É a única
+  // fonte confiável do custo da transação (a tabela pública não cobre extras
+  // por cobrança nem condições negociadas).
+  netValue?: number | null;
+  billingType?: string | null;
+  installmentCount?: number | null;
+  paymentDate?: string | null;
   dueDate: string;
   bankSlipUrl: string | null;
   invoiceUrl: string | null;

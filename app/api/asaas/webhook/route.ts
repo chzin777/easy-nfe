@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { configAsaasEfetiva } from "@/lib/asaas-config";
 import { ativarPorPagamento, metodoDoBillingType } from "@/lib/assinatura";
+import { registrarCustoFatura } from "@/lib/taxas";
 
 // Webhook do Asaas: confirma pagamento da assinatura e renova a licença.
 // Configure no painel Asaas a URL deste endpoint + um token; o mesmo token deve
@@ -19,7 +20,17 @@ export async function POST(req: Request) {
     }
   }
 
-  let body: { event?: string; payment?: { id?: string; billingType?: string; paymentDate?: string; value?: number; subscription?: string } };
+  let body: {
+    event?: string;
+    payment?: {
+      id?: string;
+      billingType?: string;
+      paymentDate?: string;
+      value?: number;
+      netValue?: number;
+      subscription?: string;
+    };
+  };
   try {
     body = await req.json();
   } catch {
@@ -33,11 +44,21 @@ export async function POST(req: Request) {
   const metodo = metodoDoBillingType(body.payment?.billingType);
   const pagaEm = body.payment?.paymentDate ? new Date(body.payment.paymentDate) : new Date();
 
-  const fatura = await prisma.fatura.findUnique({ where: { asaasPaymentId: paymentId }, select: { id: true } });
+  const fatura = await prisma.fatura.findUnique({
+    where: { asaasPaymentId: paymentId },
+    select: { id: true, valor: true },
+  });
 
   if (fatura) {
     if (PAGOS.has(event)) {
       await ativarPorPagamento(fatura.id, metodo, pagaEm);
+      // Custo da transação: o netValue do Asaas é a fonte da verdade da taxa.
+      await registrarCustoFatura(fatura.id, {
+        valor: body.payment?.value ?? Number(fatura.valor),
+        metodo,
+        netValue: body.payment?.netValue,
+        viaAsaas: true,
+      }).catch(() => {});
     } else if (VENCIDOS.has(event)) {
       await prisma.fatura.update({ where: { id: fatura.id }, data: { status: "ATRASADA" } });
     }
@@ -69,6 +90,12 @@ export async function POST(req: Request) {
         select: { id: true },
       });
       await ativarPorPagamento(nova.id, metodo, pagaEm);
+      await registrarCustoFatura(nova.id, {
+        valor: body.payment?.value ?? Number(lic.plano?.preco ?? 0),
+        metodo,
+        netValue: body.payment?.netValue,
+        viaAsaas: true,
+      }).catch(() => {});
     }
     return Response.json({ ok: true, recorrente: true });
   }

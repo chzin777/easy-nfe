@@ -223,6 +223,14 @@ model Fatura {
   pagaEm      DateTime?
   metodo      String? // pix | cartao | boleto | transferencia (ao marcar paga)
 
+  // Custo da transação no gateway. `taxa` vem do netValue devolvido pelo Asaas
+  // quando disponível (taxaOrigem = "asaas"); senão é calculada pela tabela de
+  // taxas configurada (taxaOrigem = "estimada"). Fatura recebida fora do Asaas
+  // (dinheiro, Pix direto) fica sem taxa.
+  taxa         Decimal? @db.Decimal(10, 2)
+  valorLiquido Decimal? @db.Decimal(10, 2)
+  taxaOrigem   String? // asaas | estimada
+
   // Cobrança Asaas
   asaasPaymentId String? @unique
   bankSlipUrl    String? // PDF do boleto

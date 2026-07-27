@@ -20,6 +20,7 @@ import {
 } from "./actions";
 import UsuarioDetalhe from "./UsuarioDetalhe";
 import Integracoes from "./Integracoes";
+import Faturamento from "./Faturamento";
 
 const ROLES = [
   { value: "USER", label: "Usuário" },
@@ -32,10 +33,11 @@ const tomLicenca: Record<string, "success" | "danger" | "warning" | "neutral" | 
   ATIVA: "success", TRIAL: "primary", EXPIRADA: "danger", SUSPENSA: "warning", CANCELADA: "neutral",
 };
 
-const ABAS = ["usuarios", "planos", "beneficios", "integracoes"] as const;
+const ABAS = ["usuarios", "faturamento", "planos", "beneficios", "integracoes"] as const;
 type Aba = (typeof ABAS)[number];
 const ABA_LABEL: Record<Aba, string> = {
   usuarios: "Usuários & Licenças",
+  faturamento: "Faturamento",
   planos: "Planos",
   beneficios: "Benefícios",
   integracoes: "Integrações",
@@ -87,7 +89,7 @@ export default function AdminPage() {
             exit="exit"
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           >
-            {aba === "usuarios" ? <AbaUsuarios /> : aba === "planos" ? <AbaPlanos /> : aba === "beneficios" ? <AbaBeneficios /> : <Integracoes />}
+            {aba === "usuarios" ? <AbaUsuarios /> : aba === "faturamento" ? <Faturamento /> : aba === "planos" ? <AbaPlanos /> : aba === "beneficios" ? <AbaBeneficios /> : <Integracoes />}
           </motion.div>
         </AnimatePresence>
       </div>

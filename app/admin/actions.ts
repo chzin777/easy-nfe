@@ -9,6 +9,7 @@ import { enviarEmail, htmlCobranca } from "@/lib/email";
 import { baseUrlServidor } from "@/lib/base-url";
 import { logoBase64, LOGO_CID } from "@/lib/logo-email";
 import { precoComDesconto } from "@/lib/assinatura";
+import { registrarCustoFatura } from "@/lib/taxas";
 import {
   statusConfigAsaas,
   salvarConfigAsaas as salvarConfigAsaasStore,
@@ -951,10 +952,18 @@ export async function marcarFaturaPaga(input: {
 }): Promise<Resultado> {
   try {
     await exigirAdmin();
-    await prisma.fatura.update({
+    const f = await prisma.fatura.update({
       where: { id: input.faturaId },
       data: { status: "PAGA", pagaEm: input.data ? new Date(input.data) : new Date(), metodo: input.metodo },
+      select: { id: true, valor: true, asaasPaymentId: true },
     });
+    // Baixa manual também precisa de custo: se a cobrança existe no Asaas o
+    // valor real chega depois pelo "Sincronizar taxas"; por ora, estimativa.
+    await registrarCustoFatura(f.id, {
+      valor: Number(f.valor),
+      metodo: input.metodo,
+      viaAsaas: !!f.asaasPaymentId,
+    }).catch(() => {});
     return { ok: true };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
@@ -969,7 +978,9 @@ export async function marcarFaturaPendente(faturaId: string): Promise<Resultado>
     const atrasada = f.vencimento < new Date();
     await prisma.fatura.update({
       where: { id: faturaId },
-      data: { status: atrasada ? "ATRASADA" : "PENDENTE", pagaEm: null, metodo: null },
+      // Desfazer a baixa também zera o custo — senão a taxa fica contando num
+      // recebimento que não existe mais.
+      data: { status: atrasada ? "ATRASADA" : "PENDENTE", pagaEm: null, metodo: null, taxa: null, valorLiquido: null, taxaOrigem: null },
     });
     return { ok: true };
   } catch (e) {
