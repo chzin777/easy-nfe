@@ -38,6 +38,22 @@ const requisicao = (
 // inclusive reserializar, invalida a assinatura. Por isso a string assinada vai
 // direto para o gzip.
 export async function emitirNfse(dados: DadosDPS, cert: Certificado): Promise<ResultadoNFSe> {
+  const r = await transmitir(dados, cert);
+
+  // E0120: o município do emitente não tem convênio registrado no CNC da
+  // NFS-e Nacional, e aí a inscrição municipal do prestador não pode ir na
+  // DPS. Não há como saber isso antes de tentar, então reenvia sem a IM.
+  if (!r.ok && dados.prestador.im && pedeDpsSemIM(r.erro)) {
+    const semIM = { ...dados, prestador: { ...dados.prestador, im: "" } };
+    return transmitir(semIM, cert);
+  }
+  return r;
+}
+
+const pedeDpsSemIM = (erro: string) =>
+  /\bE0120\b/.test(erro) || /IM do prestador n[ãa]o deve ser informado/i.test(erro);
+
+async function transmitir(dados: DadosDPS, cert: Certificado): Promise<ResultadoNFSe> {
   const { xml, id } = montarDps(dados, VER_APLIC);
   // A SEFIN rejeita (E1229) o XML sem a declaração de encoding. Ela entra
   // depois de assinar: a declaração fica fora da canonicalização do infDPS,
