@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import Stepper, { Step } from "@/app/ui/Stepper";
+import Modal from "@/app/ui/Modal";
 import {
   Badge,
   Button,
@@ -92,16 +93,19 @@ export default function StepperNfse({
     }));
   }
 
-  async function emitir() {
+  // Retorna false p/ o Stepper ficar no passo 3 quando a emissão falha —
+  // o erro aparece em modal, com o formulário intacto atrás.
+  async function emitir(): Promise<boolean> {
     setEmitindo(true);
     setErro(null);
     const r = await emitirNotaServico(form);
     setEmitindo(false);
     if (!r.ok) {
       setErro(r.erro);
-      return;
+      return false;
     }
     setSucesso({ numero: r.numero, chaveAcesso: r.chaveAcesso });
+    return true;
   }
 
   function novaEmissao() {
@@ -138,10 +142,12 @@ export default function StepperNfse({
   function canProceed(step: number) {
     if (step === 1) return form.clienteId !== "";
     if (step === 2) return form.descricao.trim() !== "" && form.cTribNac.length === 6;
+    if (step === 3) return !emitindo && form.valorServico > 0;
     return true;
   }
 
   return (
+    <>
     <Stepper
       key={formKey}
       nextButtonText="Continuar"
@@ -307,13 +313,19 @@ export default function StepperNfse({
             <p className="line-clamp-2 text-[var(--muted)]">{form.descricao || "—"}</p>
           </div>
 
-          {erro && (
-            <p className="rounded-lg bg-[var(--danger-soft,#fee2e2)] px-3 py-2.5 text-sm font-medium text-[var(--danger)]">
-              {erro}
-            </p>
-          )}
         </div>
       </Step>
     </Stepper>
+
+    <Modal
+      aberto={erro !== null}
+      onFechar={() => setErro(null)}
+      titulo="Não deu para emitir"
+      largura="max-w-md"
+      rodape={<Button onClick={() => setErro(null)}>Entendi</Button>}
+    >
+      <p className="text-sm leading-relaxed text-[var(--muted)]">{erro}</p>
+    </Modal>
+    </>
   );
 }

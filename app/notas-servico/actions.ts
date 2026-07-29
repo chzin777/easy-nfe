@@ -6,6 +6,7 @@ import { exigirFeature } from "@/lib/permissoes";
 import { decriptar } from "@/lib/crypto";
 import { carregarCertificado } from "@/lib/nfe/cert";
 import { consultarPorDps, emitirNfse } from "@/lib/nfse/client";
+import { resolverCodMunicipio } from "@/lib/nfe/ibge";
 import type { AmbienteNFSe, DadosDPS } from "@/lib/nfse/types";
 
 // Emissão de NFS-e no Padrão Nacional.
@@ -50,6 +51,7 @@ export type ResultadoEmissao =
 function validarTomador(c: {
   nome: string; documento: string; cep: string | null; logradouro: string | null;
   numero: string | null; bairro: string | null; codMunicipio: string | null;
+  municipio: string | null; uf: string | null;
 }): string | null {
   if (!so(c.documento)) return `O cliente ${c.nome} está sem CPF/CNPJ.`;
   const faltando = [
@@ -57,7 +59,9 @@ function validarTomador(c: {
     !c.logradouro && "logradouro",
     !c.numero && "número",
     !c.bairro && "bairro",
-    !c.codMunicipio && "município",
+    // O cadastro guarda o nome do município; o código IBGE é resolvido na
+    // emissão. Só falta município se nem nome nem código estiverem lá.
+    !c.codMunicipio && !(c.municipio && c.uf) && "município",
   ].filter(Boolean);
   if (faltando.length) {
     return `Endereço do cliente ${c.nome} incompleto — falta ${faltando.join(", ")}.`;
@@ -87,6 +91,18 @@ export async function emitirNotaServico(input: EmitirNfseInput): Promise<Resulta
     if (input.valorServico <= 0) return { ok: false, erro: "Valor do serviço deve ser maior que zero." };
     if (so(input.cTribNac).length !== 6) {
       return { ok: false, erro: "Código de tributação nacional inválido (6 dígitos)." };
+    }
+
+    // Código IBGE do tomador: usa o salvo quando existir, senão resolve pelo
+    // nome do município + UF do cadastro (mesmo caminho da NF-e).
+    let cMunTomador: string;
+    try {
+      cMunTomador = await resolverCodMunicipio(
+        so(cliente.codMunicipio) || cliente.municipio || "",
+        cliente.uf || empresa.uf,
+      );
+    } catch (e) {
+      return { ok: false, erro: e instanceof Error ? e.message : "Município do cliente inválido." };
     }
 
     const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
@@ -157,7 +173,7 @@ export async function emitirNotaServico(input: EmitirNfseInput): Promise<Resulta
         im: so(cliente.inscricaoEstadual) || undefined,
         nome: cliente.nome,
         endereco: {
-          cMun: so(cliente.codMunicipio),
+          cMun: cMunTomador,
           cep: so(cliente.cep),
           logradouro: cliente.logradouro ?? "",
           numero: cliente.numero ?? "",

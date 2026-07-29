@@ -14,7 +14,8 @@ interface StepperProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   initialStep?: number;
   onStepChange?: (step: number) => void;
-  onFinalStepCompleted?: () => void;
+  /** Retornar false (ou Promise<false>) mantém o Stepper no último passo. */
+  onFinalStepCompleted?: () => void | boolean | Promise<void | boolean>;
   backButtonText?: string;
   nextButtonText?: string;
   completeButtonText?: string;
@@ -54,8 +55,7 @@ export default function Stepper({
 
   const updateStep = (newStep: number) => {
     setCurrentStep(newStep);
-    if (newStep > totalSteps) onFinalStepCompleted();
-    else onStepChange(newStep);
+    if (newStep <= totalSteps) onStepChange(newStep);
     // Rola o topo do card pra vista ao trocar de passo (mobile).
     if (newStep <= totalSteps && typeof window !== "undefined") {
       requestAnimationFrame(() =>
@@ -76,9 +76,13 @@ export default function Stepper({
       updateStep(currentStep + 1);
     }
   };
-  const handleComplete = () => {
+  // O último passo só some depois que a ação final der certo. Se ela retornar
+  // false (erro), o formulário fica onde está, com os dados preenchidos.
+  const handleComplete = async () => {
+    const r = await onFinalStepCompleted();
+    if (r === false) return;
     setDirection(1);
-    updateStep(totalSteps + 1);
+    setCurrentStep(totalSteps + 1);
   };
 
   return (
