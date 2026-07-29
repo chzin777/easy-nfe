@@ -1,6 +1,6 @@
 "use client";
 
-import { formatBRL } from "@/lib/format";
+import { formatBRL, formatCep, formatCpfCnpj, formatTelefone } from "@/lib/format";
 import type { EmpresaDados } from "@/app/configuracoes/actions";
 import type { OrcamentoCompleto } from "./actions";
 
@@ -21,7 +21,7 @@ export default function OrcamentoPdf({
   const e = empresa;
   const end = e?.endereco;
   const endLinha = end
-    ? `${end.logradouro}, ${end.numero}${end.complemento ? " " + end.complemento : ""} — ${end.bairro}, ${end.municipio}/${end.uf}${end.cep ? " · CEP " + end.cep : ""}`
+    ? `${end.logradouro}, ${end.numero}${end.complemento ? " " + end.complemento : ""} — ${end.bairro}, ${end.municipio}/${end.uf}${end.cep ? " · CEP " + formatCep(end.cep) : ""}`
     : "";
 
   return (
@@ -46,9 +46,13 @@ export default function OrcamentoPdf({
         <div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>{e?.nomeFantasia || e?.razaoSocial || "Orçamento"}</div>
           {e?.nomeFantasia && e?.razaoSocial && <div style={{ color: "#475569" }}>{e.razaoSocial}</div>}
-          {e?.cnpj && <div style={{ color: "#475569" }}>CNPJ {e.cnpj}{e.inscricaoEstadual ? ` · IE ${e.inscricaoEstadual}` : ""}</div>}
+          {e?.cnpj && <div style={{ color: "#475569" }}>CNPJ {formatCpfCnpj(e.cnpj)}{e.inscricaoEstadual ? ` · IE ${e.inscricaoEstadual}` : ""}</div>}
           {endLinha && <div style={{ color: "#475569" }}>{endLinha}</div>}
-          {(e?.telefone || e?.email) && <div style={{ color: "#475569" }}>{[e?.telefone, e?.email].filter(Boolean).join(" · ")}</div>}
+          {(e?.telefone || e?.email) && (
+            <div style={{ color: "#475569" }}>
+              {[e?.telefone ? formatTelefone(e.telefone) : null, e?.email].filter(Boolean).join(" · ")}
+            </div>
+          )}
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "#64748b" }}>Orçamento</div>
@@ -56,9 +60,28 @@ export default function OrcamentoPdf({
         </div>
       </div>
 
+      {/* Cliente */}
+      <div style={{ marginBottom: 16, padding: 12, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#64748b", marginBottom: 6 }}>Cliente</div>
+        <div style={{ fontWeight: 700, fontSize: 14 }}>{orc.clienteNome}</div>
+        {/* Consumidor final não tem documento — a linha some em vez de vir vazia. */}
+        {orc.clienteDocumento && (
+          <div style={{ color: "#475569" }}>
+            {orc.clienteDocumento.replace(/\D/g, "").length > 11 ? "CNPJ " : "CPF "}
+            {formatCpfCnpj(orc.clienteDocumento)}
+          </div>
+        )}
+        {(orc.clienteTelefone || orc.clienteEmail) && (
+          <div style={{ color: "#475569" }}>
+            {[orc.clienteTelefone ? formatTelefone(orc.clienteTelefone) : null, orc.clienteEmail]
+              .filter(Boolean)
+              .join(" · ")}
+          </div>
+        )}
+      </div>
+
       {/* Dados do orçamento */}
       <div style={{ display: "flex", gap: 24, marginBottom: 20, flexWrap: "wrap" }}>
-        <Campo rotulo="Cliente" valor={orc.clienteNome} />
         <Campo rotulo="Validade" valor={fmtData(orc.validade)} />
         <Campo rotulo="Emitido em" valor={fmtData(orc.criadoEm.slice(0, 10))} />
         <Campo rotulo="Modelo" valor={modelo} />

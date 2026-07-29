@@ -55,6 +55,9 @@ export type OrcamentoCompleto = {
   ordem: number;
   clienteId: string;
   clienteNome: string;
+  clienteDocumento: string; // CPF ou CNPJ, só dígitos (vazio no consumidor final)
+  clienteTelefone: string;
+  clienteEmail: string;
   transportadoraId: string | null;
   tipoNota: string;
   modFrete: string;
@@ -92,14 +95,16 @@ type OrcRow = {
   clienteId: string; transportadoraId: string | null; tipoNota: string; modFrete: string;
   observacoes: string | null; validade: Date | null; motivoPerda: string | null;
   descontoTipo: string; descontoValor: unknown; valorTotal: unknown; notaId: string | null;
-  criadoEm: Date; cliente: { nome: string };
+  criadoEm: Date; cliente: { nome: string; documento: string; telefone: string | null; email: string | null };
   itens: { id: string; produtoId: string | null; nome: string; unidade: string | null; quantidade: unknown; precoUnitario: unknown; descontoTipo: string; descontoValor: unknown; valorTotal: unknown }[];
 };
 
 function paraUI(o: OrcRow): OrcamentoCompleto {
   return {
     id: o.id, numero: o.numero, status: STATUS_UI[o.status] ?? "rascunho", ordem: o.ordem,
-    clienteId: o.clienteId, clienteNome: o.cliente.nome, transportadoraId: o.transportadoraId,
+    clienteId: o.clienteId, clienteNome: o.cliente.nome, clienteDocumento: o.cliente.documento,
+    clienteTelefone: o.cliente.telefone ?? "", clienteEmail: o.cliente.email ?? "",
+    transportadoraId: o.transportadoraId,
     tipoNota: o.tipoNota, modFrete: o.modFrete, observacoes: o.observacoes ?? "",
     validade: o.validade ? o.validade.toISOString().slice(0, 10) : null,
     motivoPerda: o.motivoPerda,
@@ -114,7 +119,10 @@ function paraUI(o: OrcRow): OrcamentoCompleto {
   };
 }
 
-const INCLUDE = { cliente: { select: { nome: true } }, itens: true } as const;
+const INCLUDE = {
+  cliente: { select: { nome: true, documento: true, telefone: true, email: true } },
+  itens: true,
+} as const;
 
 // Monta os dados de itens (snapshot dos produtos) + total, validando produtos.
 async function montarItens(empresaId: string, itens: ItemOrcamentoInput[]) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, formatCpfCnpj } from "@/lib/format";
 import type { OrcamentoCompleto, StatusOrcamentoUI } from "./actions";
 
 // Colunas do funil (kanban). "cancelado" fica fora do quadro (terminal).
@@ -76,6 +76,9 @@ export default function Kanban({
                     <span className="text-sm font-bold text-[var(--primary)]">{formatBRL(o.valorTotal)}</span>
                   </div>
                   <p className="mt-1 truncate text-sm font-medium">{o.clienteNome}</p>
+                  {o.clienteDocumento && (
+                    <p className="truncate text-[11px] text-[var(--muted)]">{formatCpfCnpj(o.clienteDocumento)}</p>
+                  )}
                   <p className="text-[11px] text-[var(--muted)]">
                     {o.itens.length} {o.itens.length === 1 ? "item" : "itens"}
                     {o.validade ? ` · vence ${o.validade.split("-").reverse().join("/")}` : ""}

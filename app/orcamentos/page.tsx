@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader, Button, Badge, Card, Input, Select, Tabela, EmptyState, SectionTitle, Paginacao, paginar, type Coluna } from "@/app/ui/primitives";
 import Modal from "@/app/ui/Modal";
 import Tabs from "@/app/ui/Tabs";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, formatCpfCnpj, formatTelefone } from "@/lib/format";
 import type { Cliente, Produto, Transportadora } from "@/lib/types";
 import { listarClientes } from "@/app/clientes/actions";
 import { listarProdutos } from "@/app/produtos/actions";
@@ -69,7 +69,11 @@ export default function OrcamentosPage() {
     const q = busca.trim().toLowerCase();
     return orcamentos.filter((o) =>
       (!filtroStatus || o.status === filtroStatus) &&
-      (!q || o.clienteNome.toLowerCase().includes(q) || String(o.numero).includes(q)),
+      (!q ||
+        o.clienteNome.toLowerCase().includes(q) ||
+        // Busca por documento aceita com ou sem pontuação.
+        (q.replace(/\D/g, "") !== "" && o.clienteDocumento.includes(q.replace(/\D/g, ""))) ||
+        String(o.numero).includes(q)),
     );
   }, [orcamentos, busca, filtroStatus]);
 
@@ -95,7 +99,19 @@ export default function OrcamentosPage() {
 
   const colunas: Coluna<OrcamentoCompleto>[] = [
     { chave: "numero", cabecalho: "Nº", render: (o) => <span className="font-mono text-xs">#{o.numero}</span> },
-    { chave: "cliente", cabecalho: "Cliente", render: (o) => <span className="font-medium">{o.clienteNome}</span> },
+    {
+      chave: "cliente",
+      cabecalho: "Cliente",
+      valor: (o) => o.clienteNome,
+      render: (o) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium">{o.clienteNome}</div>
+          {o.clienteDocumento && (
+            <div className="text-xs text-[var(--muted)]">{formatCpfCnpj(o.clienteDocumento)}</div>
+          )}
+        </div>
+      ),
+    },
     { chave: "status", cabecalho: "Status", render: (o) => <Badge tom={STATUS_TOM[o.status]}>{STATUS_LABEL[o.status]}</Badge> },
     { chave: "itens", cabecalho: "Itens", alinhar: "center", render: (o) => o.itens.length },
     { chave: "validade", cabecalho: "Validade", render: (o) => fmtData(o.validade) },
@@ -253,9 +269,21 @@ function DetalheOrcamento({
     } finally { setGerandoPdf(false); }
   }
 
+  // Rodapé em três blocos: o que se faz sempre (PDF, editar) à esquerda, o que
+  // encerra o orçamento escondido no menu, e só a ação principal em destaque à
+  // direita. Antes eram até seis botões lado a lado, com "Excluir" competindo
+  // em peso visual com "Fechar venda".
+  const acoesDestrutivas = [
+    !terminal && orc.status !== "perdido"
+      ? { rotulo: "Marcar como perdido", cor: "text-[var(--warning)]", run: () => { setMotivo(""); setDialog("perdido"); } }
+      : null,
+    !terminal ? { rotulo: "Cancelar orçamento", cor: "text-[var(--danger)]", run: () => setDialog("cancelar") } : null,
+    orc.status !== "fechado" ? { rotulo: "Excluir", cor: "text-[var(--danger)]", run: () => setDialog("excluir") } : null,
+  ].filter(Boolean) as { rotulo: string; cor: string; run: () => void }[];
+
   const rodape = (
     <div className="flex w-full flex-wrap items-center justify-between gap-2">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button variante="secondary" onClick={salvarPdf} disabled={proc || gerandoPdf}>
           <IconPdf /> {gerandoPdf ? "Gerando…" : "Salvar PDF"}
         </Button>
@@ -264,15 +292,7 @@ function DetalheOrcamento({
             <IconLapis /> Editar
           </Button>
         )}
-        {!terminal && orc.status !== "perdido" && (
-          <Button variante="warning" onClick={() => { setMotivo(""); setDialog("perdido"); }} disabled={proc}>Marcar perdido</Button>
-        )}
-        {!terminal && (
-          <Button variante="dangerSoft" onClick={() => setDialog("cancelar")} disabled={proc}>Cancelar</Button>
-        )}
-        {orc.status !== "fechado" && (
-          <Button variante="danger" onClick={() => setDialog("excluir")} disabled={proc}><IconLixeira /> Excluir</Button>
-        )}
+        {acoesDestrutivas.length > 0 && <MenuAcoes acoes={acoesDestrutivas} desabilitado={proc} />}
       </div>
       {!terminal && (
         <Button onClick={() => setDialog("fechar")} disabled={proc}>
@@ -321,9 +341,29 @@ function DetalheOrcamento({
             label: "Resumo",
             content: (
               <>
-                <SectionTitle>Dados do orçamento</SectionTitle>
+                <SectionTitle>Cliente</SectionTitle>
+                <div className="rounded-xl border border-[var(--border)] bg-white px-4 py-3">
+                  <p className="font-semibold">{orc.clienteNome}</p>
+                  {/* Consumidor final não tem documento — a linha some em vez de vir vazia. */}
+                  {orc.clienteDocumento && (
+                    <p className="mt-0.5 text-sm text-[var(--muted)]">
+                      {orc.clienteDocumento.replace(/\D/g, "").length > 11 ? "CNPJ " : "CPF "}
+                      {formatCpfCnpj(orc.clienteDocumento)}
+                    </p>
+                  )}
+                  {(orc.clienteTelefone || orc.clienteEmail) && (
+                    <p className="mt-0.5 text-sm text-[var(--muted)]">
+                      {[orc.clienteTelefone ? formatTelefone(orc.clienteTelefone) : null, orc.clienteEmail]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  )}
+                </div>
+
+                <div className="mt-4">
+                  <SectionTitle>Dados do orçamento</SectionTitle>
+                </div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  <Info rotulo="Cliente" valor={orc.clienteNome} />
                   <Info rotulo="Validade" valor={fmtData(orc.validade)} />
                   <Info rotulo="Modelo" valor={orc.tipoNota.startsWith("65") ? "NFC-e (65)" : "NF-e (55)"} />
                   <Info rotulo="Criado em" valor={fmtData(orc.criadoEm.slice(0, 10))} />
@@ -459,14 +499,58 @@ function Info({ rotulo, valor }: { rotulo: string; valor: string }) {
   );
 }
 
+// Menu das ações que encerram o orçamento. Fora do rodapé principal para não
+// disputar atenção com "Fechar venda" — e abre para cima porque o rodapé já
+// está na base do modal.
+function MenuAcoes({
+  acoes,
+  desabilitado,
+}: {
+  acoes: { rotulo: string; cor: string; run: () => void }[];
+  desabilitado?: boolean;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const caixa = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: MouseEvent) => {
+      if (caixa.current && !caixa.current.contains(e.target as Node)) setAberto(false);
+    };
+    document.addEventListener("mousedown", fora);
+    return () => document.removeEventListener("mousedown", fora);
+  }, [aberto]);
+
+  return (
+    <div ref={caixa} className="relative">
+      <Button variante="ghost" onClick={() => setAberto((v) => !v)} disabled={desabilitado} aria-label="Mais ações">
+        Mais
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={aberto ? "rotate-180 transition" : "transition"}>
+          <path d="m18 15-6-6-6 6" />
+        </svg>
+      </Button>
+      {aberto && (
+        <div className="absolute bottom-full left-0 z-10 mb-2 min-w-48 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1 shadow-xl">
+          {acoes.map((a) => (
+            <button
+              key={a.rotulo}
+              onClick={() => { setAberto(false); a.run(); }}
+              className={"block w-full cursor-pointer px-4 py-2 text-left text-sm font-medium hover:bg-slate-50 " + a.cor}
+            >
+              {a.rotulo}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function IconRaio() {
   return <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" className="-ml-0.5"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg>;
 }
 function IconLapis() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="-ml-0.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>;
-}
-function IconLixeira() {
-  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="-ml-0.5"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>;
 }
 function IconPdf() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="-ml-0.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M9 15h6" /><path d="M9 18h6" /></svg>;
