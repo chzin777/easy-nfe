@@ -12,6 +12,9 @@ interface CountUpProps {
   className?: string;
   startWhen?: boolean;
   separator?: string;
+  // Casas decimais fixas. Sem isso, a quantidade sai do próprio número — e um
+  // valor calculado (média, divisão) chega com 13 casas e vaza na tela.
+  decimais?: number;
   prefix?: string;
   suffix?: string;
   onStart?: () => void;
@@ -27,6 +30,7 @@ export default function CountUp({
   className = "",
   startWhen = true,
   separator = "",
+  decimais,
   prefix = "",
   suffix = "",
   onStart,
@@ -50,19 +54,22 @@ export default function CountUp({
     return 0;
   };
 
-  const maxDecimals = Math.max(getDecimalPlaces(from), getDecimalPlaces(to));
+  const maxDecimals =
+    decimais ?? Math.max(getDecimalPlaces(from), getDecimalPlaces(to));
 
   const formatValue = useCallback(
     (latest: number) => {
-      const hasDecimals = maxDecimals > 0;
       const options: Intl.NumberFormatOptions = {
         useGrouping: !!separator,
-        minimumFractionDigits: hasDecimals ? maxDecimals : 0,
-        maximumFractionDigits: hasDecimals ? maxDecimals : 0,
+        minimumFractionDigits: maxDecimals,
+        maximumFractionDigits: maxDecimals,
       };
+      // Com separador de milhar, formata em pt-BR: ponto no milhar e vírgula no
+      // decimal já saem certos. Trocar vírgula por ponto na mão (como era antes)
+      // quebra assim que o número tem casas decimais.
+      if (separator === ".") return `${prefix}${Intl.NumberFormat("pt-BR", options).format(latest)}${suffix}`;
       const formatted = Intl.NumberFormat("en-US", options).format(latest);
-      const núcleo = separator ? formatted.replace(/,/g, separator) : formatted;
-      return `${prefix}${núcleo}${suffix}`;
+      return `${prefix}${separator ? formatted.replace(/,/g, separator) : formatted}${suffix}`;
     },
     [maxDecimals, separator, prefix, suffix],
   );

@@ -77,7 +77,7 @@ export function KpiDestaque({
       <div>
         <p className="text-sm text-[var(--muted)]">{titulo}</p>
         <p className="mt-1.5 text-[26px] font-semibold leading-tight tracking-tight tabular-nums" style={{ color: cor }}>
-          <CountUp to={valor} prefix="R$ " separator="." duration={1.3} delay={0.1} />
+          <CountUp to={valor} prefix="R$ " separator="." decimais={2} duration={1.3} delay={0.1} />
         </p>
         <div className="mt-1.5">
           <Variacao atual={valor} anterior={anterior} invertido={invertido} />
@@ -121,7 +121,7 @@ export function KpiSimples({
         style={destaque ? { color: destaque } : undefined}
       >
         {moeda ? (
-          <CountUp to={valor} prefix="R$ " separator="." duration={1.2} delay={0.1} />
+          <CountUp to={valor} prefix="R$ " separator="." decimais={2} duration={1.2} delay={0.1} />
         ) : (
           <>
             <CountUp to={valor} separator="." duration={1.2} delay={0.1} />

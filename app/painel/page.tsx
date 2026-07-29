@@ -143,14 +143,14 @@ export default async function Dashboard({
         <Card className="p-5">
           <p className="text-sm text-[var(--muted)]">Custo da mercadoria vendida</p>
           <p className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums">
-            <CountUp to={resumo.cmv} prefix="R$ " separator="." duration={1.4} delay={0.15} />
+            <CountUp to={resumo.cmv} prefix="R$ " separator="." decimais={2} duration={1.4} delay={0.15} />
           </p>
           <p className="mt-1 text-xs text-[var(--muted)]">Custo dos produtos vendidos no período (itens com custo).</p>
         </Card>
         <Card className="p-5">
           <p className="text-sm text-[var(--muted)]">Estoque a preço de custo</p>
           <p className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums">
-            <CountUp to={resumo.valorEstoqueCusto} prefix="R$ " separator="." duration={1.4} delay={0.15} />
+            <CountUp to={resumo.valorEstoqueCusto} prefix="R$ " separator="." decimais={2} duration={1.4} delay={0.15} />
           </p>
           <p className="mt-1 text-xs text-[var(--muted)]">
             {resumo.valorEstoqueVenda > 0
@@ -163,7 +163,7 @@ export default async function Dashboard({
           <p className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums" style={{ color: COR.lucro }}>
             <CountUp
               to={Math.max(0, resumo.valorEstoqueVenda - resumo.valorEstoqueCusto)}
-              prefix="R$ " separator="." duration={1.4} delay={0.15}
+              prefix="R$ " separator="." decimais={2} duration={1.4} delay={0.15}
             />
           </p>
           <p className="mt-1 text-xs text-[var(--muted)]">Se todo o estoque atual for vendido pelo preço de tabela.</p>

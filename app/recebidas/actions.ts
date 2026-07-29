@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
 import { decriptar } from "@/lib/crypto";
 import { exigirFeature } from "@/lib/permissoes";
+import { sincronizarNfseRecebidas } from "@/lib/nfse/distribuicao";
 
 // Certificado A1 (PFX+senha) armazenado criptografado na empresa.
 function certDaEmpresa(certData: string | null): { pfxBase64: string; senha: string } {
@@ -299,6 +300,305 @@ export async function baixarXmlRecebida(notaId: string): Promise<{ ok: boolean; 
     if (!nota) return { ok: false, erro: "Documento não encontrado." };
     const nome = (nota.chaveAcesso || nota.nsu) + ".xml";
     return { ok: true, xml: nota.xml, nome };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Caixa de entrada única: nota de produto (NF-e, via SEFAZ) e nota de serviço
+// (NFS-e, via ADN) na mesma lista. São duas filas independentes, com numeração
+// e transporte próprios — o que se junta é só a apresentação.
+// ----------------------------------------------------------------------------
+
+// Nomes dos eventos da NFS-e em português. Os códigos crus não servem p/ tela.
+const NOME_EVENTO_NFSE: Record<string, string> = {
+  CANCELAMENTO: "Cancelada",
+  SOLICITACAO_CANCELAMENTO_ANALISE_FISCAL: "Cancelamento em análise",
+  CANCELAMENTO_POR_SUBSTITUICAO: "Substituída",
+  CANCELAMENTO_DEFERIDO_ANALISE_FISCAL: "Cancelamento deferido",
+  CANCELAMENTO_INDEFERIDO_ANALISE_FISCAL: "Cancelamento indeferido",
+  CONFIRMACAO_PRESTADOR: "Confirmada pelo prestador",
+  REJEICAO_PRESTADOR: "Rejeitada pelo prestador",
+  CONFIRMACAO_TOMADOR: "Confirmada por você",
+  REJEICAO_TOMADOR: "Rejeitada por você",
+  CONFIRMACAO_INTERMEDIARIO: "Confirmada pelo intermediário",
+  REJEICAO_INTERMEDIARIO: "Rejeitada pelo intermediário",
+  CONFIRMACAO_TACITA: "Confirmada automaticamente",
+  ANULACAO_REJEICAO: "Rejeição anulada",
+  CANCELAMENTO_POR_OFICIO: "Cancelada de ofício",
+  BLOQUEIO_POR_OFICIO: "Bloqueada de ofício",
+  DESBLOQUEIO_POR_OFICIO: "Desbloqueada",
+  INCLUSAO_NFSE_DAN: "Incluída no DAN",
+  TRIBUTOS_NFSE_RECOLHIDOS: "Tributos recolhidos",
+};
+
+const NOME_MANIFESTO: Record<string, string> = {
+  CIENCIA: "Ciência dada",
+  CONFIRMACAO: "Operação confirmada",
+  DESCONHECIMENTO: "Operação desconhecida",
+  NAO_REALIZADA: "Operação não realizada",
+};
+
+export type TomSituacao = "neutral" | "danger" | "success" | "warning";
+
+function tomEventoNfse(tipo: string): TomSituacao {
+  if (/^CANCELAMENTO|^BLOQUEIO/.test(tipo)) return "danger";
+  if (/^REJEICAO/.test(tipo)) return "warning";
+  if (/^CONFIRMACAO/.test(tipo)) return "success";
+  return "neutral";
+}
+
+export type EventoUI = { rotulo: string; em: string | null };
+
+export type EntradaUI = {
+  // Prefixado pela origem — os dois bancos têm ids próprios e a tabela precisa
+  // de chave única entre as duas listas juntas.
+  id: string;
+  origem: "produto" | "servico";
+  // Acontecimento que chegou sem a nota correspondente na caixa.
+  avulso: boolean;
+  nsu: string;
+  chaveAcesso: string;
+  contraparteNome: string;
+  contraparteDoc: string;
+  descricao: string | null;
+  valor: number | null;
+  emitidaEm: string | null;
+  situacao: string | null;
+  situacaoTom: TomSituacao;
+  eventos: EventoUI[];
+  // Só nota de produto é manifestável, e só quando ainda está pendente.
+  manifestavel: boolean;
+};
+
+export type ResumoEntradas = {
+  sincronizadaEm: string | null;
+  produtos: number;
+  servicos: number;
+  pendentes: number;
+};
+
+export async function listarEntradas(): Promise<{ docs: EntradaUI[]; resumo: ResumoEntradas }> {
+  const empresaId = await exigirEmpresa();
+  const [empresa, nfe, nfse] = await Promise.all([
+    prisma.emitente.findUniqueOrThrow({
+      where: { id: empresaId },
+      select: { dfeSincNSUEm: true, adnSincNSUEm: true },
+    }),
+    prisma.notaRecebida.findMany({
+      where: { empresaId },
+      select: {
+        id: true, nsu: true, tipoDoc: true, chaveAcesso: true, emitenteCnpj: true,
+        emitenteNome: true, valorTotal: true, emitidaEm: true, descricao: true,
+        manifestacao: true,
+      },
+    }),
+    prisma.nfseRecebida.findMany({
+      where: { empresaId },
+      select: {
+        id: true, nsu: true, tipoDocumento: true, tipoEvento: true, chaveAcesso: true,
+        prestadorCnpj: true, prestadorNome: true, valorServico: true, emitidaEm: true,
+        descricao: true,
+      },
+    }),
+  ]);
+
+  // --- nota de produto ---
+  const eventosNfe = nfe.filter((r) => r.tipoDoc === "evento");
+  const notasNfe = nfe.filter((r) => r.tipoDoc !== "evento");
+  const chavesNfe = new Set(notasNfe.map((n) => n.chaveAcesso).filter(Boolean));
+
+  const porChaveNfe = new Map<string, typeof eventosNfe>();
+  for (const e of eventosNfe) {
+    if (!e.chaveAcesso || !chavesNfe.has(e.chaveAcesso)) continue;
+    const atual = porChaveNfe.get(e.chaveAcesso) ?? [];
+    atual.push(e);
+    porChaveNfe.set(e.chaveAcesso, atual);
+  }
+
+  const linhasNfe: EntradaUI[] = notasNfe.map((n) => {
+    const meus = [...((n.chaveAcesso ? porChaveNfe.get(n.chaveAcesso) : undefined) ?? [])].sort(
+      (a, b) => (a.emitidaEm?.getTime() ?? 0) - (b.emitidaEm?.getTime() ?? 0),
+    );
+    const ultimo = meus[meus.length - 1];
+    // Evento do fisco manda na situação; sem evento, vale o que você declarou.
+    const situacao =
+      ultimo?.descricao ??
+      (n.manifestacao !== "PENDENTE" ? NOME_MANIFESTO[n.manifestacao] ?? n.manifestacao : null);
+    const cancelada = !!ultimo?.descricao && /cancel/i.test(ultimo.descricao);
+    return {
+      id: `produto:${n.id}`,
+      origem: "produto",
+      avulso: false,
+      nsu: n.nsu,
+      chaveAcesso: n.chaveAcesso ?? "",
+      contraparteNome: n.emitenteNome ?? "—",
+      contraparteDoc: n.emitenteCnpj ?? "",
+      // Resumo é o aviso da nota, sem o conteúdo dela — vale dizer na tela.
+      descricao: n.tipoDoc === "resumo" ? "Somente o resumo da nota" : "Nota completa",
+      valor: n.valorTotal != null ? Number(n.valorTotal) : null,
+      emitidaEm: n.emitidaEm?.toISOString() ?? null,
+      situacao,
+      situacaoTom: cancelada ? "danger" : situacao ? "success" : "neutral",
+      eventos: meus.map((e) => ({ rotulo: e.descricao ?? "Evento", em: e.emitidaEm?.toISOString() ?? null })),
+      manifestavel: !!n.chaveAcesso && n.manifestacao === "PENDENTE",
+    };
+  });
+
+  const orfaosNfe: EntradaUI[] = eventosNfe
+    .filter((e) => !e.chaveAcesso || !chavesNfe.has(e.chaveAcesso))
+    .map((e) => ({
+      id: `produto:${e.id}`,
+      origem: "produto",
+      avulso: true,
+      nsu: e.nsu,
+      chaveAcesso: e.chaveAcesso ?? "",
+      contraparteNome: "—",
+      contraparteDoc: "",
+      descricao: e.descricao,
+      valor: null,
+      emitidaEm: e.emitidaEm?.toISOString() ?? null,
+      situacao: e.descricao ?? "Evento",
+      situacaoTom: e.descricao && /cancel/i.test(e.descricao) ? "danger" : "neutral",
+      eventos: [],
+      manifestavel: false,
+    }));
+
+  // --- nota de serviço ---
+  const eventosNfse = nfse.filter((r) => r.tipoDocumento === "EVENTO");
+  const notasNfse = nfse.filter((r) => r.tipoDocumento !== "EVENTO");
+  const chavesNfse = new Set(notasNfse.map((n) => n.chaveAcesso).filter(Boolean));
+
+  const porChaveNfse = new Map<string, typeof eventosNfse>();
+  for (const e of eventosNfse) {
+    if (!e.chaveAcesso || !chavesNfse.has(e.chaveAcesso)) continue;
+    const atual = porChaveNfse.get(e.chaveAcesso) ?? [];
+    atual.push(e);
+    porChaveNfse.set(e.chaveAcesso, atual);
+  }
+
+  const rotuloEvento = (tipo: string | null) =>
+    tipo ? NOME_EVENTO_NFSE[tipo] ?? tipo : "Evento";
+
+  const linhasNfse: EntradaUI[] = notasNfse.map((n) => {
+    const meus = [...((n.chaveAcesso ? porChaveNfse.get(n.chaveAcesso) : undefined) ?? [])].sort(
+      (a, b) => (a.emitidaEm?.getTime() ?? 0) - (b.emitidaEm?.getTime() ?? 0),
+    );
+    const ultimo = meus[meus.length - 1];
+    return {
+      id: `servico:${n.id}`,
+      origem: "servico",
+      avulso: false,
+      nsu: n.nsu,
+      chaveAcesso: n.chaveAcesso ?? "",
+      contraparteNome: n.prestadorNome ?? "—",
+      contraparteDoc: n.prestadorCnpj ?? "",
+      descricao: n.descricao,
+      valor: n.valorServico != null ? Number(n.valorServico) : null,
+      emitidaEm: n.emitidaEm?.toISOString() ?? null,
+      situacao: ultimo ? rotuloEvento(ultimo.tipoEvento) : null,
+      situacaoTom: ultimo?.tipoEvento ? tomEventoNfse(ultimo.tipoEvento) : "neutral",
+      eventos: meus.map((e) => ({
+        rotulo: rotuloEvento(e.tipoEvento),
+        em: e.emitidaEm?.toISOString() ?? null,
+      })),
+      manifestavel: false,
+    };
+  });
+
+  const orfaosNfse: EntradaUI[] = eventosNfse
+    .filter((e) => !e.chaveAcesso || !chavesNfse.has(e.chaveAcesso))
+    .map((e) => ({
+      id: `servico:${e.id}`,
+      origem: "servico",
+      avulso: true,
+      nsu: e.nsu,
+      chaveAcesso: e.chaveAcesso ?? "",
+      contraparteNome: "—",
+      contraparteDoc: "",
+      descricao: e.descricao,
+      valor: null,
+      emitidaEm: e.emitidaEm?.toISOString() ?? null,
+      situacao: rotuloEvento(e.tipoEvento),
+      situacaoTom: e.tipoEvento ? tomEventoNfse(e.tipoEvento) : "neutral",
+      eventos: [],
+      manifestavel: false,
+    }));
+
+  const docs = [...linhasNfe, ...orfaosNfe, ...linhasNfse, ...orfaosNfse].sort(
+    (a, b) => (b.emitidaEm ?? "").localeCompare(a.emitidaEm ?? ""),
+  );
+
+  // A busca mais antiga das duas manda no rótulo — é até onde a caixa está
+  // realmente em dia.
+  const datas = [empresa.dfeSincNSUEm, empresa.adnSincNSUEm];
+  const sincronizadaEm = datas.some((d) => !d)
+    ? null
+    : new Date(Math.min(...datas.map((d) => d!.getTime()))).toISOString();
+
+  return {
+    docs,
+    resumo: {
+      sincronizadaEm,
+      produtos: linhasNfe.length,
+      servicos: linhasNfse.length,
+      pendentes: linhasNfe.filter((l) => l.manifestavel).length,
+    },
+  };
+}
+
+export type SincEntradas = {
+  produto: { ok: boolean; novas: number; erro?: string };
+  servico: { ok: boolean; novas: number; erro?: string };
+};
+
+// Busca as duas filas numa tacada. Uma falhando não impede a outra — são
+// serviços independentes, e meia caixa atualizada é melhor que nenhuma.
+export async function sincronizarEntradas(): Promise<SincEntradas> {
+  const [nfe, nfse] = await Promise.all([
+    sincronizarRecebidas(),
+    sincronizarServicos(),
+  ]);
+  return {
+    produto: nfe.ok ? { ok: true, novas: nfe.novas } : { ok: false, novas: 0, erro: nfe.erro },
+    servico: nfse.ok ? { ok: true, novas: nfse.novas } : { ok: false, novas: 0, erro: nfse.erro },
+  };
+}
+
+async function sincronizarServicos() {
+  try {
+    await exigirFeature("dfe");
+    const empresaId = await exigirEmpresa();
+    return await sincronizarNfseRecebidas(empresaId);
+  } catch (e) {
+    return { ok: false as const, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// XML bruto de qualquer documento da caixa, produto ou serviço.
+export async function baixarXmlEntrada(
+  id: string,
+): Promise<{ ok: true; xml: string; nome: string } | { ok: false; erro: string }> {
+  try {
+    const empresaId = await exigirEmpresa();
+    const [origem, real] = id.split(":");
+
+    if (origem === "servico") {
+      const doc = await prisma.nfseRecebida.findFirst({
+        where: { id: real, empresaId },
+        select: { xml: true, chaveAcesso: true, nsu: true },
+      });
+      if (!doc) return { ok: false, erro: "Documento não encontrado." };
+      return { ok: true, xml: doc.xml, nome: `${doc.chaveAcesso || `nsu-${doc.nsu}`}.xml` };
+    }
+
+    const doc = await prisma.notaRecebida.findFirst({
+      where: { id: real, empresaId },
+      select: { xml: true, chaveAcesso: true, nsu: true },
+    });
+    if (!doc) return { ok: false, erro: "Documento não encontrado." };
+    return { ok: true, xml: doc.xml, nome: `${doc.chaveAcesso || `nsu-${doc.nsu}`}.xml` };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
   }
