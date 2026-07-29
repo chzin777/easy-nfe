@@ -33,6 +33,7 @@ const grupos: Grupo[] = [
     itens: [
       { href: "/notas/nova", label: "Emitir nova nota", icon: <IconPlus />, feature: "emitir_nfe" },
       { href: "/orcamentos", label: "Orçamentos", icon: <IconClipboard />, feature: "orcamentos" },
+      { href: "/notas-servico", label: "Notas de serviço", icon: <IconList />, feature: "emitir_nfse" },
       { href: "/notas", label: "Notas emitidas", icon: <IconList />, feature: "notas_listar" },
     ],
   },
@@ -56,6 +57,7 @@ const grupos: Grupo[] = [
     titulo: "Cadastros",
     itens: [
       { href: "/produtos", label: "Produtos", icon: <IconBox />, feature: "produtos" },
+      { href: "/servicos", label: "Serviços", icon: <IconBox />, feature: "emitir_nfse" },
       { href: "/estoque", label: "Estoque", icon: <IconLayers />, feature: "estoque" },
       { href: "/clientes", label: "Clientes", icon: <IconUser />, feature: "clientes" },
       { href: "/fornecedores", label: "Fornecedores", icon: <IconFactory />, feature: "fornecedores" },

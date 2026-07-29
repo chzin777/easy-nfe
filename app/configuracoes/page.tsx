@@ -73,6 +73,13 @@ const empresaVazia: EmpresaDados = {
   proximoNumeroNFCe: "1",
   cscNFCe: "",
   idCscNFCe: "",
+  inscricaoMunicipal: "",
+  cnae: "",
+  opSimpNac: "1",
+  regApTribSN: "",
+  regEspTrib: "0",
+  serieNFSe: "1",
+  proximoNumeroNFSe: "1",
   casasDecimaisQtd: "2",
   bloquearSemEstoque: false,
   tipoNotaPadrao: "55-saida",
@@ -1100,6 +1107,55 @@ function AbaAmbiente({
           </Field>
           <Field label="CSC (token)">
             <Input value={form.cscNFCe} onChange={(e) => setE("cscNFCe", e.target.value)} />
+          </Field>
+        </div>
+      </section>
+
+      <section>
+        <SectionTitle>NFS-e (nota de serviço)</SectionTitle>
+        <p className="mb-3 text-sm text-[var(--muted)]">
+          O ISS é imposto da prefeitura, então a nota de serviço exige a inscrição municipal e o regime
+          tributário do prestador. Sem a inscrição municipal a nota não sai.
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Inscrição municipal">
+            <Input value={form.inscricaoMunicipal} onChange={(e) => setE("inscricaoMunicipal", e.target.value)} />
+          </Field>
+          <Field label="CNAE principal" hint="Só dígitos.">
+            <Input value={form.cnae} onChange={(e) => setE("cnae", e.target.value)} />
+          </Field>
+          <Field label="Regime do Simples">
+            <Select
+              opcoes={[
+                { value: "1", label: "Não optante pelo Simples" },
+                { value: "2", label: "MEI" },
+                { value: "3", label: "ME / EPP" },
+              ]}
+              value={form.opSimpNac}
+              onChange={(e) => setE("opSimpNac", e.target.value)}
+            />
+          </Field>
+          <Field label="Apuração no Simples" hint="Só para optante.">
+            <Select
+              opcoes={[
+                { value: "", label: "—" },
+                { value: "1", label: "Federais e ISSQN pelo Simples" },
+                { value: "2", label: "Federais pelo Simples, ISSQN por fora" },
+                { value: "3", label: "Todos os tributos por fora do Simples" },
+              ]}
+              value={form.regApTribSN}
+              disabled={form.opSimpNac === "1"}
+              onChange={(e) => setE("regApTribSN", e.target.value)}
+            />
+          </Field>
+          <Field label="Regime especial de tributação" hint="0 = nenhum. A prefeitura informa se houver.">
+            <Input value={form.regEspTrib} onChange={(e) => setE("regEspTrib", e.target.value)} />
+          </Field>
+          <Field label="Série NFS-e">
+            <Input value={form.serieNFSe} onChange={(e) => setE("serieNFSe", e.target.value)} />
+          </Field>
+          <Field label="Próximo nº NFS-e">
+            <Input type="number" min="1" value={form.proximoNumeroNFSe} onChange={(e) => setE("proximoNumeroNFSe", e.target.value)} />
           </Field>
         </div>
       </section>

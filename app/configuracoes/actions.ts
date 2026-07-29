@@ -156,6 +156,15 @@ export type EmpresaDados = {
   proximoNumeroNFCe: string;
   cscNFCe: string;
   idCscNFCe: string;
+  // NFS-e (serviço). O ISS é municipal, então exige inscrição municipal e o
+  // regime tributário do prestador — sem eles a nota de serviço não sai.
+  inscricaoMunicipal: string;
+  cnae: string;
+  opSimpNac: string; // 1=não optante, 2=MEI, 3=ME/EPP
+  regApTribSN: string; // regime de apuração no Simples (só p/ optante)
+  regEspTrib: string; // 0 = nenhum
+  serieNFSe: string;
+  proximoNumeroNFSe: string;
   // casas decimais na quantidade dos itens (0–4)
   casasDecimaisQtd: string;
   // estoque: bloquear emissão quando item controlado não tem saldo
@@ -237,6 +246,13 @@ export async function obterEmpresaAtiva(): Promise<EmpresaDados | null> {
     proximoNumeroNFCe: String(e.proximoNumeroNFCe),
     cscNFCe: e.cscNFCe ?? "",
     idCscNFCe: e.idCscNFCe ?? "",
+    inscricaoMunicipal: e.inscricaoMunicipal ?? "",
+    cnae: e.cnae ?? "",
+    opSimpNac: e.opSimpNac,
+    regApTribSN: e.regApTribSN ?? "",
+    regEspTrib: e.regEspTrib ?? "0",
+    serieNFSe: String(e.serieNFSe),
+    proximoNumeroNFSe: String(e.proximoNumeroNFSe),
     casasDecimaisQtd: String(e.casasDecimaisQtd),
     bloquearSemEstoque: e.bloquearSemEstoque,
     tipoNotaPadrao: e.tipoNotaPadrao,
@@ -314,6 +330,13 @@ export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id
       proximoNumeroNFCe: Number(dados.proximoNumeroNFCe) || 1,
       cscNFCe: dados.cscNFCe?.trim() || null,
       idCscNFCe: dados.idCscNFCe?.replace(/\D/g, "") || null,
+      inscricaoMunicipal: dados.inscricaoMunicipal?.replace(/\D/g, "") || null,
+      cnae: dados.cnae?.replace(/\D/g, "") || null,
+      opSimpNac: dados.opSimpNac || "1",
+      regApTribSN: dados.opSimpNac !== "1" ? dados.regApTribSN || null : null,
+      regEspTrib: dados.regEspTrib || "0",
+      serieNFSe: Number(dados.serieNFSe) || 1,
+      proximoNumeroNFSe: Number(dados.proximoNumeroNFSe) || 1,
       casasDecimaisQtd: Math.min(4, Math.max(0, Number(dados.casasDecimaisQtd) || 0)),
       bloquearSemEstoque: !!dados.bloquearSemEstoque,
       tipoNotaPadrao: dados.tipoNotaPadrao || "55-saida",
