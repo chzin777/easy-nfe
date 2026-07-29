@@ -114,7 +114,7 @@ model RedefinicaoSenha {
 // Escopo por empresa: a chave autentica requisições daquela empresa.
 // ----------------------------------------------------------------------------
 model ApiKey {
-  id        String @id @default(uuid())
+  id String @id @default(uuid())
 
   empresaId String
   empresa   Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
@@ -243,9 +243,9 @@ model Fatura {
   tokenPublico String? @unique
 
   // Status do e-mail de cobrança enviado ao assinante (badge no admin).
-  emailStatus String?   // ENVIADO | REENVIADO | FALHA
+  emailStatus String? // ENVIADO | REENVIADO | FALHA
   emailEm     DateTime? // quando o último envio/tentativa ocorreu
-  emailErro   String?   // mensagem da falha (quando FALHA)
+  emailErro   String? // mensagem da falha (quando FALHA)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -277,17 +277,17 @@ model Lead {
 
 // Vínculo M—N usuário <-> empresa (acesso compartilhado).
 model AcessoEmpresa {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  empresaId String
-  empresa   Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  papel     String   @default("membro") // dono | membro
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  empresaId  String
+  empresa    Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  papel      String   @default("membro") // dono | membro
   // Features (lib/features.ts) liberadas para este membro nesta empresa.
   // Vazio = sem restrição própria: vale tudo que o plano do titular libera.
   // Nunca amplia o plano — o acesso final é plano ∩ permissoes. Dono ignora.
   permissoes String[] @default([])
-  createdAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 
   @@unique([userId, empresaId])
   @@index([empresaId])
@@ -370,11 +370,17 @@ model Emitente {
   dfeMaxNSU    String?
   dfeSincNSUEm DateTime?
 
+  // Distribuição DFe da NFS-e — cursor no ADN (Ambiente de Dados Nacional).
+  // Fila e numeração são independentes da NF-e, por isso campos separados.
+  adnUltNSU    String?
+  adnSincNSUEm DateTime?
+
   notas             Nota[]
   notasServico      NotaServico[]
   servicos          Servico[]
   orcamentos        Orcamento[]
   notasRecebidas    NotaRecebida[]
+  nfseRecebidas     NfseRecebida[]
   produtos          Produto[]
   clientes          Cliente[]
   fornecedores      Fornecedor[]
@@ -913,6 +919,42 @@ model NotaRecebida {
   @@unique([empresaId, nsu])
   @@index([empresaId, chaveAcesso])
   @@map("notas_recebidas")
+}
+
+// ----------------------------------------------------------------------------
+// NFS-e recebida via distribuição do ADN. Fila numerada por NSU, própria da
+// NFS-e — separada da NotaRecebida (NF-e) porque numeração, chave (50 dígitos
+// contra 44) e tipos de evento não se misturam.
+//
+// tipoDocumento: NFSE | EVENTO | DPS | PEDIDO_REGISTRO_EVENTO | CNC | NENHUM
+// tipoEvento: preenchido só quando tipoDocumento = EVENTO (CANCELAMENTO,
+// CONFIRMACAO_TOMADOR, CANCELAMENTO_POR_SUBSTITUICAO, etc.)
+// ----------------------------------------------------------------------------
+model NfseRecebida {
+  id String @id @default(uuid())
+
+  empresaId String
+  empresa   Emitente @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  nsu           String
+  tipoDocumento String
+  tipoEvento    String?
+
+  chaveAcesso   String? // 50 dígitos
+  prestadorCnpj String?
+  prestadorNome String?
+  valorServico  Decimal?  @db.Decimal(15, 2)
+  emitidaEm     DateTime?
+  descricao     String? // descrição do serviço ou do evento
+
+  xml String @db.Text // XML bruto do documento, como veio do ADN
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([empresaId, nsu])
+  @@index([empresaId, chaveAcesso])
+  @@map("nfse_recebidas")
 }
 
 // ----------------------------------------------------------------------------

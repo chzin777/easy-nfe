@@ -48,6 +48,7 @@ const grupos: Grupo[] = [
     titulo: "Notas de entrada",
     itens: [
       { href: "/recebidas", label: "Notas recebidas", icon: <IconInbox />, feature: "dfe" },
+      { href: "/servicos-recebidos", label: "Serviços recebidos", icon: <IconInbox />, feature: "dfe" },
       { href: "/importar", label: "Importar XML", icon: <IconImport />, feature: "importar_xml" },
     ],
   },

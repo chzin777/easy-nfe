@@ -1,7 +1,6 @@
-import https from "node:https";
-import { gzipSync, gunzipSync } from "node:zlib";
 import type { Certificado } from "@/lib/nfe/cert";
 import { assinar } from "@/lib/nfe/sign";
+import { deGzipB64, explicarErro, gzipB64, requisicao as http } from "./http";
 import { montarDps } from "./xml";
 import type { AmbienteNFSe, DadosDPS, ResultadoNFSe } from "./types";
 
@@ -23,69 +22,13 @@ const HOST: Record<AmbienteNFSe, string> = {
 
 const VER_APLIC = "EasyNFe";
 
-const gzipB64 = (xml: string) => gzipSync(Buffer.from(xml, "utf8")).toString("base64");
-const deGzipB64 = (b64: string) => gunzipSync(Buffer.from(b64, "base64")).toString("utf8");
-
-type Resposta = { status: number; body: string };
-
-function requisicao(
+const requisicao = (
   ambiente: AmbienteNFSe,
   metodo: "GET" | "POST",
   caminho: string,
   cert: Certificado,
   corpo?: string,
-): Promise<Resposta> {
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: HOST[ambiente],
-        port: 443,
-        path: caminho,
-        method: metodo,
-        key: cert.keyPem,
-        cert: cert.chainPem, // folha + cadeia no handshake, igual à NF-e
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          ...(corpo ? { "Content-Length": Buffer.byteLength(corpo) } : {}),
-        },
-        timeout: 60_000,
-      },
-      (res) => {
-        let dados = "";
-        res.setEncoding("utf8");
-        res.on("data", (c) => { dados += c; });
-        res.on("end", () => resolve({ status: res.statusCode ?? 0, body: dados }));
-      },
-    );
-    req.on("timeout", () => req.destroy(new Error("Tempo esgotado ao falar com a SEFIN Nacional.")));
-    req.on("error", reject);
-    if (corpo) req.write(corpo);
-    req.end();
-  });
-}
-
-// Extrai a mensagem de erro do corpo devolvido pelo fisco. O formato varia
-// entre rejeição de schema e rejeição de regra, então tentamos os campos
-// conhecidos antes de cair no corpo cru.
-function explicarErro(body: string): { erro: string; mensagens?: { codigo?: string; descricao?: string }[] } {
-  try {
-    const j = JSON.parse(body) as Record<string, unknown>;
-    const lista = (j.erros ?? j.Erros ?? j.mensagens) as { Codigo?: string; codigo?: string; Descricao?: string; descricao?: string; Complemento?: string }[] | undefined;
-    if (Array.isArray(lista) && lista.length) {
-      const mensagens = lista.map((m) => ({
-        codigo: m.Codigo ?? m.codigo,
-        descricao: [m.Descricao ?? m.descricao, m.Complemento].filter(Boolean).join(" — "),
-      }));
-      return { erro: mensagens.map((m) => `${m.codigo ?? ""} ${m.descricao ?? ""}`.trim()).join("; "), mensagens };
-    }
-    const msg = j.message ?? j.Message ?? j.erro;
-    if (typeof msg === "string") return { erro: msg };
-  } catch {
-    // corpo não-JSON: devolve cru, truncado
-  }
-  return { erro: body.slice(0, 500) || "Resposta vazia da SEFIN Nacional." };
-}
+) => http(HOST[ambiente], metodo, caminho, cert, corpo);
 
 // Emite a NFS-e: monta a DPS, assina, comprime e transmite.
 //

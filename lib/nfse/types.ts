@@ -84,6 +84,57 @@ export type DadosDPS = {
   infoAdicional?: string;
 };
 
+// --- Distribuição de DFe (ADN) ---
+
+export type StatusDistribuicao = "REJEICAO" | "NENHUM_DOCUMENTO_LOCALIZADO" | "DOCUMENTOS_LOCALIZADOS";
+
+export type TipoDocumentoDFe = "NENHUM" | "DPS" | "PEDIDO_REGISTRO_EVENTO" | "NFSE" | "EVENTO" | "CNC";
+
+export type TipoEventoDFe =
+  | "CANCELAMENTO"
+  | "SOLICITACAO_CANCELAMENTO_ANALISE_FISCAL"
+  | "CANCELAMENTO_POR_SUBSTITUICAO"
+  | "CANCELAMENTO_DEFERIDO_ANALISE_FISCAL"
+  | "CANCELAMENTO_INDEFERIDO_ANALISE_FISCAL"
+  | "CONFIRMACAO_PRESTADOR"
+  | "REJEICAO_PRESTADOR"
+  | "CONFIRMACAO_TOMADOR"
+  | "REJEICAO_TOMADOR"
+  | "CONFIRMACAO_INTERMEDIARIO"
+  | "REJEICAO_INTERMEDIARIO"
+  | "CONFIRMACAO_TACITA"
+  | "ANULACAO_REJEICAO"
+  | "CANCELAMENTO_POR_OFICIO"
+  | "BLOQUEIO_POR_OFICIO"
+  | "DESBLOQUEIO_POR_OFICIO"
+  | "INCLUSAO_NFSE_DAN"
+  | "TRIBUTOS_NFSE_RECOLHIDOS";
+
+// Um documento da fila de distribuição. O XML já vem descompactado.
+export type DFeDistribuido = {
+  nsu: number;
+  chaveAcesso?: string;
+  tipoDocumento: TipoDocumentoDFe;
+  tipoEvento?: TipoEventoDFe;
+  geradoEm?: Date;
+  xml?: string;
+};
+
+export type LoteDFe =
+  | {
+      ok: true;
+      status: StatusDistribuicao;
+      documentos: DFeDistribuido[];
+      ultimoNSU: number;
+      alertas: string[];
+    }
+  | {
+      ok: false;
+      erro: string;
+      status?: number;
+      mensagens?: { codigo?: string; descricao?: string }[];
+    };
+
 // Retorno da SEFIN Nacional ao transmitir a DPS.
 export type ResultadoNFSe =
   | {
