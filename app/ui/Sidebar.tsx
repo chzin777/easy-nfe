@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { listarEmpresas, trocarEmpresa, type EmpresaResumo } from "@/app/configuracoes/actions";
 import { sair, papelAtual } from "@/app/auth/actions";
 import { obterMinhasFeatures } from "@/app/permissoes-actions";
+import { formatCpfCnpj } from "@/lib/format";
 
 // feature aceita lista quando o item é liberado por mais de um benefício —
 // basta o plano ter uma delas.
@@ -394,7 +395,7 @@ function SeletorEmpresa({ empresas }: { empresas: EmpresaResumo[] }) {
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold text-white">{ativa?.razaoSocial ?? "Selecione"}</span>
-          {ativa?.cnpj && <span className="block truncate font-mono text-[10px] text-slate-400">{ativa.cnpj}</span>}
+          {ativa?.cnpj && <span className="block truncate font-mono text-[10px] text-slate-400">{formatCpfCnpj(ativa.cnpj)}</span>}
         </span>
         <motion.span animate={{ rotate: aberto ? 180 : 0 }} transition={{ duration: 0.2 }} className="shrink-0 text-slate-400">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
@@ -432,7 +433,7 @@ function SeletorEmpresa({ empresas }: { empresas: EmpresaResumo[] }) {
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{e.razaoSocial}</span>
-                      <span className="block truncate font-mono text-[10px] text-slate-400">{e.cnpj}</span>
+                      <span className="block truncate font-mono text-[10px] text-slate-400">{formatCpfCnpj(e.cnpj)}</span>
                     </span>
                     {trocando === e.id ? (
                       <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-white/40 border-t-white" />
