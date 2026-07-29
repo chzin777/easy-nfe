@@ -7,6 +7,8 @@ import Sidebar from "./Sidebar";
 import AvisoLicenca from "./AvisoLicenca";
 import Onboarding from "./Onboarding";
 import TrialAviso from "./TrialAviso";
+import Tour from "./Tour";
+import { tourDaRota } from "./tours";
 import { obterEstadoLicenca } from "@/app/licenca-actions";
 import type { EstadoLicenca } from "@/lib/licenca";
 import { sair } from "@/app/auth/actions";
@@ -19,6 +21,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     pathname === "/recuperar-senha" || pathname === "/redefinir-senha";
   const [estado, setEstado] = useState<EstadoLicenca | null>(null);
   const [menuAberto, setMenuAberto] = useState(false);
+  const tour = tourDaRota(pathname);
 
   useEffect(() => {
     if (publica) return;
@@ -100,6 +103,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Onboarding />
             {children}
           </div>
+          {/* Tutorial da tela atual — o botão "?" segue o usuário por todo o
+              app; o conteúdo muda conforme a rota. */}
+          {tour && <Tour key={tour.chave} chave={tour.chave} titulo={tour.titulo} slides={tour.slides} />}
         </main>
       </div>
     </div>
