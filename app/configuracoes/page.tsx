@@ -26,6 +26,7 @@ import { EnderecoFields } from "@/app/ui/PessoaFields";
 import { FEATURES } from "@/lib/features";
 import { formatCep, formatCpfCnpj, formatTelefone } from "@/lib/format";
 import NovaEmpresaModal from "./NovaEmpresaModal";
+import SeletorAtividade, { exigeIE, exigeIM } from "./SeletorAtividade";
 import AbaWhatsApp from "./AbaWhatsApp";
 import AbaEmail from "./AbaEmail";
 import {
@@ -62,6 +63,7 @@ const empresaVazia: EmpresaDados = {
   nomeFantasia: "",
   cnpj: "",
   inscricaoEstadual: "",
+  atividade: "comercio",
   crt: "1",
   telefone: "",
   email: "",
@@ -828,6 +830,9 @@ function AbaEmitente({
     <div className="space-y-6">
       <section>
         <SectionTitle>Identificação</SectionTitle>
+        <div className="mb-5">
+          <SeletorAtividade valor={form.atividade} onChange={(v) => setE("atividade", v)} />
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Razão social" required className="sm:col-span-2">
             <Input value={form.razaoSocial} onChange={(e) => setE("razaoSocial", e.target.value)} />
@@ -845,9 +850,16 @@ function AbaEmitente({
               inputMode="numeric"
             />
           </Field>
-          <Field label="Inscrição estadual" required>
-            <Input value={form.inscricaoEstadual} onChange={(e) => setE("inscricaoEstadual", e.target.value)} />
-          </Field>
+          {exigeIE(form.atividade) && (
+            <Field label="Inscrição estadual" required hint="Emitida pela SEFAZ do estado.">
+              <Input value={form.inscricaoEstadual} onChange={(e) => setE("inscricaoEstadual", e.target.value)} />
+            </Field>
+          )}
+          {exigeIM(form.atividade) && (
+            <Field label="Inscrição municipal" required hint="Emitida pela prefeitura. Sem ela a NFS-e não sai.">
+              <Input value={form.inscricaoMunicipal} onChange={(e) => setE("inscricaoMunicipal", e.target.value)} />
+            </Field>
+          )}
           <Field label="Regime tributário (CRT)" required>
             <Select opcoes={CRT} value={form.crt} onChange={(e) => setE("crt", e.target.value)} />
           </Field>
@@ -1118,7 +1130,7 @@ function AbaAmbiente({
           tributário do prestador. Sem a inscrição municipal a nota não sai.
         </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Inscrição municipal">
+          <Field label="Inscrição municipal" hint="Também aparece na aba Empresa.">
             <Input value={form.inscricaoMunicipal} onChange={(e) => setE("inscricaoMunicipal", e.target.value)} />
           </Field>
           <Field label="CNAE principal" hint="Só dígitos.">

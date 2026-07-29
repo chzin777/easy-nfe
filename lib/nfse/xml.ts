@@ -111,8 +111,12 @@ function valoresXml(v: DadosDPS["valores"]): string {
     ? `<tribFed><piscofins>${tag("CST", v.pisCofins.cst)}${tag("tpRetPisCofins", v.pisCofins.tpRet)}</piscofins></tribFed>`
     : "";
 
+  // totTrib é obrigatório no XSD. Sem o percentual do Simples informado, vai
+  // indTotTrib=0 — "não informar o valor estimado dos tributos" (Lei 12.741).
   const totTrib =
-    v.pTotTribSN != null ? `<totTrib><pTotTribSN>${n2(v.pTotTribSN)}</pTotTribSN></totTrib>` : "";
+    v.pTotTribSN != null
+      ? `<totTrib><pTotTribSN>${n2(v.pTotTribSN)}</pTotTribSN></totTrib>`
+      : `<totTrib><indTotTrib>0</indTotTrib></totTrib>`;
 
   return (
     `<valores>` +

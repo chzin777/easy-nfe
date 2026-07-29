@@ -5,6 +5,7 @@ import { Field, Input, Select, SectionTitle } from "@/app/ui/primitives";
 import StepperModal from "@/app/ui/StepperModal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import { EnderecoFields } from "@/app/ui/PessoaFields";
+import SeletorAtividade, { exigeIE, exigeIM } from "./SeletorAtividade";
 import {
   criarEmpresaComCertificado,
   inspecionarCertificado,
@@ -23,6 +24,7 @@ const vazia: EmpresaDados = {
   nomeFantasia: "",
   cnpj: "",
   inscricaoEstadual: "",
+  atividade: "comercio",
   crt: "1",
   telefone: "",
   email: "",
@@ -208,7 +210,14 @@ export default function NovaEmpresaModal({
         completeButtonText={salvando ? "Cadastrando…" : "Cadastrar empresa"}
         onFinalStepCompleted={salvar}
         canProceed={(s) => {
-          if (s === 1) return form.razaoSocial.trim() !== "" && cnpjDigitos.length === 14 && form.inscricaoEstadual.trim() !== "";
+          if (s === 1) {
+            return (
+              form.razaoSocial.trim() !== "" &&
+              cnpjDigitos.length === 14 &&
+              (!exigeIE(form.atividade) || form.inscricaoEstadual.trim() !== "") &&
+              (!exigeIM(form.atividade) || form.inscricaoMunicipal.trim() !== "")
+            );
+          }
           if (s === 3) return certOk && !salvando;
           return true;
         }}
@@ -217,6 +226,11 @@ export default function NovaEmpresaModal({
         <Step>
           <SectionTitle>Identificação da empresa</SectionTitle>
           <p className="-mt-2 mb-4 text-sm text-[var(--muted)]">Preencha o CNPJ para puxar os dados automaticamente.</p>
+
+          <div className="mb-5">
+            <SeletorAtividade valor={form.atividade} onChange={(v) => setE("atividade", v)} />
+          </div>
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="CNPJ" required hint={buscandoCnpj ? "Buscando dados da empresa…" : "Preencha para puxar a razão social"}>
               <Input
@@ -226,9 +240,16 @@ export default function NovaEmpresaModal({
                 placeholder="00.000.000/0000-00"
               />
             </Field>
-            <Field label="Inscrição estadual" required>
-              <Input value={form.inscricaoEstadual} onChange={(e) => setE("inscricaoEstadual", e.target.value)} />
-            </Field>
+            {exigeIE(form.atividade) && (
+              <Field label="Inscrição estadual" required hint="Emitida pela SEFAZ do estado.">
+                <Input value={form.inscricaoEstadual} onChange={(e) => setE("inscricaoEstadual", e.target.value)} />
+              </Field>
+            )}
+            {exigeIM(form.atividade) && (
+              <Field label="Inscrição municipal" required hint="Emitida pela prefeitura. Sem ela a NFS-e não sai.">
+                <Input value={form.inscricaoMunicipal} onChange={(e) => setE("inscricaoMunicipal", e.target.value)} />
+              </Field>
+            )}
             <Field label="Razão social" required className="sm:col-span-2">
               <Input value={form.razaoSocial} onChange={(e) => setE("razaoSocial", e.target.value)} />
             </Field>

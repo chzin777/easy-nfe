@@ -144,6 +144,8 @@ export type EmpresaDados = {
   nomeFantasia: string;
   cnpj: string;
   inscricaoEstadual: string;
+  // comercio | servico | ambos — define qual inscrição é obrigatória.
+  atividade: string;
   crt: string;
   telefone: string;
   email: string;
@@ -227,6 +229,7 @@ export async function obterEmpresaAtiva(): Promise<EmpresaDados | null> {
     nomeFantasia: e.nomeFantasia ?? "",
     cnpj: e.cnpj,
     inscricaoEstadual: e.ie,
+    atividade: e.atividade,
     crt: e.crt,
     telefone: e.telefone ?? "",
     email: e.email ?? "",
@@ -305,6 +308,15 @@ export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id
     if (!dados.razaoSocial.trim() || !dados.cnpj.trim()) {
       return { ok: false, erro: "Razão social e CNPJ são obrigatórios." };
     }
+    // Quem vende mercadoria precisa da inscrição estadual; quem presta serviço,
+    // da municipal. Empresa que faz as duas coisas precisa das duas.
+    const atividade = ["comercio", "servico", "ambos"].includes(dados.atividade) ? dados.atividade : "comercio";
+    if (atividade !== "servico" && !dados.inscricaoEstadual.trim()) {
+      return { ok: false, erro: "Informe a inscrição estadual — ela é obrigatória para emitir NF-e e NFC-e." };
+    }
+    if (atividade !== "comercio" && !dados.inscricaoMunicipal?.trim()) {
+      return { ok: false, erro: "Informe a inscrição municipal — ela é obrigatória para emitir NFS-e." };
+    }
     // Resolve o código IBGE via API (sem tabela local); não bloqueia o cadastro se falhar.
     const codMunicipio = await resolverCodMunicipioIBGE(dados.endereco.municipio, dados.endereco.uf).catch(() => "");
     const dadosBase = {
@@ -312,6 +324,7 @@ export async function salvarEmpresa(dados: EmpresaDados): Promise<{ ok: true; id
       nomeFantasia: dados.nomeFantasia || null,
       cnpj: dados.cnpj.replace(/\D/g, ""),
       ie: dados.inscricaoEstadual.replace(/\D/g, ""),
+      atividade,
       crt: dados.crt,
       cep: dados.endereco.cep.replace(/\D/g, ""),
       logradouro: dados.endereco.logradouro,

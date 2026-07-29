@@ -309,6 +309,10 @@ model Emitente {
   ie           String // inscrição estadual
   crt          String // 1=Simples, 2=Simples-excesso, 3=Regime normal
 
+  // O que a empresa faz. Define qual inscrição é obrigatória no cadastro:
+  // comercio = estadual (NF-e/NFC-e) | servico = municipal (NFS-e) | ambos.
+  atividade String @default("comercio")
+
   // endereço (flat)
   cep          String
   logradouro   String
