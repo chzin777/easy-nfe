@@ -17,6 +17,7 @@ import {
   paginar,
   type Coluna,
 } from "@/app/ui/primitives";
+import SeletorLC116 from "./SeletorLC116";
 import {
   atualizarServico,
   criarServico,
@@ -264,11 +265,27 @@ export default function ServicosPage() {
             />
           </Field>
 
+          <Field label="Classificação do serviço" required hint="Busque pelo que a empresa faz — o código sai daqui.">
+            <SeletorLC116
+              cTribNac={form.cTribNac}
+              itemLista={form.itemListaServico}
+              onEscolher={(v) =>
+                setForm((f) => ({
+                  ...f,
+                  cTribNac: v.cTribNac,
+                  itemListaServico: v.itemListaServico,
+                  // Só sugere a descrição legal quando o campo ainda está vazio.
+                  descricao: f.descricao.trim() ? f.descricao : v.descricao,
+                }))
+              }
+            />
+          </Field>
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
               label="Código de tributação nacional"
               required
-              hint="6 dígitos. Sai da lista da LC 116 — o contador tem essa tabela."
+              hint="Preenchido pela busca. Os 2 últimos dígitos são o desdobramento — ajuste se a sua prefeitura usar outro."
             >
               <Input
                 value={form.cTribNac}
@@ -277,7 +294,7 @@ export default function ServicosPage() {
                 inputMode="numeric"
               />
             </Field>
-            <Field label="Item da lista de serviços" hint="Opcional. Ex.: 14.01">
+            <Field label="Item da lista de serviços" hint="Ex.: 14.01">
               <Input
                 value={form.itemListaServico}
                 onChange={(e) => setForm({ ...form, itemListaServico: e.target.value })}

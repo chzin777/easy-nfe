@@ -25,6 +25,7 @@ import type { Cliente } from "@/lib/types";
 import { listarClientes } from "@/app/clientes/actions";
 import ClientePicker from "@/app/notas/nova/ClientePicker";
 import { listarServicos, type Servico } from "@/app/servicos/actions";
+import SeletorLC116 from "@/app/servicos/SeletorLC116";
 import {
   baixarXmlNotaServico,
   emitirNotaServico,
@@ -75,6 +76,8 @@ export default function NotasServicoPage() {
   const [porPagina, setPorPagina] = useState(10);
   const [emitir, setEmitir] = useState(false);
   const [form, setForm] = useState<EmitirNfseInput>({ ...VAZIO, competencia: hoje() });
+  // Só para o rótulo da busca — o item da lista da nota vem do serviço escolhido.
+  const [itemLista, setItemLista] = useState("");
   const [emitindo, setEmitindo] = useState(false);
   const [msg, setMsg] = useState<{ tom: "ok" | "erro"; texto: string } | null>(null);
   const [detalhe, setDetalhe] = useState<NotaServicoUI | null>(null);
@@ -104,6 +107,7 @@ export default function NotasServicoPage() {
 
   function abrirEmissao() {
     setForm({ ...VAZIO, competencia: hoje() });
+    setItemLista("");
     setMsg(null);
     setEmitir(true);
   }
@@ -115,6 +119,7 @@ export default function NotasServicoPage() {
       setForm((f) => ({ ...f, servicoId: null }));
       return;
     }
+    setItemLista(s.itemListaServico);
     setForm((f) => ({
       ...f,
       servicoId: s.id,
@@ -323,8 +328,23 @@ export default function NotasServicoPage() {
             />
           </Field>
 
+          <Field label="Classificação do serviço" required hint="Busque pelo que foi feito.">
+            <SeletorLC116
+              cTribNac={form.cTribNac}
+              itemLista={itemLista}
+              onEscolher={(v) => {
+                setItemLista(v.itemListaServico);
+                setForm((f) => ({
+                  ...f,
+                  cTribNac: v.cTribNac,
+                  descricao: f.descricao.trim() ? f.descricao : v.descricao,
+                }));
+              }}
+            />
+          </Field>
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Código de tributação nacional" required hint="6 dígitos.">
+            <Field label="Código de tributação nacional" required hint="6 dígitos. Os 2 últimos são o desdobramento.">
               <Input
                 value={form.cTribNac}
                 onChange={(e) => setForm({ ...form, cTribNac: e.target.value.replace(/\D/g, "").slice(0, 6) })}

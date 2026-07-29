@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Button,
   Field,
@@ -45,6 +46,7 @@ import TourEmissao from "./TourEmissao";
 import { listarProdutos } from "@/app/produtos/actions";
 import { listarTransportadoras } from "@/app/transportadoras/actions";
 import { obterCasasDecimaisQtd, obterPadroesEmissao, type PadroesEmissao } from "@/app/configuracoes/actions";
+import { obterMinhasFeatures } from "@/app/permissoes-actions";
 import { QtyStepper, DescInput, PrecoInput } from "@/app/ui/ItensFields";
 import { lerRascunho, limparRascunho, salvarRascunho, reidratarItens, type Rascunho } from "./rascunho";
 
@@ -58,6 +60,8 @@ function fmtQtd(v: number, casas: number) {
 }
 
 export default function NovaNotaPage() {
+  const router = useRouter();
+  const [temNfse, setTemNfse] = useState(false);
   const [tipoNota, setTipoNota] = useState("55-saida");
   const [clienteId, setClienteId] = useState("");
   const [transportadoraId, setTransportadoraId] = useState("");
@@ -96,6 +100,12 @@ export default function NovaNotaPage() {
   // estiver pendente de resposta, nada é salvo por cima.
   const [rascunho, setRascunho] = useState<Rascunho | null>(null);
 
+  // A opção de serviço só aparece para quem tem o benefício — senão levaria a
+  // uma tela bloqueada.
+  const opcoesTipo = temNfse
+    ? [...TIPOS_NOTA, { value: "nfse", label: "NFS-e (serviço)" }]
+    : TIPOS_NOTA;
+
   // Limpa todos os campos e volta ao passo 1 (mantém listas já carregadas).
   function resetarFormulario() {
     setTipoNota(padroes.tipoNotaPadrao);
@@ -113,13 +123,15 @@ export default function NovaNotaPage() {
 
   useEffect(() => {
     (async () => {
-      const [c, p, t, cd, pad] = await Promise.all([
+      const [c, p, t, cd, pad, feats] = await Promise.all([
         listarClientes(),
         listarProdutos(),
         listarTransportadoras(),
         obterCasasDecimaisQtd(),
         obterPadroesEmissao(),
+        obterMinhasFeatures(),
       ]);
+      setTemNfse(feats.includes("emitir_nfse"));
       setClientes(c);
       setProdutos(p);
       setTransportadoras(t);
@@ -397,7 +409,20 @@ export default function NovaNotaPage() {
               </Field>
             ) : (
               <Field label="Tipo de nota" required>
-                <Select opcoes={TIPOS_NOTA} value={tipoNota} onChange={(e) => setTipoNota(e.target.value)} />
+                <Select
+                  opcoes={opcoesTipo}
+                  value={tipoNota}
+                  onChange={(e) => {
+                    // Nota de serviço não é uma variação desta tela: não tem
+                    // itens, ICMS nem transporte. Escolher aqui leva para a
+                    // tela própria em vez de fingir que cabe no mesmo formulário.
+                    if (e.target.value === "nfse") {
+                      router.push("/notas-servico");
+                      return;
+                    }
+                    setTipoNota(e.target.value);
+                  }}
+                />
               </Field>
             )}
             <Field label="Cliente" required>
