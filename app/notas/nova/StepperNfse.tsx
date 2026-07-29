@@ -320,7 +320,7 @@ export default function StepperNfse({
     <Modal
       aberto={erro !== null}
       onFechar={() => setErro(null)}
-      titulo="Não deu para emitir"
+      titulo="Não foi possível emitir"
       largura="max-w-md"
       rodape={<Button onClick={() => setErro(null)}>Entendi</Button>}
     >

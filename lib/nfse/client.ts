@@ -22,6 +22,8 @@ const HOST: Record<AmbienteNFSe, string> = {
 
 const VER_APLIC = "EasyNFe";
 
+const PROLOGO = '<?xml version="1.0" encoding="UTF-8"?>';
+
 const requisicao = (
   ambiente: AmbienteNFSe,
   metodo: "GET" | "POST",
@@ -37,7 +39,10 @@ const requisicao = (
 // direto para o gzip.
 export async function emitirNfse(dados: DadosDPS, cert: Certificado): Promise<ResultadoNFSe> {
   const { xml, id } = montarDps(dados, VER_APLIC);
-  const assinado = assinar(xml, id, cert, "infDPS");
+  // A SEFIN rejeita (E1229) o XML sem a declaração de encoding. Ela entra
+  // depois de assinar: a declaração fica fora da canonicalização do infDPS,
+  // então não invalida a assinatura.
+  const assinado = PROLOGO + assinar(xml, id, cert, "infDPS");
 
   try {
     const r = await requisicao(
