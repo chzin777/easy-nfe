@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Button,
   Field,
@@ -47,6 +46,8 @@ import { listarProdutos } from "@/app/produtos/actions";
 import { listarTransportadoras } from "@/app/transportadoras/actions";
 import { obterCasasDecimaisQtd, obterPadroesEmissao, type PadroesEmissao } from "@/app/configuracoes/actions";
 import { obterMinhasFeatures } from "@/app/permissoes-actions";
+import { listarServicos, type Servico } from "@/app/servicos/actions";
+import StepperNfse from "./StepperNfse";
 import { QtyStepper, DescInput, PrecoInput } from "@/app/ui/ItensFields";
 import { lerRascunho, limparRascunho, salvarRascunho, reidratarItens, type Rascunho } from "./rascunho";
 
@@ -60,8 +61,8 @@ function fmtQtd(v: number, casas: number) {
 }
 
 export default function NovaNotaPage() {
-  const router = useRouter();
   const [temNfse, setTemNfse] = useState(false);
+  const [servicos, setServicos] = useState<Servico[]>([]);
   const [tipoNota, setTipoNota] = useState("55-saida");
   const [clienteId, setClienteId] = useState("");
   const [transportadoraId, setTransportadoraId] = useState("");
@@ -100,11 +101,16 @@ export default function NovaNotaPage() {
   // estiver pendente de resposta, nada é salvo por cima.
   const [rascunho, setRascunho] = useState<Rascunho | null>(null);
 
-  // A opção de serviço só aparece para quem tem o benefício — senão levaria a
-  // uma tela bloqueada.
+  // A opção de serviço só aparece para quem tem o benefício.
   const opcoesTipo = temNfse
     ? [...TIPOS_NOTA, { value: "nfse", label: "NFS-e (serviço)" }]
     : TIPOS_NOTA;
+
+  // O mesmo seletor serve os dois fluxos — trocar o tipo troca o formulário
+  // abaixo dele, sem sair da página.
+  const selectTipo = (
+    <Select opcoes={opcoesTipo} value={tipoNota} onChange={(e) => setTipoNota(e.target.value)} />
+  );
 
   // Limpa todos os campos e volta ao passo 1 (mantém listas já carregadas).
   function resetarFormulario() {
@@ -131,7 +137,10 @@ export default function NovaNotaPage() {
         obterPadroesEmissao(),
         obterMinhasFeatures(),
       ]);
-      setTemNfse(feats.includes("emitir_nfse"));
+      const podeNfse = feats.includes("emitir_nfse");
+      setTemNfse(podeNfse);
+      // Catálogo só é buscado por quem pode emitir serviço.
+      if (podeNfse) listarServicos().then(setServicos).catch(() => {});
       setClientes(c);
       setProdutos(p);
       setTransportadoras(t);
@@ -376,6 +385,14 @@ export default function NovaNotaPage() {
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-10">
           <LightningLoader texto="Carregando…" />
         </div>
+      ) : tipoNota === "nfse" ? (
+        // Serviço tem passos próprios: sem produtos, sem transporte.
+        <StepperNfse
+          clientes={clientes}
+          onClienteCriado={(c) => setClientes((prev) => [...prev.filter((x) => x.id !== c.id), c])}
+          servicos={servicos}
+          tipoSelect={selectTipo}
+        />
       ) : (
       <Stepper
         key={formKey}
@@ -409,20 +426,7 @@ export default function NovaNotaPage() {
               </Field>
             ) : (
               <Field label="Tipo de nota" required>
-                <Select
-                  opcoes={opcoesTipo}
-                  value={tipoNota}
-                  onChange={(e) => {
-                    // Nota de serviço não é uma variação desta tela: não tem
-                    // itens, ICMS nem transporte. Escolher aqui leva para a
-                    // tela própria em vez de fingir que cabe no mesmo formulário.
-                    if (e.target.value === "nfse") {
-                      router.push("/notas-servico");
-                      return;
-                    }
-                    setTipoNota(e.target.value);
-                  }}
-                />
+                {selectTipo}
               </Field>
             )}
             <Field label="Cliente" required>
