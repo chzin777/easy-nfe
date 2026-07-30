@@ -33,7 +33,9 @@ const TRIBUTACAO = [
   { value: "4", label: "Não incidência" },
 ];
 
-const hoje = () => new Date().toISOString().slice(0, 10);
+// Data de hoje no fuso de Brasília. Com toISOString() o dia vira o de amanhã
+// depois das 21h — e competência à frente da emissão é rejeição (E0015).
+const hoje = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date());
 
 const VAZIO: EmitirNfseInput = {
   clienteId: "",

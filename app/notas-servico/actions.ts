@@ -7,6 +7,7 @@ import { decriptar } from "@/lib/crypto";
 import { carregarCertificado } from "@/lib/nfe/cert";
 import { consultarPorDps, emitirNfse } from "@/lib/nfse/client";
 import { resolverCodMunicipio } from "@/lib/nfe/ibge";
+import { dataBrasilia } from "@/lib/nfse/xml";
 import type { AmbienteNFSe, DadosDPS } from "@/lib/nfse/types";
 
 // Emissão de NFS-e no Padrão Nacional.
@@ -112,7 +113,10 @@ export async function emitirNotaServico(input: EmitirNfseInput): Promise<Resulta
     const numero = empresa.proximoNumeroNFSe;
     const serie = empresa.serieNFSe;
     const agora = new Date();
-    const competencia = input.competencia ? new Date(`${input.competencia}T12:00:00`) : agora;
+    // Competência é o mês do serviço e não pode passar da data de emissão
+    // (E0015). Data do browser em fuso adiantado cai nessa, então trava aqui.
+    const informada = input.competencia ? new Date(`${input.competencia}T12:00:00-03:00`) : agora;
+    const competencia = dataBrasilia(informada) > dataBrasilia(agora) ? agora : informada;
     const localPrestacao = so(input.codMunicipioPrestacao) || empresa.codMunicipio;
 
     // Grava antes de transmitir: se a resposta se perder, o rascunho segura o
