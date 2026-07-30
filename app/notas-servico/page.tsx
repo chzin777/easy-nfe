@@ -38,8 +38,18 @@ import {
 const TRIBUTACAO = [
   { value: "1", label: "Tributável (ISS devido)" },
   { value: "2", label: "Imune" },
-  { value: "3", label: "Exportação de serviço" },
   { value: "4", label: "Não incidência" },
+];
+
+// Só entra na nota quando a tributação é imune. Texto encurtado do que a
+// Constituição lista no Art. 150, VI.
+const IMUNIDADES = [
+  { value: "0", label: "Não informado" },
+  { value: "1", label: "Entes públicos entre si" },
+  { value: "2", label: "Templos de qualquer culto" },
+  { value: "3", label: "Partidos, sindicatos, educação e assistência sem fins lucrativos" },
+  { value: "4", label: "Livros, jornais e periódicos" },
+  { value: "5", label: "Fonogramas e videofonogramas musicais brasileiros" },
 ];
 
 const TOM_STATUS: Record<string, "neutral" | "success" | "danger" | "warning"> = {
@@ -63,6 +73,7 @@ const VAZIO: EmitirNfseInput = {
   valorServico: 0,
   aliqISS: 0,
   tribISSQN: "1",
+  tpImunidade: "0",
   issRetido: false,
   codMunicipioPrestacao: "",
   competencia: "",
@@ -373,7 +384,7 @@ export default function NotasServicoPage() {
             </Field>
             <Field
               label="Alíquota do ISS (%)"
-              hint={valorISS > 0 ? `ISS de ${formatBRL(valorISS)}` : undefined}
+              hint={valorISS > 0 ? `ISS de ${formatBRL(valorISS)} — a prefeitura confirma a alíquota` : undefined}
             >
               <Input
                 type="number"
@@ -383,6 +394,15 @@ export default function NotasServicoPage() {
                 onChange={(e) => setForm({ ...form, aliqISS: Number(e.target.value) || 0 })}
               />
             </Field>
+            {form.tribISSQN === "2" && (
+              <Field label="Tipo de imunidade" required hint="A prefeitura rejeita a nota imune sem isso." className="sm:col-span-2">
+                <Select
+                  opcoes={IMUNIDADES}
+                  value={form.tpImunidade}
+                  onChange={(e) => setForm({ ...form, tpImunidade: e.target.value })}
+                />
+              </Field>
+            )}
           </div>
 
           <label className="flex cursor-pointer items-center gap-2 text-sm">

@@ -7,8 +7,9 @@ import { decriptar } from "@/lib/crypto";
 import { carregarCertificado } from "@/lib/nfe/cert";
 import { consultarPorDps, emitirNfse } from "@/lib/nfse/client";
 import { resolverCodMunicipio } from "@/lib/nfe/ibge";
-import { dataBrasilia } from "@/lib/nfse/xml";
-import type { AmbienteNFSe, DadosDPS } from "@/lib/nfse/types";
+import { dataBrasilia, valoresAplicados } from "@/lib/nfse/xml";
+import type { AmbienteNFSe } from "@/lib/nfse/types";
+import { montarDadosDps } from "@/lib/nfse/dps";
 
 // Emissão de NFS-e no Padrão Nacional.
 //
@@ -33,8 +34,10 @@ export type EmitirNfseInput = {
   cNBS: string;
   valorServico: number;
   aliqISS: number;
-  // 1 = tributável | 2 = imune | 3 = exportação | 4 = não incidência
+  // 1 = tributável | 2 = imune | 4 = não incidência
   tribISSQN: string;
+  // Tipo de imunidade (0-5). Só usado quando tribISSQN = 2.
+  tpImunidade: string;
   // ISS retido pelo tomador — quem recolhe é quem contratou.
   issRetido: boolean;
   // Local da prestação (IBGE 7). Vazio = município do emitente.
@@ -151,56 +154,18 @@ export async function emitirNotaServico(input: EmitirNfseInput): Promise<Resulta
       data: { proximoNumeroNFSe: numero + 1 },
     });
 
-    const dados: DadosDPS = {
+    const dados = montarDadosDps({
+      empresa,
+      cliente,
+      input,
       ambiente,
       serie,
       numero,
       emitidaEm: agora,
       competencia,
-      cLocEmi: empresa.codMunicipio,
-      tpEmit: "1", // prestador
-      prestador: {
-        cnpj: so(empresa.cnpj),
-        im: so(empresa.inscricaoMunicipal),
-        fone: so(empresa.telefone),
-        email: empresa.email ?? undefined,
-        regTrib: {
-          opSimpNac: empresa.opSimpNac,
-          // Só faz sentido para optante do Simples.
-          regApTribSN: empresa.opSimpNac !== "1" ? empresa.regApTribSN ?? undefined : undefined,
-          regEspTrib: empresa.regEspTrib ?? "0",
-        },
-      },
-      tomador: {
-        cnpj: so(cliente.documento).length === 14 ? so(cliente.documento) : undefined,
-        cpf: so(cliente.documento).length === 11 ? so(cliente.documento) : undefined,
-        im: so(cliente.inscricaoEstadual) || undefined,
-        nome: cliente.nome,
-        endereco: {
-          cMun: cMunTomador,
-          cep: so(cliente.cep),
-          logradouro: cliente.logradouro ?? "",
-          numero: cliente.numero ?? "",
-          complemento: cliente.complemento ?? undefined,
-          bairro: cliente.bairro ?? "",
-        },
-        fone: so(cliente.telefone) || undefined,
-        email: cliente.email ?? undefined,
-      },
-      servico: {
-        cLocPrestacao: localPrestacao,
-        cTribNac: so(input.cTribNac),
-        descricao: input.descricao.trim(),
-        cNBS: so(input.cNBS) || undefined,
-      },
-      valores: {
-        valorServico: input.valorServico,
-        tribISSQN: input.tribISSQN,
-        tpRetISSQN: input.issRetido ? "2" : "1",
-        aliquotaISS: input.tribISSQN === "1" && input.aliqISS > 0 ? input.aliqISS : undefined,
-      },
-      infoAdicional: input.informacoesAdicionais.trim() || undefined,
-    };
+      cMunTomador,
+      cLocPrestacao: localPrestacao,
+    });
 
     const r = await emitirNfse(dados, cert);
 
@@ -212,6 +177,7 @@ export async function emitirNotaServico(input: EmitirNfseInput): Promise<Resulta
       return { ok: false, erro: r.erro, id: registro.id };
     }
 
+    const aplicado = valoresAplicados(r.xmlNfse);
     await prisma.notaServico.update({
       where: { id: registro.id },
       data: {
@@ -221,6 +187,9 @@ export async function emitirNotaServico(input: EmitirNfseInput): Promise<Resulta
         autorizadaEm: new Date(),
         xmlDps: r.xmlDps,
         xmlNfse: r.xmlNfse,
+        // Quem calcula o ISS é a prefeitura; grava o que ela aplicou.
+        ...(aplicado.aliqISS != null ? { aliqISS: aplicado.aliqISS } : {}),
+        ...(aplicado.valorISS != null ? { valorISS: aplicado.valorISS } : {}),
       },
     });
 

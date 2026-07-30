@@ -61,7 +61,12 @@ export type ValoresDPS = {
   tribISSQN: string;
   // 1 = não retido | 2 = retido pelo tomador | 3 = retido pelo intermediário
   tpRetISSQN: string;
+  // Tipo de imunidade (0-5). Obrigatório, e só permitido, quando tribISSQN = 2.
+  tpImunidade?: string;
   aliquotaISS?: number; // pAliq — omitido quando não tributável
+  // Regime do Simples do prestador (mesmo código do regTrib). Quem não é
+  // optante não pode informar alíquota: quem calcula o ISS é a prefeitura.
+  opSimpNac?: string;
   // Simples Nacional informa a alíquota efetiva total; fora do Simples o campo
   // do XSD é outro, por isso o tipo separa os dois casos.
   pTotTribSN?: number;

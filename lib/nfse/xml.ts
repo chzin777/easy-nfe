@@ -99,22 +99,35 @@ function tomadorXml(t: DadosDPS["tomador"]): string {
 }
 
 function valoresXml(v: DadosDPS["valores"]): string {
+  // Alíquota só entra quando o ISS é devido E o prestador é optante do Simples.
+  // Fora do Simples quem calcula o ISS é a prefeitura, e informar pAliq é
+  // rejeição (E0617). opSimpNac = 1 é "não optante".
+  const podeAliquota = v.tribISSQN === "1" && v.opSimpNac !== undefined && v.opSimpNac !== "1";
   const tribMun =
     `<tribMun>` +
     tag("tribISSQN", v.tribISSQN) +
+    // Ordem do XSD: tpImunidade vem antes de tpRetISSQN. Só vale p/ imune.
+    (v.tribISSQN === "2" ? tag("tpImunidade", v.tpImunidade ?? "0") : "") +
     tag("tpRetISSQN", v.tpRetISSQN) +
-    // Alíquota só faz sentido quando o ISS é devido.
-    (v.tribISSQN === "1" && v.aliquotaISS != null ? `<pAliq>${n2(v.aliquotaISS)}</pAliq>` : "") +
+    (podeAliquota && v.aliquotaISS != null ? `<pAliq>${n2(v.aliquotaISS)}</pAliq>` : "") +
     `</tribMun>`;
 
   const tribFed = v.pisCofins
     ? `<tribFed><piscofins>${tag("CST", v.pisCofins.cst)}${tag("tpRetPisCofins", v.pisCofins.tpRet)}</piscofins></tribFed>`
     : "";
 
-  // totTrib é obrigatório no XSD. Sem o percentual do Simples informado, vai
-  // indTotTrib=0 — "não informar o valor estimado dos tributos" (Lei 12.741).
-  const totTrib =
-    v.pTotTribSN != null
+  // totTrib é obrigatório no XSD e aceita uma escolha entre quatro grupos.
+  // Optante do Simples usa o percentual da alíquota do Simples, ou indTotTrib=0
+  // ("não informar valor estimado", Decreto 8.264/2014). Não optante não pode
+  // usar nenhum dos dois (E0713), então vai o percentual por esfera — federal e
+  // estadual em zero, municipal com a alíquota do ISS.
+  const totTrib = !podeAliquota
+    ? `<totTrib><pTotTrib>` +
+      `<pTotTribFed>${n2(0)}</pTotTribFed>` +
+      `<pTotTribEst>${n2(0)}</pTotTribEst>` +
+      `<pTotTribMun>${n2(v.aliquotaISS ?? 0)}</pTotTribMun>` +
+      `</pTotTrib></totTrib>`
+    : v.pTotTribSN != null
       ? `<totTrib><pTotTribSN>${n2(v.pTotTribSN)}</pTotTribSN></totTrib>`
       : `<totTrib><indTotTrib>0</indTotTrib></totTrib>`;
 
@@ -124,6 +137,18 @@ function valoresXml(v: DadosDPS["valores"]): string {
     `<trib>${tribMun}${tribFed}${totTrib}</trib>` +
     `</valores>`
   );
+}
+
+// Alíquota e ISS que a prefeitura aplicou de fato, lidos do XML da NFS-e
+// autorizada. Fora do Simples é ela quem calcula, então o que o usuário digitou
+// é só estimativa — o que vale é isto.
+export function valoresAplicados(xmlNfse: string): { aliqISS?: number; valorISS?: number } {
+  const ler = (nome: string) => {
+    const m = new RegExp(`<${nome}>([^<]+)</${nome}>`).exec(xmlNfse);
+    const n = m ? Number(m[1]) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  };
+  return { aliqISS: ler("pAliqAplic"), valorISS: ler("vISSQN") };
 }
 
 // XML da DPS pronto para assinar. A assinatura entra como irmã de <infDPS>,
