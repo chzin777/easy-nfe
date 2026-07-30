@@ -20,6 +20,26 @@ export type SlideTour = {
   icone: React.ReactNode;
 };
 
+function Conteudo({ slide, indice, total }: { slide: SlideTour; indice: number; total: number }) {
+  return (
+    <>
+      <div className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${slide.cor} text-white shadow-md`}>
+        {slide.icone}
+      </div>
+      <h3 className="mt-4 text-lg font-semibold tracking-tight">
+        {total > 1 ? `Etapa ${indice + 1}: ` : ""}{slide.titulo}
+      </h3>
+      <p className="mt-2 text-sm text-[var(--muted)]">{slide.texto}</p>
+      {slide.dica && (
+        <p className="mt-3 flex gap-2 rounded-lg bg-[var(--primary-soft)]/50 px-3 py-2.5 text-sm text-[var(--foreground)]">
+          <span aria-hidden>💡</span>
+          <span>{slide.dica}</span>
+        </p>
+      )}
+    </>
+  );
+}
+
 export default function Tour({
   chave,
   titulo,
@@ -88,29 +108,27 @@ export default function Tour({
           </div>
         }
       >
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, x: 24 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -24 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <div className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${s.cor} text-white shadow-md`}>
-              {s.icone}
+        {/* Todos os slides ocupam a mesma célula do grid: os invisíveis reservam
+            a altura do maior, então o card não muda de tamanho ao avançar. */}
+        <div className="grid [grid-template-areas:'slide']">
+          {slides.map((sl, idx) => (
+            <div key={idx} aria-hidden className="invisible pointer-events-none [grid-area:slide]">
+              <Conteudo slide={sl} indice={idx} total={slides.length} />
             </div>
-            <h3 className="mt-4 text-lg font-semibold tracking-tight">
-              {slides.length > 1 ? `Etapa ${i + 1}: ` : ""}{s.titulo}
-            </h3>
-            <p className="mt-2 text-sm text-[var(--muted)]">{s.texto}</p>
-            {s.dica && (
-              <p className="mt-3 flex gap-2 rounded-lg bg-[var(--primary-soft)]/50 px-3 py-2.5 text-sm text-[var(--foreground)]">
-                <span>💡</span>
-                <span>{s.dica}</span>
-              </p>
-            )}
-          </motion.div>
-        </AnimatePresence>
+          ))}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: 24 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -24 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="[grid-area:slide]"
+            >
+              <Conteudo slide={s} indice={i} total={slides.length} />
+            </motion.div>
+          </AnimatePresence>
+        </div>
 
         <div className="mt-5 flex justify-center gap-1.5">
           {slides.map((_, idx) => (

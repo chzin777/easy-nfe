@@ -256,3 +256,165 @@ export function htmlRedefinicaoSenha(link: string): string {
     </p>
   </div>`;
 }
+
+// ----------------------------------------------------------------------------
+// E-mail de reativação — assinante cujo período de teste terminou sem virar
+// assinatura. Usa o que a pessoa JÁ fez na conta (notas, clientes, produtos)
+// em vez de discurso genérico: o argumento mais forte é o trabalho que ela
+// perde se não voltar.
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// Aviso de novidades da versão. A lista vem de lib/novidades.ts — a mesma que
+// alimenta o carrossel do painel e a landing, para não haver três verdades.
+// ----------------------------------------------------------------------------
+export function htmlNovidades(vars: {
+  nome: string;
+  entrarUrl: string;
+  novidades: { titulo: string; desc: string; tag: string }[];
+  logoCid?: string;
+}): string {
+  const primeiro = vars.nome.split(" ")[0] || vars.nome;
+  const [destaque, ...demais] = vars.novidades;
+
+  // Painel escuro para o anúncio da versão: é o único bloco com contraste
+  // invertido, então o olho vai nele antes de qualquer outra coisa. Gradiente
+  // com cor de fundo sólida atrás, porque o Outlook ignora background-image.
+  const painel = destaque
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius:16px;background-color:#241a4d;background-image:linear-gradient(135deg,#2a1a63 0%,#5227ff 100%);margin:0 0 26px">
+        <tr><td style="padding:24px">
+          <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.16);color:#e9e1ff;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px">Principal desta versão</span>
+          <div style="margin-top:14px;font-size:21px;font-weight:800;line-height:1.25;color:#ffffff">${escapar(destaque.titulo)}</div>
+          <div style="margin-top:8px;font-size:14px;line-height:1.7;color:#d3c9f7">${escapar(destaque.desc)}</div>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0 0">
+            ${["Emissão pelo Padrão Nacional, sem falar com a prefeitura", "Serviço buscado pela lista da LC 116, sem decorar código", "PDF, XML e cancelamento na mesma tela"]
+              .map(
+                (t) => `<tr><td width="20" valign="top" style="padding:0 0 7px"><span style="color:#b9a6ff;font-size:14px;font-weight:800">&#10003;</span></td>
+                  <td style="padding:0 0 7px;font-size:13px;line-height:1.5;color:#e6e0fb">${t}</td></tr>`,
+              )
+              .join("")}
+          </table>
+        </td></tr>
+      </table>`
+    : "";
+
+  // Demais novidades de dois em dois: cards curtos e do mesmo tamanho, sem a
+  // sensação de lista infinita.
+  const cardCurto = (n: { titulo: string; desc: string; tag: string }) => `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eceaf6;border-radius:12px;background:#ffffff">
+      <tr><td style="padding:14px 16px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${
+          n.tag === "Novo" ? "#5227ff" : "#98a2b3"
+        }">${escapar(n.tag)}</div>
+        <div style="margin-top:5px;font-size:14px;font-weight:700;line-height:1.35;color:#161b26">${escapar(n.titulo)}</div>
+        <div style="margin-top:5px;font-size:13px;line-height:1.55;color:#667085">${escapar(n.desc)}</div>
+      </td></tr>
+    </table>`;
+
+  const pares: (typeof demais)[] = [];
+  for (let i = 0; i < demais.length; i += 2) pares.push(demais.slice(i, i + 2));
+
+  const grade = pares.length
+    ? `<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#98a2b3;margin:0 0 12px">Também nesta versão</div>
+       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+         ${pares
+           .map(
+             (par) => `<tr>
+               <td width="50%" valign="top" style="padding:0 6px 12px 0">${cardCurto(par[0])}</td>
+               <td width="50%" valign="top" style="padding:0 0 12px 6px">${par[1] ? cardCurto(par[1]) : ""}</td>
+             </tr>`,
+           )
+           .join("")}
+       </table>`
+    : "";
+
+  const corpo = `
+    <span style="display:inline-block;padding:4px 12px;border-radius:999px;background:#efe9ff;color:#5227ff;font-size:12px;font-weight:700">Novidades da versão</span>
+    <h1 style="margin:16px 0 10px;font-size:23px;line-height:1.3;color:#161b26">${escapar(primeiro)}, o Easy-NFe agora emite nota de serviço</h1>
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.65;color:#475467">
+      Quem vende mercadoria e também presta serviço parou de precisar de dois sistemas. A NFS-e do
+      Padrão Nacional já está no ar, na mesma conta e na mesma lista das suas notas de venda.
+    </p>
+    ${painel}
+    ${grade}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:14px 0 0">
+      <tr><td align="center">${botao(vars.entrarUrl, "Ver no meu painel")}</td></tr>
+    </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius:12px;background:#fffaf0;border:1px solid #fceccd;margin:24px 0 0">
+      <tr><td style="padding:16px 18px">
+        <div style="font-size:14px;font-weight:700;color:#7a4b09">Antes da primeira nota de serviço</div>
+        <div style="margin-top:6px;font-size:13px;line-height:1.65;color:#8a5a12">
+          A empresa precisa da inscrição municipal preenchida em Configurações e do CNPJ credenciado
+          no portal nacional da NFS-e. Se travar em qualquer um dos dois, responda este e-mail que a
+          gente resolve junto com você.
+        </div>
+      </td></tr>
+    </table>`;
+
+  return emailShell({
+    preheader: `${escapar(primeiro)}, agora dá para emitir NFS-e no Easy-NFe`,
+    corpo,
+    logoCid: vars.logoCid,
+  });
+}
+
+export function htmlReativacao(vars: {
+  nome: string;
+  plano: string;
+  valor: number;
+  fimTeste: Date;
+  entrarUrl: string;
+  empresa?: string;
+  uso?: { notas: number; clientes: number; produtos: number };
+  logoCid?: string;
+}): string {
+  const fim = vars.fimTeste.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+  const primeiro = vars.nome.split(" ")[0] || vars.nome;
+
+  const bloco = (n: number, rotulo: string) => `
+    <td align="center" style="padding:14px 8px">
+      <div style="font-size:24px;font-weight:800;color:#5227ff;line-height:1">${n}</div>
+      <div style="font-size:12px;color:#667085;margin-top:3px">${rotulo}</div>
+    </td>`;
+
+  const uso = vars.uso
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eceaf6;border-radius:12px;background:#faf9ff;margin:0 0 22px">
+        <tr>
+          ${bloco(vars.uso.notas, "notas emitidas")}
+          ${bloco(vars.uso.clientes, "clientes")}
+          ${bloco(vars.uso.produtos, "produtos")}
+        </tr>
+      </table>
+      <p style="margin:0 0 22px;font-size:14px;line-height:1.65;color:#344054">
+        Está tudo guardado${vars.empresa ? ` em <strong>${escapar(vars.empresa)}</strong>` : ""} — clientes,
+        produtos e o histórico das notas. Reativando, você continua de onde parou, sem recadastrar nada.
+      </p>`
+    : "";
+
+  const corpo = `
+    <span style="display:inline-block;padding:4px 12px;border-radius:999px;background:#fdf3e3;color:#b45309;font-size:12px;font-weight:700">Seu teste terminou</span>
+    <h1 style="margin:16px 0 8px;font-size:22px;color:#161b26">${escapar(primeiro)}, sua conta está esperando por você</h1>
+    <p style="margin:0 0 22px;font-size:15px;line-height:1.65;color:#344054">
+      Seu período de teste do Easy-NFe terminou em <strong>${fim}</strong>, e com ele a emissão de
+      notas ficou pausada. É só ativar o plano para voltar a emitir hoje mesmo.
+    </p>
+    ${uso}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eceaf6;border-radius:12px;overflow:hidden;margin:0 0 22px">
+      ${linhaInfo("Plano", escapar(vars.plano))}
+      ${linhaInfo("Mensalidade", `<strong style="color:#5227ff;font-size:16px">${fmtBRL(vars.valor)}</strong> por mês`, true)}
+    </table>
+    ${botao(vars.entrarUrl, "Reativar minha conta")}
+    <p style="margin:22px 0 0;font-size:14px;line-height:1.7;color:#344054">
+      Com o Easy-NFe você emite NF-e e NFC-e em qualquer estado, controla estoque e clientes,
+      manda a nota por e-mail para o comprador e acompanha faturamento e lucro pelo painel.
+    </p>
+    <p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:#98a2b3">
+      Ficou com dúvida sobre planos ou precisa de ajuda para voltar? É só responder este e-mail
+      que a gente resolve com você.
+    </p>`;
+
+  return emailShell({
+    preheader: `${escapar(primeiro)}, reative o Easy-NFe e volte a emitir suas notas`,
+    corpo,
+    logoCid: vars.logoCid,
+  });
+}

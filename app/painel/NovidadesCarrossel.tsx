@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { NOVIDADES, VERSAO_NOVIDADES } from "@/lib/novidades";
+import { NOVIDADES, VERSAO_NOVIDADES, type Novidade } from "@/lib/novidades";
 import IconeNovidade from "@/app/ui/IconesNovidades";
 
 // Carrossel de novidades no topo do painel. Anda sozinho, para quando o mouse
@@ -91,8 +91,14 @@ export default function NovidadesCarrossel() {
         </button>
       </div>
 
-      {/* Altura fixa: o conteúdo troca por cima, sem a página pular de tamanho. */}
-      <div className="relative h-[132px] px-5 sm:h-[116px]">
+      {/* Todos os cards na mesma célula do grid: os invisíveis reservam a altura
+          do maior, então a faixa não muda de tamanho ao trocar de novidade. */}
+      <div className="grid px-5 py-3 [grid-template-areas:'card']">
+        {NOVIDADES.map((item, idx) => (
+          <div key={idx} aria-hidden className="invisible pointer-events-none [grid-area:card]">
+            <CardNovidade n={item} />
+          </div>
+        ))}
         <AnimatePresence initial={false} mode="wait">
           <motion.div
             key={i}
@@ -100,36 +106,9 @@ export default function NovidadesCarrossel() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -24 }}
             transition={{ duration: 0.35, ease: "easeOut" }}
-            className="absolute inset-x-5 top-3 flex gap-4"
+            className="[grid-area:card]"
           >
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg">
-              <IconeNovidade icone={n.icone} className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="truncate text-base font-semibold">{n.titulo}</h3>
-                <span
-                  className={
-                    "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase " +
-                    (n.tag === "Novo" ? "bg-emerald-400/20 text-emerald-300" : "bg-white/10 text-slate-300")
-                  }
-                >
-                  {n.tag}
-                </span>
-              </div>
-              <p className="mt-1 text-sm leading-relaxed text-slate-300">{n.desc}</p>
-              {n.href && (
-                <Link
-                  href={n.href}
-                  className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-violet-300 transition hover:text-violet-200"
-                >
-                  Ver na prática
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12h14M13 6l6 6-6 6" />
-                  </svg>
-                </Link>
-              )}
-            </div>
+            <CardNovidade n={n} />
           </motion.div>
         </AnimatePresence>
       </div>
@@ -154,6 +133,41 @@ export default function NovidadesCarrossel() {
           <Seta rotulo="Anterior" onClick={() => ir(-1)} d="M15 6l-6 6 6 6" />
           <Seta rotulo="Próxima" onClick={() => ir(1)} d="M9 6l6 6-6 6" />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CardNovidade({ n }: { n: Novidade }) {
+  return (
+    <div className="flex gap-4">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-2)] text-white shadow-lg">
+        <IconeNovidade icone={n.icone} className="h-5 w-5" />
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <h3 className="truncate text-base font-semibold">{n.titulo}</h3>
+          <span
+            className={
+              "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase " +
+              (n.tag === "Novo" ? "bg-emerald-400/20 text-emerald-300" : "bg-white/10 text-slate-300")
+            }
+          >
+            {n.tag}
+          </span>
+        </div>
+        <p className="mt-1 text-sm leading-relaxed text-slate-300">{n.desc}</p>
+        {n.href && (
+          <Link
+            href={n.href}
+            className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-violet-300 transition hover:text-violet-200"
+          >
+            Ver na prática
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          </Link>
+        )}
       </div>
     </div>
   );
