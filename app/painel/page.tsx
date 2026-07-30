@@ -9,6 +9,7 @@ import { resumoDashboard, type PeriodoFiltro } from "../dashboard-actions";
 import Graficos from "./Graficos";
 import FiltrosDashboard from "./FiltrosDashboard";
 import Bloco from "./Bloco";
+import NovidadesCarrossel from "./NovidadesCarrossel";
 import { KpiDestaque, KpiSimples } from "./Kpis";
 import { num } from "./dados";
 
@@ -68,6 +69,8 @@ export default async function Dashboard({
         </div>
         <FiltrosDashboard periodo={periodo} modelo={modelo} />
       </div>
+
+      <NovidadesCarrossel />
 
       {/* Linha 1 — dinheiro. Os três números que respondem "como foi o período". */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

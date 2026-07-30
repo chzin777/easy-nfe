@@ -12,12 +12,15 @@ import MotionCard from "./ui/MotionCard";
 import { MacbookScroll } from "./ui/MacbookScroll";
 import SectionReveal from "./ui/SectionReveal";
 import BlurText from "./ui/BlurText";
+import IconeNovidade from "./ui/IconesNovidades";
+import { NOVIDADES } from "@/lib/novidades";
 
 const WPP_PARCEIRO = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Sou contador(a) e quero ser parceiro(a) do Easy-NFe. Gostaria de saber como funciona o programa de parcerias para contadores.");
 const WPP_VENDAS = "https://wa.me/556282103699?text=" + encodeURIComponent("Olá! Tenho dúvidas sobre os planos do Easy-NFe e gostaria de ajuda para escolher o ideal para minha empresa.");
 
 const RECURSOS = [
   { titulo: "Emissão de NF-e", desc: "Modelo 55 com autorização síncrona na SEFAZ em segundos.", icon: <IFile /> },
+  { titulo: "Nota de serviço", desc: "NFS-e do Padrão Nacional: mão de obra e mercadoria na mesma conta.", icon: <IDoc /> },
   { titulo: "Assinatura A1", desc: "Certificado digital A1 com assinatura XML-DSig automática.", icon: <ILock /> },
   { titulo: "DANFE & cancelamento", desc: "Gere o DANFE em PDF e cancele notas direto pelo painel.", icon: <IDoc /> },
   { titulo: "Vendeu online, nota emitida", desc: "Conecte sua loja e marketplaces: cada pedido pago vira NF-e automática.", icon: <IPlug /> },
@@ -129,6 +132,7 @@ export default async function Landing() {
           </ScrollLink>
           <div className="hidden items-center gap-8 text-sm text-slate-600 sm:flex">
             <ScrollLink href="#recursos" className="transition hover:text-[var(--primary)]">Recursos</ScrollLink>
+            <ScrollLink href="#novidades" className="transition hover:text-[var(--primary)]">Novidades</ScrollLink>
             <ScrollLink href="#como-funciona" className="transition hover:text-[var(--primary)]">Como funciona</ScrollLink>
             <ScrollLink href="#planos" className="transition hover:text-[var(--primary)]">Planos</ScrollLink>
             <ScrollLink href="#parceiros" className="transition hover:text-[var(--primary)]">Parceiros</ScrollLink>
@@ -238,8 +242,64 @@ export default async function Landing() {
         </SectionReveal>
       </section>
 
+      {/* Novidades da versão — mesma fonte do carrossel do painel. */}
+      <section id="novidades" className="border-y border-[var(--border)] bg-slate-50">
+        <SectionReveal className="mx-auto max-w-6xl px-6 py-24">
+          <div className="mx-auto max-w-2xl text-center">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)]/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--primary)]">
+              Novo nesta versão
+            </span>
+            <h2 className="mt-5 text-3xl font-bold tracking-tight">Agora o Easy também faz nota de serviço</h2>
+            <p className="mt-3 text-[var(--muted)]">
+              Quem vende mercadoria e presta serviço parou de precisar de dois sistemas. NFS-e do
+              Padrão Nacional, na mesma conta e na mesma lista das notas de venda.
+            </p>
+          </div>
+
+          <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {NOVIDADES.map((n) => (
+              <div
+                key={n.titulo}
+                className="rounded-2xl border border-[var(--border)] bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-[0_12px_32px_-12px_rgba(82,39,255,0.3)]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-2)] text-white">
+                    <IconeNovidade icone={n.icone} className="h-5 w-5" />
+                  </div>
+                  <span
+                    className={
+                      "rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide " +
+                      (n.tag === "Novo"
+                        ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                        : "bg-slate-100 text-slate-600 ring-1 ring-slate-200")
+                    }
+                  >
+                    {n.tag}
+                  </span>
+                </div>
+                <h3 className="mt-4 font-semibold">{n.titulo}</h3>
+                <p className="mt-1.5 text-sm text-[var(--muted)]">{n.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-12 flex flex-col items-center gap-3 text-center">
+            <Link
+              href="/cadastro"
+              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-violet-500/30 transition hover:-translate-y-0.5"
+            >
+              Testar de graça por 7 dias
+            </Link>
+            <p className="text-xs text-[var(--muted)]">
+              Para emitir nota de serviço você precisa da inscrição municipal e do CNPJ credenciado
+              no portal nacional da NFS-e. A gente ajuda nos dois.
+            </p>
+          </div>
+        </SectionReveal>
+      </section>
+
       {/* Como funciona */}
-      <section id="como-funciona" className="bg-white pb-24">
+      <section id="como-funciona" className="bg-white pb-24 pt-24">
         <SectionReveal className="mx-auto max-w-6xl px-6">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight">Da configuração à nota na mão do cliente</h2>
