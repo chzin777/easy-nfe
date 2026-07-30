@@ -57,15 +57,20 @@ export function requisicao(
 export function explicarErro(body: string): { erro: string; mensagens?: { codigo?: string; descricao?: string }[] } {
   try {
     const j = JSON.parse(body) as Record<string, unknown>;
-    const lista = (j.erros ?? j.Erros ?? j.mensagens) as { Codigo?: string; codigo?: string; Descricao?: string; descricao?: string; Complemento?: string }[] | undefined;
+    // A SEFIN alterna entre "erros" e "erro" (singular, mas array) dependendo
+    // do endpoint. Sem cobrir os dois, a rejeição chega como JSON cru na tela.
+    const lista = (j.erros ?? j.Erros ?? j.erro ?? j.Erro ?? j.mensagens) as
+      | { Codigo?: string; codigo?: string; Descricao?: string; descricao?: string; Complemento?: string; complemento?: string }[]
+      | undefined;
     if (Array.isArray(lista) && lista.length) {
       const mensagens = lista.map((m) => ({
         codigo: m.Codigo ?? m.codigo,
-        descricao: [m.Descricao ?? m.descricao, m.Complemento].filter(Boolean).join(" — "),
+        // O complemento é onde vem o detalhe útil (qual campo, qual regra).
+        descricao: [m.Descricao ?? m.descricao, m.Complemento ?? m.complemento].filter(Boolean).join(" — "),
       }));
       return { erro: mensagens.map((m) => `${m.codigo ?? ""} ${m.descricao ?? ""}`.trim()).join("; "), mensagens };
     }
-    const msg = j.message ?? j.Message ?? j.erro;
+    const msg = j.message ?? j.Message ?? (typeof j.erro === "string" ? j.erro : undefined);
     if (typeof msg === "string") return { erro: msg };
   } catch {
     // corpo não-JSON: devolve cru, truncado

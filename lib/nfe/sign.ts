@@ -10,7 +10,7 @@ export function assinar(
   xml: string,
   refId: string,
   cert: Certificado,
-  tag: "infNFe" | "infEvento" | "infDPS",
+  tag: "infNFe" | "infEvento" | "infDPS" | "infPedReg",
 ): string {
   const sig = new SignedXml({
     privateKey: cert.keyPem,

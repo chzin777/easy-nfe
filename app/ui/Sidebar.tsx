@@ -27,30 +27,24 @@ const grupos: Grupo[] = [
       { href: "/relatorios", label: "Relatórios", icon: <IconReport />, feature: ["relatorios", "dashboard"] },
     ],
   },
-  // Só o que gera documento fiscal de saída.
+  // Nota fiscal, saindo ou chegando. Venda e serviço convivem na mesma lista,
+  // então não faz sentido separar por tipo de documento aqui.
   {
-    titulo: "Emissão de notas",
+    titulo: "Notas fiscais",
     itens: [
       { href: "/notas/nova", label: "Emitir nova nota", icon: <IconPlus />, feature: "emitir_nfe" },
-      { href: "/orcamentos", label: "Orçamentos", icon: <IconClipboard />, feature: "orcamentos" },
-      { href: "/notas-servico", label: "Notas de serviço", icon: <IconList />, feature: "emitir_nfse" },
       { href: "/notas", label: "Notas emitidas", icon: <IconList />, feature: "notas_listar" },
-    ],
-  },
-  // Venda sem nota e fiado não são emissão fiscal — vivem no comercial.
-  {
-    titulo: "Vendas e fiado",
-    itens: [
-      { href: "/vendas", label: "Vendas sem nota", icon: <IconCart />, feature: "vendas" },
-      { href: "/caderneta", label: "Caderneta", icon: <IconBook />, feature: "clientes" },
-    ],
-  },
-  // Documento fiscal que CHEGA (de terceiros), não que sai.
-  {
-    titulo: "Notas de entrada",
-    itens: [
       { href: "/recebidas", label: "Notas recebidas", icon: <IconInbox />, feature: "dfe" },
       { href: "/importar", label: "Importar XML", icon: <IconImport />, feature: "importar_xml" },
+    ],
+  },
+  // Sem documento fiscal: orçamento, venda no caderno e fiado.
+  {
+    titulo: "Vendas",
+    itens: [
+      { href: "/orcamentos", label: "Orçamentos", icon: <IconClipboard />, feature: "orcamentos" },
+      { href: "/vendas", label: "Vendas sem nota", icon: <IconCart />, feature: "vendas" },
+      { href: "/caderneta", label: "Caderneta", icon: <IconBook />, feature: "clientes" },
     ],
   },
   {
@@ -117,14 +111,25 @@ export default function Sidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
-  // Semeia estado de colapso do localStorage (persiste entre F5).
+  // Semeia estado de colapso do localStorage (persiste entre F5). Na primeira
+  // visita, só o grupo da tela atual fica aberto — o menu inteiro escancarado
+  // é muita coisa de uma vez.
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(COLAPSADOS_CACHE_KEY);
-      if (raw) setColapsados(new Set(JSON.parse(raw) as string[]));
+      if (raw) {
+        setColapsados(new Set(JSON.parse(raw) as string[]));
+        return;
+      }
     } catch {
       // ignora (modo privado / quota)
     }
+    const doGrupoAtual = (g: Grupo) =>
+      g.itens.some((i) => pathname === i.href || pathname.startsWith(i.href + "/"));
+    setColapsados(
+      new Set(grupos.filter((g) => !g.flat && !doGrupoAtual(g)).map((g) => g.titulo)),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const alternarGrupo = (titulo: string) =>

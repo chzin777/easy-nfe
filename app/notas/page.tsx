@@ -21,12 +21,58 @@ import {
 import Modal from "@/app/ui/Modal";
 import Danfe from "@/app/ui/Danfe";
 import DanfeNFCe from "@/app/ui/DanfeNFCe";
+import Danfse from "@/app/ui/Danfse";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { baixarDanfePdf } from "@/app/ui/danfePdf";
 import { STATUS_NOTA, TIPOS_NOTA, rotulo, rotuloTipoCurto } from "@/lib/mock-data";
+import { formatCpfCnpj } from "@/lib/format";
 import type { StatusNota } from "@/lib/types";
 import { listarNotas, cancelarNota, obterXmlNota, type NotaCompleta } from "./actions";
+import {
+  baixarXmlNotaServico,
+  cancelarNotaServico,
+  listarNotasServico,
+  obterNotaServico,
+  recuperarNotaServico,
+  type NotaServicoCompleta,
+  type NotaServicoUI,
+} from "@/app/notas-servico/actions";
+import { MOTIVOS_CANCELAMENTO, type MotivoCancelamento } from "@/lib/nfse/evento";
 import DevolucaoModal from "./DevolucaoModal";
+
+// Notas de produto (NF-e/NFC-e) e de serviço (NFS-e) na mesma lista. São
+// documentos diferentes em bases diferentes, então a tabela trabalha com uma
+// linha unificada e cada tipo abre o seu próprio espelho.
+type Origem = "todas" | "produto" | "servico";
+
+const ORIGENS: { valor: Origem; label: string }[] = [
+  { valor: "todas", label: "Todas" },
+  { valor: "produto", label: "De venda" },
+  { valor: "servico", label: "De serviço" },
+];
+
+type Linha = {
+  id: string;
+  origem: "produto" | "servico";
+  numero: number;
+  nome: string;
+  sub: string;
+  tipoLabel: string;
+  emitidaEm: string;
+  valor: number;
+  status: StatusNota;
+  ambiente: "producao" | "homologacao";
+  produto?: NotaCompleta;
+  servico?: NotaServicoUI;
+};
+
+const STATUS_SERVICO: Record<string, StatusNota> = {
+  AUTORIZADA: "autorizada",
+  CANCELADA: "cancelada",
+  REJEITADA: "rejeitada",
+  DENEGADA: "denegada",
+  RASCUNHO: "rascunho",
+};
 
 const tomStatus: Record<StatusNota, "success" | "danger" | "warning" | "neutral" | "primary"> = {
   autorizada: "success",
@@ -40,7 +86,9 @@ type AcaoEvento = { nota: NotaCompleta; tipo: "cancelamento" | "cce" };
 
 export default function NotasEmitidasPage() {
   const [notas, setNotas] = useState<NotaCompleta[]>([]);
+  const [notasServico, setNotasServico] = useState<NotaServicoUI[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [origem, setOrigem] = useState<Origem>("todas");
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("");
@@ -54,10 +102,15 @@ export default function NotasEmitidasPage() {
   const [erroEvento, setErroEvento] = useState<string | null>(null);
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // Serviço: espelho aberto e cancelamento (que tem motivo próprio da NFS-e).
+  const [verServico, setVerServico] = useState<NotaServicoCompleta | null>(null);
+  const [cancelarServ, setCancelarServ] = useState<NotaServicoCompleta | null>(null);
+  const [motivoServ, setMotivoServ] = useState<MotivoCancelamento>("1");
 
   async function recarregar() {
-    const lista = await listarNotas();
+    const [lista, servico] = await Promise.all([listarNotas(), listarNotasServico()]);
     setNotas(lista);
+    setNotasServico(servico);
     setCarregando(false);
   }
 
@@ -85,6 +138,17 @@ export default function NotasEmitidasPage() {
     }
   }
 
+  async function baixarPdfServico(nota: NotaServicoCompleta) {
+    setGerandoPdf(true);
+    try {
+      await baixarDanfePdf("danfe-print", nota.numero);
+    } catch {
+      setToast("Falha ao gerar o PDF. Tente novamente.");
+    } finally {
+      setGerandoPdf(false);
+    }
+  }
+
   async function baixarXml(nota: NotaCompleta) {
     const r = await obterXmlNota(nota.id);
     if (!r.ok) { setToast(r.erro); return; }
@@ -95,16 +159,48 @@ export default function NotasEmitidasPage() {
     URL.revokeObjectURL(url);
   }
 
+  const linhas = useMemo<Linha[]>(() => {
+    const deProduto: Linha[] = notas.map((n) => ({
+      id: n.id,
+      origem: "produto",
+      numero: n.numero,
+      nome: n.clienteNome,
+      sub: n.chaveAcesso,
+      tipoLabel: rotuloTipoCurto(n.tipoNota),
+      emitidaEm: n.emitidaEm,
+      valor: n.valorTotal,
+      status: n.status,
+      ambiente: n.ambiente,
+      produto: n,
+    }));
+    const deServico: Linha[] = notasServico.map((s) => ({
+      id: s.id,
+      origem: "servico",
+      numero: s.numero,
+      nome: s.clienteNome,
+      sub: s.chaveAcesso || s.descricaoServico,
+      tipoLabel: "NFS-e",
+      emitidaEm: s.emitidaEm,
+      valor: s.valorServico,
+      status: STATUS_SERVICO[s.status] ?? "rascunho",
+      ambiente: s.ambienteUI,
+      servico: s,
+    }));
+    return [...deProduto, ...deServico].sort((a, b) => b.emitidaEm.localeCompare(a.emitidaEm));
+  }, [notas, notasServico]);
+
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return notas.filter((n) => {
-      if (filtroStatus && n.status !== filtroStatus) return false;
-      if (filtroTipo && n.tipoNota !== filtroTipo) return false;
-      if (q && !n.clienteNome.toLowerCase().includes(q) && !String(n.numero).includes(q) && !n.chaveAcesso.includes(q))
+    return linhas.filter((l) => {
+      if (origem !== "todas" && l.origem !== origem) return false;
+      if (filtroStatus && l.status !== filtroStatus) return false;
+      // O tipo é só das notas de produto; escolher um deixa serviço de fora.
+      if (filtroTipo && (l.origem !== "produto" || l.produto?.tipoNota !== filtroTipo)) return false;
+      if (q && !l.nome.toLowerCase().includes(q) && !String(l.numero).includes(q) && !l.sub.toLowerCase().includes(q))
         return false;
       return true;
     });
-  }, [notas, busca, filtroStatus, filtroTipo]);
+  }, [linhas, origem, busca, filtroStatus, filtroTipo]);
 
   const pag = paginar(filtradas, pagina, porPagina);
 
@@ -113,11 +209,11 @@ export default function NotasEmitidasPage() {
     const aut = filtradas.filter((n) => n.status === "autorizada");
     const canceladas = filtradas.filter((n) => n.status === "cancelada").length;
     const rejeitadas = filtradas.filter((n) => n.status === "rejeitada" || n.status === "denegada").length;
-    const valorAut = aut.reduce((s, n) => s + n.valorTotal, 0);
+    const valorAut = aut.reduce((s, n) => s + n.valor, 0);
     const agora = new Date();
     const valorMes = aut.reduce((s, n) => {
       const d = new Date(n.emitidaEm);
-      return d.getMonth() === agora.getMonth() && d.getFullYear() === agora.getFullYear() ? s + n.valorTotal : s;
+      return d.getMonth() === agora.getMonth() && d.getFullYear() === agora.getFullYear() ? s + n.valor : s;
     }, 0);
     return {
       total: filtradas.length,
@@ -169,15 +265,16 @@ export default function NotasEmitidasPage() {
   }
 
   function exportarCsv() {
-    const cabecalho = ["Numero", "Tipo", "Cliente", "Status", "Emissao", "Total", "Chave"];
-    const linhas = filtradas.map((n) => [
-      n.numero,
-      rotulo(TIPOS_NOTA, n.tipoNota),
-      n.clienteNome,
-      n.status,
-      formatData(n.emitidaEm),
-      n.valorTotal.toFixed(2).replace(".", ","),
-      n.chaveAcesso,
+    const cabecalho = ["Numero", "Documento", "Tipo", "Cliente", "Status", "Emissao", "Total", "Chave"];
+    const linhas = filtradas.map((l) => [
+      l.numero,
+      l.origem === "servico" ? "NFS-e" : "NF-e/NFC-e",
+      l.origem === "servico" ? "NFS-e" : rotulo(TIPOS_NOTA, l.produto!.tipoNota),
+      l.nome,
+      l.status,
+      formatData(l.emitidaEm),
+      l.valor.toFixed(2).replace(".", ","),
+      l.origem === "servico" ? l.servico!.chaveAcesso : l.produto!.chaveAcesso,
     ]);
     const csv = [cabecalho, ...linhas]
       .map((linha) => linha.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";"))
@@ -191,51 +288,96 @@ export default function NotasEmitidasPage() {
     URL.revokeObjectURL(url);
   }
 
-  const colunas: Coluna<NotaCompleta>[] = [
+  // Abre o espelho: nota de produto já vem inteira da lista; a de serviço
+  // precisa buscar emitente e endereço do tomador.
+  async function abrirLinha(l: Linha) {
+    if (l.origem === "produto") {
+      setVisualizar(l.produto!);
+      return;
+    }
+    const r = await obterNotaServico(l.id);
+    if (!r.ok) { setToast(r.erro); return; }
+    setVerServico(r.nota);
+  }
+
+  async function baixarXmlServico(nota: NotaServicoCompleta) {
+    const r = await baixarXmlNotaServico(nota.id);
+    if (!r.ok) { setToast(r.erro); return; }
+    const url = URL.createObjectURL(new Blob([r.xml], { type: "application/xml;charset=utf-8;" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = r.nome; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function recuperarServico(nota: NotaServicoCompleta) {
+    const r = await recuperarNotaServico(nota.id);
+    setToast(r.ok ? "Nota recuperada — estava autorizada no fisco." : r.erro);
+    setVerServico(null);
+    await recarregar();
+  }
+
+  async function confirmarCancelamentoServico() {
+    if (!cancelarServ) return;
+    setProcessando(true);
+    setErroEvento(null);
+    const r = await cancelarNotaServico({
+      id: cancelarServ.id,
+      motivo: motivoServ,
+      descricaoMotivo: justificativa,
+    });
+    setProcessando(false);
+    if (!r.ok) { setErroEvento(r.erro); return; }
+    setCancelarServ(null);
+    await recarregar();
+  }
+
+  const colunas: Coluna<Linha>[] = [
     {
       chave: "numero",
       cabecalho: "Nº",
-      render: (n) => <span className="font-mono text-xs">{n.numero}</span>,
+      render: (l) => <span className="font-mono text-xs">{l.numero}</span>,
     },
     {
       chave: "cliente",
       cabecalho: "Cliente",
-      render: (n) => (
-        <div>
-          <p className="font-medium">{n.clienteNome}</p>
-          <p className="font-mono text-[11px] text-[var(--muted)]">{n.chaveAcesso}</p>
+      render: (l) => (
+        <div className="min-w-0">
+          <p className="truncate font-medium">{l.nome}</p>
+          <p className="truncate font-mono text-[11px] text-[var(--muted)]">{l.sub}</p>
         </div>
       ),
     },
     {
       chave: "tipo",
       cabecalho: "Tipo",
-      render: (n) => <span className="text-xs">{rotuloTipoCurto(n.tipoNota)}</span>,
+      render: (l) => (
+        <Badge tom={l.origem === "servico" ? "primary" : "neutral"}>{l.tipoLabel}</Badge>
+      ),
     },
     {
       chave: "emissao",
       cabecalho: "Emissão",
-      render: (n) => formatData(n.emitidaEm),
+      render: (l) => formatData(l.emitidaEm),
     },
     {
       chave: "total",
       cabecalho: "Total",
       alinhar: "right",
-      render: (n) => <span className="font-medium">{formatBRL(n.valorTotal)}</span>,
+      render: (l) => <span className="font-medium">{formatBRL(l.valor)}</span>,
     },
     {
       chave: "status",
       cabecalho: "Status",
       alinhar: "center",
-      render: (n) => <Badge tom={tomStatus[n.status]}>{n.status}</Badge>,
+      render: (l) => <Badge tom={tomStatus[l.status]}>{l.status}</Badge>,
     },
     {
       chave: "ambiente",
       cabecalho: "Ambiente",
       alinhar: "center",
-      render: (n) => (
-        <Badge tom={n.ambiente === "homologacao" ? "warning" : "neutral"}>
-          {n.ambiente === "homologacao" ? "homologação" : "produção"}
+      render: (l) => (
+        <Badge tom={l.ambiente === "homologacao" ? "warning" : "neutral"}>
+          {l.ambiente === "homologacao" ? "homologação" : "produção"}
         </Badge>
       ),
     },
@@ -266,6 +408,32 @@ export default function NotasEmitidasPage() {
       </div>
 
       <Card>
+        <div className="flex flex-wrap gap-1 border-b border-[var(--border)] p-3">
+          {ORIGENS.map((o) => {
+            const ativo = origem === o.valor;
+            const quantas =
+              o.valor === "todas" ? linhas.length : linhas.filter((l) => l.origem === o.valor).length;
+            return (
+              <button
+                key={o.valor}
+                type="button"
+                onClick={() => { setOrigem(o.valor); setPagina(1); }}
+                aria-pressed={ativo}
+                className={
+                  "rounded-lg px-3 py-2 text-sm font-medium transition " +
+                  (ativo
+                    ? "bg-[var(--primary)] text-white shadow-sm"
+                    : "text-[var(--muted)] hover:bg-slate-100 hover:text-[var(--foreground)]")
+                }
+              >
+                {o.label}
+                <span className={"ml-1.5 text-xs " + (ativo ? "text-white/70" : "text-[var(--muted)]")}>
+                  {quantas}
+                </span>
+              </button>
+            );
+          })}
+        </div>
         <div className="grid grid-cols-1 gap-3 border-b border-[var(--border)] p-4 sm:grid-cols-[1fr_200px_200px]">
           <Input
             placeholder="Buscar por nº, cliente ou chave…"
@@ -288,7 +456,7 @@ export default function NotasEmitidasPage() {
         <Tabela
           colunas={colunas}
           dados={pag.fatia}
-          onRowClick={(n) => setVisualizar(n)}
+          onRowClick={(l) => void abrirLinha(l)}
           vazio={
             carregando
               ? <LightningLoader texto="Carregando notas…" />
@@ -298,7 +466,7 @@ export default function NotasEmitidasPage() {
         {/* Total do conjunto filtrado inteiro, não só da página — senão o número
             mudaria a cada virada de página. */}
         <div className="border-t border-[var(--border)] px-4 pt-3 text-xs text-[var(--muted)]">
-          Total filtrado: <b className="text-[var(--foreground)]">{formatBRL(filtradas.reduce((s, n) => s + n.valorTotal, 0))}</b>
+          Total filtrado: <b className="text-[var(--foreground)]">{formatBRL(filtradas.reduce((s, l) => s + l.valor, 0))}</b>
         </div>
         <Paginacao
           total={filtradas.length}
@@ -410,6 +578,114 @@ export default function NotasEmitidasPage() {
             ) : (
               <Danfe nota={visualizar} />
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Espelho da NFS-e — mesmos botões do DANFE, no leiaute de serviço. */}
+      <Modal
+        aberto={verServico !== null}
+        onFechar={() => setVerServico(null)}
+        titulo={`DANFSe · NFS-e nº ${verServico?.numero ?? ""}`}
+        largura="max-w-4xl"
+        rodape={
+          <>
+            <Button variante="secondary" onClick={() => setVerServico(null)}>Fechar</Button>
+            {/* Rascunho = transmitiu e não veio resposta. Pode estar autorizada
+                no fisco; reemitir criaria duplicidade. */}
+            {verServico?.status === "RASCUNHO" && (
+              <Button variante="secondary" onClick={() => verServico && void recuperarServico(verServico)}>
+                Consultar no fisco
+              </Button>
+            )}
+            {verServico?.status === "AUTORIZADA" && (
+              <>
+                <Button
+                  variante="dangerSoft"
+                  onClick={() => {
+                    if (!verServico) return;
+                    const n = verServico;
+                    setVerServico(null);
+                    setJustificativa("");
+                    setMotivoServ("1");
+                    setErroEvento(null);
+                    setCancelarServ(n);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button variante="secondary" onClick={() => verServico && void baixarXmlServico(verServico)}>
+                  Salvar XML
+                </Button>
+              </>
+            )}
+            <Button
+              onClick={() => verServico && baixarPdfServico(verServico)}
+              disabled={gerandoPdf}
+            >
+              {gerandoPdf ? "Gerando PDF…" : "Baixar PDF"}
+            </Button>
+          </>
+        }
+      >
+        {verServico && (
+          <div id="danfe-print">
+            <Danfse nota={verServico} />
+          </div>
+        )}
+      </Modal>
+
+      {/* Cancelamento da NFS-e — motivo é código da SEFIN, não texto livre. */}
+      <Modal
+        aberto={cancelarServ !== null}
+        onFechar={() => setCancelarServ(null)}
+        titulo="Cancelar nota de serviço"
+        largura="max-w-lg"
+        rodape={
+          <>
+            <Button variante="secondary" onClick={() => setCancelarServ(null)} disabled={processando}>
+              Voltar
+            </Button>
+            <Button
+              variante="danger"
+              disabled={justificativa.trim().length < 15 || processando}
+              onClick={confirmarCancelamentoServico}
+            >
+              {processando ? "Enviando à SEFIN…" : "Confirmar cancelamento"}
+            </Button>
+          </>
+        }
+      >
+        {cancelarServ && (
+          <div className="space-y-4 text-sm">
+            <p className="text-[var(--muted)]">
+              NFS-e nº <span className="font-medium text-[var(--foreground)]">{cancelarServ.numero}</span> ·{" "}
+              {cancelarServ.clienteNome}
+              {cancelarServ.clienteDocumento ? ` · ${formatCpfCnpj(cancelarServ.clienteDocumento)}` : ""}
+            </p>
+            <Field label="Motivo" required>
+              <Select
+                opcoes={MOTIVOS_CANCELAMENTO}
+                value={motivoServ}
+                onChange={(e) => setMotivoServ(e.target.value as MotivoCancelamento)}
+              />
+            </Field>
+            <Field label="Descrição do motivo" required hint="Mínimo 15 caracteres.">
+              <Textarea
+                value={justificativa}
+                onChange={(e) => setJustificativa(e.target.value)}
+                placeholder="O que aconteceu…"
+              />
+            </Field>
+            {erroEvento && (
+              <p className="rounded-lg bg-[var(--danger-soft,#fee2e2)] px-3 py-2 text-sm font-medium text-[var(--danger)]">
+                {erroEvento}
+              </p>
+            )}
+            <p className="text-xs text-[var(--muted)]">
+              O prazo de cancelamento é da prefeitura. Fora dele a própria SEFIN recusa, e a nota
+              precisa ser substituída em vez de cancelada.
+            </p>
           </div>
         )}
       </Modal>

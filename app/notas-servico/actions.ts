@@ -5,7 +5,8 @@ import { exigirEmpresa } from "@/lib/empresa";
 import { exigirFeature } from "@/lib/permissoes";
 import { decriptar } from "@/lib/crypto";
 import { carregarCertificado } from "@/lib/nfe/cert";
-import { consultarPorDps, emitirNfse } from "@/lib/nfse/client";
+import { cancelarNfse, consultarPorDps, emitirNfse } from "@/lib/nfse/client";
+import type { MotivoCancelamento } from "@/lib/nfse/evento";
 import { resolverCodMunicipio } from "@/lib/nfe/ibge";
 import { dataBrasilia, valoresAplicados } from "@/lib/nfse/xml";
 import type { AmbienteNFSe } from "@/lib/nfse/types";
@@ -247,6 +248,7 @@ export type NotaServicoUI = {
   numero: number;
   serie: number;
   status: string;
+  ambienteUI: "producao" | "homologacao";
   clienteNome: string;
   clienteDocumento: string;
   descricaoServico: string;
@@ -270,6 +272,7 @@ export async function listarNotasServico(): Promise<NotaServicoUI[]> {
     numero: n.numero,
     serie: n.serie,
     status: n.status,
+    ambienteUI: n.ambiente === "PRODUCAO" ? ("producao" as const) : ("homologacao" as const),
     clienteNome: n.cliente.nome,
     clienteDocumento: n.cliente.documento,
     descricaoServico: n.descricaoServico,
@@ -280,6 +283,143 @@ export async function listarNotasServico(): Promise<NotaServicoUI[]> {
     competencia: n.competencia.toISOString(),
     motivo: n.xMotivo,
   }));
+}
+
+// Cancelamento da NFS-e (evento 101101). Prazo e regras são do município —
+// fora da janela a própria SEFIN recusa e a mensagem dela vai para a tela.
+export async function cancelarNotaServico(args: {
+  id: string;
+  motivo: MotivoCancelamento;
+  descricaoMotivo: string;
+}): Promise<{ ok: true } | { ok: false; erro: string }> {
+  try {
+    await exigirFeature("emitir_nfse");
+    const empresaId = await exigirEmpresa();
+    const nota = await prisma.notaServico.findFirst({
+      where: { id: args.id, emitenteId: empresaId },
+      include: { emitente: true },
+    });
+    if (!nota) return { ok: false, erro: "Nota não encontrada." };
+    if (nota.status === "CANCELADA") return { ok: false, erro: "Esta nota já está cancelada." };
+    if (nota.status !== "AUTORIZADA" || !nota.chaveAcesso) {
+      return { ok: false, erro: "Só nota autorizada pode ser cancelada." };
+    }
+    if (args.descricaoMotivo.trim().length < 15) {
+      return { ok: false, erro: "Descreva o motivo com pelo menos 15 caracteres." };
+    }
+
+    const { pfxBase64, senha } = certDaEmpresa(nota.emitente.certData);
+    const cert = carregarCertificado(pfxBase64, senha);
+    const r = await cancelarNfse({
+      chaveAcesso: nota.chaveAcesso,
+      ambiente: nota.emitente.ambiente === "PRODUCAO" ? "1" : "2",
+      cert,
+      cnpjAutor: so(nota.emitente.cnpj),
+      motivo: args.motivo,
+      descricaoMotivo: args.descricaoMotivo.trim(),
+    });
+    if (!r.ok) return { ok: false, erro: r.erro };
+
+    await prisma.notaServico.update({
+      where: { id: nota.id },
+      data: {
+        status: "CANCELADA",
+        canceladaEm: new Date(),
+        justificativaCancelamento: args.descricaoMotivo.trim(),
+        xmlCancelamento: r.xmlEvento,
+      },
+    });
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
+    return { ok: false, erro: msg };
+  }
+}
+
+// Tudo que a pré-visualização da NFS-e precisa (o equivalente do DANFE).
+export type NotaServicoCompleta = NotaServicoUI & {
+  ambiente: "producao" | "homologacao";
+  descricaoCompleta: string;
+  itemListaServico: string;
+  cTribNac: string;
+  aliqISS: number | null;
+  issRetido: boolean;
+  tribISSQN: string;
+  informacoesAdicionais: string;
+  municipioPrestacao: string;
+  emitente: {
+    razaoSocial: string; nomeFantasia: string; cnpj: string; inscricaoMunicipal: string;
+    telefone: string; email: string;
+    endereco: { logradouro: string; numero: string; bairro: string; cep: string; municipio: string; uf: string };
+  };
+  tomador: {
+    nome: string; documento: string; telefone: string; email: string;
+    endereco: { logradouro: string; numero: string; complemento: string; bairro: string; cep: string; municipio: string; uf: string };
+  };
+};
+
+export async function obterNotaServico(
+  id: string,
+): Promise<{ ok: true; nota: NotaServicoCompleta } | { ok: false; erro: string }> {
+  const empresaId = await exigirEmpresa();
+  const n = await prisma.notaServico.findFirst({
+    where: { id, emitenteId: empresaId },
+    include: { cliente: true, emitente: true },
+  });
+  if (!n) return { ok: false, erro: "Nota não encontrada." };
+  const e = n.emitente;
+  const c = n.cliente;
+  return {
+    ok: true,
+    nota: {
+      id: n.id,
+      numero: n.numero,
+      serie: n.serie,
+      status: n.status,
+      ambienteUI: n.ambiente === "PRODUCAO" ? "producao" : "homologacao",
+      clienteNome: c.nome,
+      clienteDocumento: c.documento,
+      descricaoServico: n.descricaoServico,
+      valorServico: Number(n.valorServico),
+      valorISS: n.valorISS == null ? null : Number(n.valorISS),
+      chaveAcesso: n.chaveAcesso ?? "",
+      emitidaEm: n.emitidaEm.toISOString(),
+      competencia: n.competencia.toISOString(),
+      motivo: n.xMotivo,
+      ambiente: n.ambiente === "PRODUCAO" ? "producao" : "homologacao",
+      descricaoCompleta: n.descricaoServico,
+      itemListaServico: n.itemListaServico ?? "",
+      cTribNac: n.cTribNac,
+      aliqISS: n.aliqISS == null ? null : Number(n.aliqISS),
+      issRetido: n.issRetido,
+      tribISSQN: n.tribISSQN,
+      informacoesAdicionais: n.informacoesAdicionais ?? "",
+      municipioPrestacao: n.codMunicipioPrestacao,
+      emitente: {
+        razaoSocial: e.razaoSocial,
+        nomeFantasia: e.nomeFantasia ?? e.razaoSocial,
+        cnpj: e.cnpj,
+        inscricaoMunicipal: e.inscricaoMunicipal ?? "",
+        telefone: e.telefone ?? "",
+        email: e.email ?? "",
+        endereco: {
+          logradouro: e.logradouro, numero: e.numero, bairro: e.bairro,
+          cep: e.cep, municipio: e.municipio, uf: e.uf,
+        },
+      },
+      tomador: {
+        nome: c.nome,
+        documento: c.documento,
+        telefone: c.telefone ?? "",
+        email: c.email ?? "",
+        endereco: {
+          logradouro: c.logradouro ?? "", numero: c.numero ?? "", complemento: c.complemento ?? "",
+          bairro: c.bairro ?? "", cep: c.cep ?? "", municipio: c.municipio ?? "", uf: c.uf ?? "",
+        },
+      },
+    },
+  };
 }
 
 // XML da NFS-e autorizada, para download.

@@ -2,6 +2,7 @@ import type { Certificado } from "@/lib/nfe/cert";
 import { assinar } from "@/lib/nfe/sign";
 import { deGzipB64, explicarErro, gzipB64, requisicao as http } from "./http";
 import { montarDps } from "./xml";
+import { montarPedidoCancelamento, type MotivoCancelamento } from "./evento";
 import type { AmbienteNFSe, DadosDPS, ResultadoNFSe } from "./types";
 
 // Transporte da NFS-e Padrão Nacional (SEFIN Nacional).
@@ -87,6 +88,45 @@ async function transmitir(dados: DadosDPS, cert: Certificado): Promise<Resultado
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, erro: msg, xmlDps: assinado };
+  }
+}
+
+// Cancela a NFS-e pelo evento 101101. A nota continua existindo com um evento
+// de cancelamento amarrado à chave — não há exclusão.
+export async function cancelarNfse(args: {
+  chaveAcesso: string;
+  ambiente: AmbienteNFSe;
+  cert: Certificado;
+  cnpjAutor: string;
+  motivo: MotivoCancelamento;
+  descricaoMotivo: string;
+}): Promise<{ ok: true; xmlEvento: string } | { ok: false; erro: string; status?: number }> {
+  const { xml, id } = montarPedidoCancelamento({
+    chaveAcesso: args.chaveAcesso,
+    ambiente: args.ambiente,
+    verAplic: VER_APLIC,
+    cnpjAutor: args.cnpjAutor,
+    motivo: args.motivo,
+    descricaoMotivo: args.descricaoMotivo,
+    emitidoEm: new Date(),
+  });
+  const assinado = PROLOGO + assinar(xml, id, args.cert, "infPedReg");
+
+  try {
+    const r = await requisicao(
+      args.ambiente,
+      "POST",
+      `/SefinNacional/nfse/${args.chaveAcesso}/eventos`,
+      args.cert,
+      JSON.stringify({ pedidoRegistroEventoXmlGZipB64: gzipB64(assinado) }),
+    );
+    if (r.status !== 200 && r.status !== 201) {
+      return { ok: false, ...explicarErro(r.body), status: r.status };
+    }
+    const j = JSON.parse(r.body) as { eventoXmlGZipB64?: string };
+    return { ok: true, xmlEvento: j.eventoXmlGZipB64 ? deGzipB64(j.eventoXmlGZipB64) : assinado };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
   }
 }
 

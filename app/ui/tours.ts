@@ -69,37 +69,25 @@ export const TOURS: Record<string, Tour> = {
     ],
   },
 
-  "/notas-servico": {
-    chave: "tour-notas-servico-v1",
-    titulo: "Notas de serviço",
-    slides: [
-      {
-        titulo: "O que é",
-        texto: "Nota de serviço (NFS-e) é o documento da mão de obra — imposto de prefeitura, não de estado. Uma nota descreve um serviço prestado, sem lista de itens.",
-        dica: "Peça é nota de produto; mão de obra é nota de serviço. Muita empresa emite as duas.",
-        cor: ROXO, icone: IconFerramenta,
-      },
-      {
-        titulo: "Antes da primeira",
-        texto: "A empresa precisa da inscrição municipal preenchida em Configurações e do CNPJ credenciado no portal nacional. Sem a inscrição, a nota não sai.",
-        cor: AMBAR, icone: IconEngrenagem,
-      },
-      {
-        titulo: "Esta tela",
-        texto: "Aqui fica o histórico. Para emitir, use Emitir nova nota e escolha NFS-e no tipo. Clique numa linha para ver detalhes e baixar o XML.",
-        cor: AZUL, icone: IconLista,
-      },
-    ],
-  },
-
   "/notas": {
-    chave: "tour-notas-v1",
+    chave: "tour-notas-v2",
     titulo: "Notas emitidas",
     slides: [
       {
         titulo: "Tudo que já saiu",
         texto: "Lista das notas transmitidas, com status. Autorizada é a que valeu; rejeitada foi recusada pela SEFAZ e o motivo aparece no detalhe.",
         cor: AZUL, icone: IconLista,
+      },
+      {
+        titulo: "Venda e serviço juntos",
+        texto: "Os botões no alto da lista separam as notas de venda (mercadoria) das de serviço (mão de obra). Nota de serviço é imposto de prefeitura; nota de venda é de estado.",
+        dica: "Peça é nota de venda; mão de obra é nota de serviço. Muita empresa emite as duas.",
+        cor: ROXO, icone: IconFerramenta,
+      },
+      {
+        titulo: "Antes da primeira de serviço",
+        texto: "A empresa precisa da inscrição municipal preenchida em Configurações e do CNPJ credenciado no portal nacional. Sem a inscrição, a nota não sai.",
+        cor: AMBAR, icone: IconEngrenagem,
       },
       {
         titulo: "O que dá para fazer",

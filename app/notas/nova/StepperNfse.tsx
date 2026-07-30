@@ -143,8 +143,8 @@ export default function StepperNfse({
         </p>
         <div className="mt-6 flex justify-center gap-2">
           <Button onClick={novaEmissao}>Emitir outra</Button>
-          <a href="/notas-servico">
-            <Button variante="secondary">Ver notas de serviço</Button>
+          <a href="/notas">
+            <Button variante="secondary">Ver notas emitidas</Button>
           </a>
         </div>
       </Card>
