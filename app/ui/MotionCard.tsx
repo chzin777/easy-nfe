@@ -18,7 +18,7 @@ export default function MotionCard({
     <motion.div
       initial={{ scale: 0.9, opacity: 0 }}
       whileInView={{ scale: 1, opacity: 1 }}
-      viewport={{ once: true, amount: 0.2 }}
+      viewport={{ once: true, amount: "some" }}
       transition={{ type: "spring", duration: 0.5, delay: index * 0.08 }}
       whileHover={{ scale: 1.03 }}
       className={className}
