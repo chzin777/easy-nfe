@@ -802,7 +802,7 @@ export async function definirLicenca(input: {
 // Faturas (cobranças por período, geradas do plano + validade)
 // ----------------------------------------------------------------------------
 
-// Gera as faturas dos PRÓXIMOS 3 MESES (mês atual + 2), respeitando a validade.
+// Gera as faturas dos PRÓXIMOS 3 CICLOS a partir da validade da licença.
 // Não sobrescreve faturas existentes (preserva pagamentos já marcados).
 async function gerarFaturasInterno(userId: string): Promise<void> {
   const lic = await prisma.licenca.findUnique({ where: { userId }, include: { plano: true } });
@@ -811,15 +811,16 @@ async function gerarFaturasInterno(userId: string): Promise<void> {
   if (lic.status === "TRIAL") return;
 
   const preco = precoComDesconto(Number(lic.plano.preco), lic.descontoTipo, Number(lic.descontoValor));
-  const fim = lic.validadeEm;
   const hoje = new Date();
-  const diaVenc = Math.min(lic.inicioEm.getDate(), 28);
+  // Âncora do ciclo: a validade é o fim do período já pago, logo é o vencimento
+  // da próxima cobrança. Só cai na data de contratação quando não há validade.
+  const base = lic.validadeEm ?? lic.inicioEm;
+  const diaVenc = Math.min(base.getDate(), 28);
+  const passo = lic.plano.periodicidade === "anual" ? 12 : 1;
 
   for (let i = 0; i < 3; i++) {
-    const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
+    const d = new Date(base.getFullYear(), base.getMonth() + i * passo, 1);
     const vencimento = new Date(d.getFullYear(), d.getMonth(), diaVenc);
-    // Não gera além da validade da licença.
-    if (fim && vencimento > fim) break;
 
     const competencia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const atrasada = vencimento < hoje;
