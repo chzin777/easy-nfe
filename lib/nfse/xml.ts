@@ -143,12 +143,142 @@ function valoresXml(v: DadosDPS["valores"]): string {
 // autorizada. Fora do Simples é ela quem calcula, então o que o usuário digitou
 // é só estimativa — o que vale é isto.
 export function valoresAplicados(xmlNfse: string): { aliqISS?: number; valorISS?: number } {
-  const ler = (nome: string) => {
-    const m = new RegExp(`<${nome}>([^<]+)</${nome}>`).exec(xmlNfse);
-    const n = m ? Number(m[1]) : NaN;
-    return Number.isFinite(n) ? n : undefined;
+  return { aliqISS: num(xmlNfse, "pAliqAplic"), valorISS: num(xmlNfse, "vISSQN") };
+}
+
+// --- Leitura do XML autorizado -----------------------------------------------
+// A NFS-e devolvida traz a DPS inteira embutida, então um leitor por nome de
+// tag alcança tanto o que o fisco calculou (infNFSe/valores) quanto o que foi
+// declarado (DPS/infDPS/valores). Os nomes não colidem entre os dois blocos.
+
+const tagRe = (nome: string) => new RegExp(`<(?:\\w+:)?${nome}(?:\\s[^>]*)?>([^<]*)</(?:\\w+:)?${nome}>`);
+
+function txt(xml: string, nome: string): string | undefined {
+  const m = tagRe(nome).exec(xml);
+  const v = m?.[1]?.trim();
+  return v ? v : undefined;
+}
+
+function num(xml: string, nome: string): number | undefined {
+  const v = txt(xml, nome);
+  const n = v == null ? NaN : Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+// Tudo que o DANFSe imprime além do que já está no banco: os tributos que a
+// prefeitura apurou, as retenções federais e os textos que só o fisco preenche
+// (nome da atividade, município de incidência, NBS).
+export type TributosNfse = {
+  // identificação devolvida pelo fisco
+  nNFSe?: string;
+  dhProc?: string;
+  verAplic?: string;
+  xLocEmi?: string;
+  xLocPrestacao?: string;
+  xLocIncid?: string;
+  xTribNac?: string;
+  xTribMun?: string;
+  xNBS?: string;
+  // DPS que originou a nota
+  nDPS?: string;
+  serieDPS?: string;
+  dhEmiDPS?: string;
+  // regime do prestador
+  opSimpNac?: string;
+  regApTribSN?: string;
+  regEspTrib?: string;
+  // valores declarados
+  vServ?: number;
+  vDescIncond?: number;
+  vDescCond?: number;
+  vDedRed?: number;
+  // ISSQN apurado
+  vBC?: number;
+  pAliqAplic?: number;
+  vISSQN?: number;
+  tpRetISSQN?: string;
+  tribISSQN?: string;
+  tpImunidade?: string;
+  nProcesso?: string;
+  // tributação federal
+  cstPisCofins?: string;
+  tpRetPisCofins?: string;
+  vPis?: number;
+  vCofins?: number;
+  vRetCSLL?: number;
+  vRetIRRF?: number;
+  vRetCP?: number;
+  // totais
+  vTotalRet?: number;
+  vLiq?: number;
+  vTotTrib?: number;
+  pTotTribSN?: number;
+  pTotTribFed?: number;
+  pTotTribEst?: number;
+  pTotTribMun?: number;
+  // IBS/CBS (reforma) — só sai impresso quando o fisco devolve algum valor
+  vBCIBSCBS?: number;
+  vCBS?: number;
+  vIBSEst?: number;
+  vIBSMun?: number;
+};
+
+// Lê o XML da NFS-e autorizada (ou, na falta dele, a DPS assinada).
+export function tributosNfse(xml: string | null | undefined): TributosNfse {
+  if (!xml) return {};
+  return {
+    nNFSe: txt(xml, "nNFSe"),
+    dhProc: txt(xml, "dhProc"),
+    verAplic: txt(xml, "verAplic"),
+    xLocEmi: txt(xml, "xLocEmi"),
+    xLocPrestacao: txt(xml, "xLocPrestacao"),
+    xLocIncid: txt(xml, "xLocIncid"),
+    xTribNac: txt(xml, "xTribNac"),
+    xTribMun: txt(xml, "xTribMun"),
+    xNBS: txt(xml, "xNBS"),
+    nDPS: txt(xml, "nDPS"),
+    serieDPS: txt(xml, "serie"),
+    dhEmiDPS: txt(xml, "dhEmi"),
+    opSimpNac: txt(xml, "opSimpNac"),
+    regApTribSN: txt(xml, "regApTribSN"),
+    regEspTrib: txt(xml, "regEspTrib"),
+    vServ: num(xml, "vServ"),
+    vDescIncond: num(xml, "vDescIncond"),
+    vDescCond: num(xml, "vDescCond"),
+    vDedRed: num(xml, "vDedRed"),
+    vBC: num(xml, "vBC"),
+    pAliqAplic: num(xml, "pAliqAplic"),
+    vISSQN: num(xml, "vISSQN"),
+    tpRetISSQN: txt(xml, "tpRetISSQN"),
+    tribISSQN: txt(xml, "tribISSQN"),
+    tpImunidade: txt(xml, "tpImunidade"),
+    nProcesso: txt(xml, "nProcesso"),
+    cstPisCofins: txt(xml, "CST"),
+    tpRetPisCofins: txt(xml, "tpRetPisCofins"),
+    vPis: num(xml, "vPis"),
+    vCofins: num(xml, "vCofins"),
+    vRetCSLL: num(xml, "vRetCSLL"),
+    vRetIRRF: num(xml, "vRetIRRF"),
+    vRetCP: num(xml, "vRetCP"),
+    vTotalRet: num(xml, "vTotalRet"),
+    vLiq: num(xml, "vLiq"),
+    vTotTrib: num(xml, "vTotTrib"),
+    pTotTribSN: num(xml, "pTotTribSN"),
+    pTotTribFed: num(xml, "pTotTribFed"),
+    pTotTribEst: num(xml, "pTotTribEst"),
+    pTotTribMun: num(xml, "pTotTribMun"),
+    vBCIBSCBS: num(xml, "vBCIBSCBS"),
+    vCBS: num(xml, "vCBS"),
+    vIBSEst: num(xml, "vIBSUF") ?? num(xml, "vIBSEst"),
+    vIBSMun: num(xml, "vIBSMun"),
   };
-  return { aliqISS: ler("pAliqAplic"), valorISS: ler("vISSQN") };
+}
+
+// Endereço do QR Code do DANFSe (NT 008/2026): portal nacional + chave de
+// acesso. Produção restrita tem host próprio.
+export function urlConsultaNfse(chave: string, ambiente: "producao" | "homologacao"): string {
+  const host = ambiente === "producao" ? "www.nfse.gov.br" : "www.producaorestrita.nfse.gov.br";
+  return `https://${host}/ConsultaPublica/?tpc=1&chave=${chave}`;
 }
 
 // XML da DPS pronto para assinar. A assinatura entra como irmã de <infDPS>,

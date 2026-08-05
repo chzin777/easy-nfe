@@ -5,12 +5,13 @@ import { exigirEmpresa } from "@/lib/empresa";
 import { exigirFeature } from "@/lib/permissoes";
 import { decriptar } from "@/lib/crypto";
 import { carregarCertificado } from "@/lib/nfe/cert";
-import { cancelarNfse, consultarPorDps, emitirNfse } from "@/lib/nfse/client";
+import { cancelarNfse, consultarPorDps } from "@/lib/nfse/client";
 import type { MotivoCancelamento } from "@/lib/nfse/evento";
-import { resolverCodMunicipio } from "@/lib/nfe/ibge";
-import { dataBrasilia, valoresAplicados } from "@/lib/nfse/xml";
+import { tributosNfse, urlConsultaNfse, type TributosNfse } from "@/lib/nfse/xml";
 import type { AmbienteNFSe } from "@/lib/nfse/types";
-import { montarDadosDps } from "@/lib/nfse/dps";
+import { emitirParaEmpresa, type EmitirNfseInput, type ResultadoEmissao } from "@/lib/nfse/emitir";
+
+export type { EmitirNfseInput, ResultadoEmissao };
 
 // Emissão de NFS-e no Padrão Nacional.
 //
@@ -27,178 +28,13 @@ function certDaEmpresa(certData: string | null): { pfxBase64: string; senha: str
 
 const so = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
 
-export type EmitirNfseInput = {
-  clienteId: string;
-  servicoId: string | null;
-  descricao: string;
-  cTribNac: string;
-  cNBS: string;
-  valorServico: number;
-  aliqISS: number;
-  // 1 = tributável | 2 = imune | 4 = não incidência
-  tribISSQN: string;
-  // Tipo de imunidade (0-5). Só usado quando tribISSQN = 2.
-  tpImunidade: string;
-  // ISS retido pelo tomador — quem recolhe é quem contratou.
-  issRetido: boolean;
-  // Local da prestação (IBGE 7). Vazio = município do emitente.
-  codMunicipioPrestacao: string;
-  competencia: string; // yyyy-mm-dd
-  informacoesAdicionais: string;
-};
-
-export type ResultadoEmissao =
-  | { ok: true; id: string; numero: number; chaveAcesso: string }
-  | { ok: false; erro: string; id?: string };
-
-// Campos que o XSD exige do tomador. Faltando um deles a rejeição vem sem
-// explicação útil, então a checagem é feita aqui, antes de assinar.
-function validarTomador(c: {
-  nome: string; documento: string; cep: string | null; logradouro: string | null;
-  numero: string | null; bairro: string | null; codMunicipio: string | null;
-  municipio: string | null; uf: string | null;
-}): string | null {
-  if (!so(c.documento)) return `O cliente ${c.nome} está sem CPF/CNPJ.`;
-  const faltando = [
-    !c.cep && "CEP",
-    !c.logradouro && "logradouro",
-    !c.numero && "número",
-    !c.bairro && "bairro",
-    // O cadastro guarda o nome do município; o código IBGE é resolvido na
-    // emissão. Só falta município se nem nome nem código estiverem lá.
-    !c.codMunicipio && !(c.municipio && c.uf) && "município",
-  ].filter(Boolean);
-  if (faltando.length) {
-    return `Endereço do cliente ${c.nome} incompleto — falta ${faltando.join(", ")}.`;
-  }
-  return null;
-}
-
 export async function emitirNotaServico(input: EmitirNfseInput): Promise<ResultadoEmissao> {
   try {
     await exigirFeature("emitir_nfse");
     const empresaId = await exigirEmpresa();
-
-    const [empresa, cliente, servico] = await Promise.all([
-      prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } }),
-      prisma.cliente.findFirst({ where: { id: input.clienteId, empresaId } }),
-      input.servicoId
-        ? prisma.servico.findFirst({ where: { id: input.servicoId, empresaId } })
-        : Promise.resolve(null),
-    ]);
-
-    if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
-    if (!empresa.inscricaoMunicipal) {
-      return { ok: false, erro: "Informe a inscrição municipal em Configurações — a NFS-e não sai sem ela." };
-    }
-    const problema = validarTomador(cliente);
-    if (problema) return { ok: false, erro: problema };
-    if (input.valorServico <= 0) return { ok: false, erro: "Valor do serviço deve ser maior que zero." };
-    if (so(input.cTribNac).length !== 6) {
-      return { ok: false, erro: "Código de tributação nacional inválido (6 dígitos)." };
-    }
-
-    // Código IBGE do tomador: usa o salvo quando existir, senão resolve pelo
-    // nome do município + UF do cadastro (mesmo caminho da NF-e).
-    let cMunTomador: string;
-    try {
-      cMunTomador = await resolverCodMunicipio(
-        so(cliente.codMunicipio) || cliente.municipio || "",
-        cliente.uf || empresa.uf,
-      );
-    } catch (e) {
-      return { ok: false, erro: e instanceof Error ? e.message : "Município do cliente inválido." };
-    }
-
-    const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
-    const cert = carregarCertificado(pfxBase64, senha);
-    const ambiente: AmbienteNFSe = empresa.ambiente === "PRODUCAO" ? "1" : "2";
-
-    const numero = empresa.proximoNumeroNFSe;
-    const serie = empresa.serieNFSe;
-    const agora = new Date();
-    // Competência é o mês do serviço e não pode passar da data de emissão
-    // (E0015). Data do browser em fuso adiantado cai nessa, então trava aqui.
-    const informada = input.competencia ? new Date(`${input.competencia}T12:00:00-03:00`) : agora;
-    const competencia = dataBrasilia(informada) > dataBrasilia(agora) ? agora : informada;
-    const localPrestacao = so(input.codMunicipioPrestacao) || empresa.codMunicipio;
-
-    // Grava antes de transmitir: se a resposta se perder, o rascunho segura o
-    // número e a nota pode ser recuperada pelo Id da DPS em vez de reemitida.
-    const registro = await prisma.notaServico.create({
-      data: {
-        numero, serie, emitenteId: empresaId, clienteId: cliente.id,
-        servicoId: servico?.id ?? null,
-        descricaoServico: input.descricao.trim(),
-        cTribNac: so(input.cTribNac),
-        itemListaServico: servico?.itemListaServico ?? null,
-        cNBS: so(input.cNBS) || null,
-        codMunicipioPrestacao: localPrestacao,
-        valorServico: input.valorServico,
-        aliqISS: input.tribISSQN === "1" && input.aliqISS > 0 ? input.aliqISS : null,
-        valorISS:
-          input.tribISSQN === "1" && input.aliqISS > 0
-            ? Number(((input.valorServico * input.aliqISS) / 100).toFixed(2))
-            : null,
-        issRetido: input.issRetido,
-        tribISSQN: input.tribISSQN,
-        competencia,
-        informacoesAdicionais: input.informacoesAdicionais.trim() || null,
-        ambiente: empresa.ambiente,
-      },
-    });
-
-    // Reserva o número na mesma hora — duas emissões simultâneas não podem
-    // pegar o mesmo nDPS.
-    await prisma.emitente.update({
-      where: { id: empresaId },
-      data: { proximoNumeroNFSe: numero + 1 },
-    });
-
-    const dados = montarDadosDps({
-      empresa,
-      cliente,
-      input,
-      ambiente,
-      serie,
-      numero,
-      emitidaEm: agora,
-      competencia,
-      cMunTomador,
-      cLocPrestacao: localPrestacao,
-    });
-
-    const r = await emitirNfse(dados, cert);
-
-    if (!r.ok) {
-      await prisma.notaServico.update({
-        where: { id: registro.id },
-        data: { status: "REJEITADA", xMotivo: r.erro, cStat: r.status ? String(r.status) : null, xmlDps: r.xmlDps },
-      });
-      return { ok: false, erro: r.erro, id: registro.id };
-    }
-
-    const aplicado = valoresAplicados(r.xmlNfse);
-    await prisma.notaServico.update({
-      where: { id: registro.id },
-      data: {
-        status: "AUTORIZADA",
-        chaveAcesso: r.chaveAcesso,
-        dpsId: r.idDps,
-        autorizadaEm: new Date(),
-        xmlDps: r.xmlDps,
-        xmlNfse: r.xmlNfse,
-        // Quem calcula o ISS é a prefeitura; grava o que ela aplicou.
-        ...(aplicado.aliqISS != null ? { aliqISS: aplicado.aliqISS } : {}),
-        ...(aplicado.valorISS != null ? { valorISS: aplicado.valorISS } : {}),
-      },
-    });
-
-    return { ok: true, id: registro.id, numero, chaveAcesso: r.chaveAcesso };
+    return await emitirParaEmpresa(empresaId, input);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
-    return { ok: false, erro: msg };
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -348,6 +184,11 @@ export type NotaServicoCompleta = NotaServicoUI & {
   tribISSQN: string;
   informacoesAdicionais: string;
   municipioPrestacao: string;
+  cNBS: string;
+  // Tributos apurados pelo fisco + textos que só vêm no XML autorizado.
+  tributos: TributosNfse;
+  // Conteúdo do QR Code de validação (portal nacional). Vazio sem chave.
+  qrCode: string;
   emitente: {
     razaoSocial: string; nomeFantasia: string; cnpj: string; inscricaoMunicipal: string;
     telefone: string; email: string;
@@ -370,6 +211,8 @@ export async function obterNotaServico(
   if (!n) return { ok: false, erro: "Nota não encontrada." };
   const e = n.emitente;
   const c = n.cliente;
+  const tributos = tributosNfse(n.xmlNfse ?? n.xmlDps);
+  const ambienteUI = n.ambiente === "PRODUCAO" ? ("producao" as const) : ("homologacao" as const);
   return {
     ok: true,
     nota: {
@@ -377,7 +220,7 @@ export async function obterNotaServico(
       numero: n.numero,
       serie: n.serie,
       status: n.status,
-      ambienteUI: n.ambiente === "PRODUCAO" ? "producao" : "homologacao",
+      ambienteUI,
       clienteNome: c.nome,
       clienteDocumento: c.documento,
       descricaoServico: n.descricaoServico,
@@ -387,7 +230,7 @@ export async function obterNotaServico(
       emitidaEm: n.emitidaEm.toISOString(),
       competencia: n.competencia.toISOString(),
       motivo: n.xMotivo,
-      ambiente: n.ambiente === "PRODUCAO" ? "producao" : "homologacao",
+      ambiente: ambienteUI,
       descricaoCompleta: n.descricaoServico,
       itemListaServico: n.itemListaServico ?? "",
       cTribNac: n.cTribNac,
@@ -395,7 +238,10 @@ export async function obterNotaServico(
       issRetido: n.issRetido,
       tribISSQN: n.tribISSQN,
       informacoesAdicionais: n.informacoesAdicionais ?? "",
-      municipioPrestacao: n.codMunicipioPrestacao,
+      municipioPrestacao: tributos.xLocPrestacao ?? n.codMunicipioPrestacao,
+      cNBS: n.cNBS ?? "",
+      tributos,
+      qrCode: n.chaveAcesso ? urlConsultaNfse(n.chaveAcesso, ambienteUI) : "",
       emitente: {
         razaoSocial: e.razaoSocial,
         nomeFantasia: e.nomeFantasia ?? e.razaoSocial,

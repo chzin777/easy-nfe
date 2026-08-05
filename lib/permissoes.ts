@@ -70,6 +70,27 @@ export async function featuresDoUsuario(): Promise<{ admin: boolean; features: S
   return { admin: false, features: new Set([...doPlano].filter((f) => permitidas.has(f))) };
 }
 
+// Features de uma empresa sem passar por sessão — para rotinas automáticas
+// (robô dos contratos recorrentes). Vale o plano de quem paga: o dono do
+// cadastro da empresa. Licença vencida ou suspensa não tem feature nenhuma.
+export async function featuresDaEmpresa(empresaId: string): Promise<Set<string>> {
+  const empresa = await prisma.emitente.findUnique({
+    where: { id: empresaId },
+    select: { userId: true },
+  });
+  if (!empresa) return new Set();
+
+  const lic = await prisma.licenca.findUnique({
+    where: { userId: empresa.userId },
+    select: { planoId: true, status: true, validadeEm: true },
+  });
+  if (!lic?.planoId) return new Set();
+  if (lic.status !== "ATIVA" && lic.status !== "TRIAL") return new Set();
+  if (lic.validadeEm && lic.validadeEm < new Date()) return new Set();
+
+  return featuresDoPlano(lic.planoId);
+}
+
 export async function temFeature(chave: string): Promise<boolean> {
   const { admin, features } = await featuresDoUsuario();
   return admin || features.has(chave);

@@ -45,6 +45,7 @@ const grupos: Grupo[] = [
       { href: "/orcamentos", label: "Orçamentos", icon: <IconClipboard />, feature: "orcamentos" },
       { href: "/vendas", label: "Vendas sem nota", icon: <IconCart />, feature: "vendas" },
       { href: "/caderneta", label: "Caderneta", icon: <IconBook />, feature: "clientes" },
+      { href: "/contratos", label: "Contratos", icon: <IconClipboard />, feature: "emitir_nfse" },
     ],
   },
   {

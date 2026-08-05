@@ -381,6 +381,7 @@ model Emitente {
 
   notas             Nota[]
   notasServico      NotaServico[]
+  contratosServico  ContratoServico[]
   servicos          Servico[]
   orcamentos        Orcamento[]
   notasRecebidas    NotaRecebida[]
@@ -586,6 +587,7 @@ model Cliente {
 
   notas            Nota[]
   notasServico     NotaServico[]
+  contratosServico ContratoServico[]
   orcamentos       Orcamento[]
   lancamentosFiado LancamentoFiado[]
   vendas           Venda[]
@@ -809,12 +811,74 @@ model Servico {
   valorUnit        Decimal  @db.Decimal(15, 2)
 
   notasServico NotaServico[]
+  contratos    ContratoServico[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([empresaId])
   @@map("servicos")
+}
+
+// ----------------------------------------------------------------------------
+// Contrato de serviço recorrente. Guarda tudo que uma NFS-e precisa e a régua
+// de repetição; um robô diário emite as notas vencidas sozinho. O contrato não
+// é documento fiscal — quem vira nota é cada emissão dele.
+// ----------------------------------------------------------------------------
+enum PeriodicidadeContrato {
+  MENSAL
+  BIMESTRAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+}
+
+model ContratoServico {
+  id   String @id @default(uuid())
+  nome String // rótulo interno ("Mensalidade — Padaria do Zé")
+
+  emitenteId String
+  emitente   Emitente @relation(fields: [emitenteId], references: [id], onDelete: Cascade)
+
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  servicoId String?
+  servico   Servico? @relation(fields: [servicoId], references: [id])
+
+  // espelho do formulário de emissão
+  descricaoServico      String
+  cTribNac              String
+  itemListaServico      String?
+  cNBS                  String?
+  codMunicipioPrestacao String   @default("")
+  valorServico          Decimal  @db.Decimal(15, 2)
+  aliqISS               Decimal? @db.Decimal(5, 2)
+  tribISSQN             String   @default("1")
+  tpImunidade           String   @default("0")
+  issRetido             Boolean  @default(false)
+  informacoesAdicionais String?
+
+  // régua de repetição
+  periodicidade  PeriodicidadeContrato @default(MENSAL)
+  diaEmissao     Int                   @default(1) // dia do mês; 31 cai no último dia
+  proximaEmissao DateTime // data da próxima nota (00:00 em Brasília)
+  fim            DateTime? // encerra depois desta data
+  ativo          Boolean               @default(true)
+
+  ultimaEmissaoEm DateTime?
+  ultimoErro      String?
+  falhas          Int       @default(0) // seguidas; na 3ª o contrato é pausado
+  notasGeradas    Int       @default(0)
+
+  notas NotaServico[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([emitenteId])
+  @@index([ativo, proximaEmissao])
+  @@map("contratos_servico")
 }
 
 // ----------------------------------------------------------------------------
@@ -832,6 +896,10 @@ model NotaServico {
 
   clienteId String // tomador do serviço
   cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  // preenchido quando a nota nasceu de um contrato recorrente
+  contratoId String?
+  contrato   ContratoServico? @relation(fields: [contratoId], references: [id], onDelete: SetNull)
 
   // serviço (snapshot no momento da emissão)
   servicoId             String?
