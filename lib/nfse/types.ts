@@ -89,6 +89,36 @@ export type DadosDPS = {
   infoAdicional?: string;
 };
 
+// --- Emissão (formulário → DPS) ---
+//
+// Ficam aqui, e não no módulo de emissão, porque a tela de emitir precisa
+// deles: um arquivo "use server" não pode reexportar tipo (o build transforma
+// o reexport em código e a rota quebra em produção).
+
+export type EmitirNfseInput = {
+  clienteId: string;
+  servicoId: string | null;
+  descricao: string;
+  cTribNac: string;
+  cNBS: string;
+  valorServico: number;
+  aliqISS: number;
+  // 1 = tributável | 2 = imune | 4 = não incidência
+  tribISSQN: string;
+  // Tipo de imunidade (0-5). Só usado quando tribISSQN = 2.
+  tpImunidade: string;
+  // ISS retido pelo tomador — quem recolhe é quem contratou.
+  issRetido: boolean;
+  // Local da prestação (IBGE 7). Vazio = município do emitente.
+  codMunicipioPrestacao: string;
+  competencia: string; // yyyy-mm-dd
+  informacoesAdicionais: string;
+};
+
+export type ResultadoEmissaoNFSe =
+  | { ok: true; id: string; numero: number; chaveAcesso: string }
+  | { ok: false; erro: string; id?: string };
+
 // --- Distribuição de DFe (ADN) ---
 
 export type StatusDistribuicao = "REJEICAO" | "NENHUM_DOCUMENTO_LOCALIZADO" | "DOCUMENTOS_LOCALIZADOS";

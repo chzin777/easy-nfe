@@ -9,9 +9,8 @@ import { cancelarNfse, consultarPorDps } from "@/lib/nfse/client";
 import type { MotivoCancelamento } from "@/lib/nfse/evento";
 import { tributosNfse, urlConsultaNfse, type TributosNfse } from "@/lib/nfse/xml";
 import type { AmbienteNFSe } from "@/lib/nfse/types";
-import { emitirParaEmpresa, type EmitirNfseInput, type ResultadoEmissao } from "@/lib/nfse/emitir";
-
-export type { EmitirNfseInput, ResultadoEmissao };
+import { emitirParaEmpresa } from "@/lib/nfse/emitir";
+import type { EmitirNfseInput, ResultadoEmissaoNFSe } from "@/lib/nfse/types";
 
 // Emissão de NFS-e no Padrão Nacional.
 //
@@ -28,7 +27,7 @@ function certDaEmpresa(certData: string | null): { pfxBase64: string; senha: str
 
 const so = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
 
-export async function emitirNotaServico(input: EmitirNfseInput): Promise<ResultadoEmissao> {
+export async function emitirNotaServico(input: EmitirNfseInput): Promise<ResultadoEmissaoNFSe> {
   try {
     await exigirFeature("emitir_nfse");
     const empresaId = await exigirEmpresa();
@@ -40,7 +39,7 @@ export async function emitirNotaServico(input: EmitirNfseInput): Promise<Resulta
 
 // Recupera uma nota que ficou sem resposta (timeout na transmissão). A nota
 // pode ter sido autorizada mesmo assim — reemitir criaria duplicidade.
-export async function recuperarNotaServico(id: string): Promise<ResultadoEmissao> {
+export async function recuperarNotaServico(id: string): Promise<ResultadoEmissaoNFSe> {
   try {
     await exigirFeature("emitir_nfse");
     const empresaId = await exigirEmpresa();

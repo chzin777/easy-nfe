@@ -107,11 +107,20 @@ export default function NotasEmitidasPage() {
   const [cancelarServ, setCancelarServ] = useState<NotaServicoCompleta | null>(null);
   const [motivoServ, setMotivoServ] = useState<MotivoCancelamento>("1");
 
+  // Falha aqui não pode virar tela girando pra sempre: mostra o motivo e para
+  // de carregar.
   async function recarregar() {
-    const [lista, servico] = await Promise.all([listarNotas(), listarNotasServico()]);
-    setNotas(lista);
-    setNotasServico(servico);
-    setCarregando(false);
+    try {
+      const [lista, servico] = await Promise.all([listarNotas(), listarNotasServico()]);
+      setNotas(lista);
+      setNotasServico(servico);
+    } catch (e) {
+      setToast(
+        "Não foi possível carregar as notas: " + (e instanceof Error ? e.message : String(e)),
+      );
+    } finally {
+      setCarregando(false);
+    }
   }
 
   useEffect(() => {

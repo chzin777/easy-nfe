@@ -20,7 +20,8 @@ import type { Cliente } from "@/lib/types";
 import ClientePicker from "./ClientePicker";
 import SeletorLC116 from "@/app/servicos/SeletorLC116";
 import type { Servico } from "@/app/servicos/actions";
-import { emitirNotaServico, type EmitirNfseInput } from "@/app/notas-servico/actions";
+import { emitirNotaServico } from "@/app/notas-servico/actions";
+import type { EmitirNfseInput } from "@/lib/nfse/types";
 
 // Emissão de NFS-e dentro da tela de nova nota. É um fluxo próprio porque o
 // documento é outro: uma DPS descreve UM serviço, sem itens, sem ICMS e sem

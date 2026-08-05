@@ -6,35 +6,11 @@ import { resolverCodMunicipio } from "@/lib/nfe/ibge";
 import { emitirNfse } from "./client";
 import { montarDadosDps } from "./dps";
 import { dataBrasilia, valoresAplicados } from "./xml";
-import type { AmbienteNFSe } from "./types";
+import type { AmbienteNFSe, EmitirNfseInput, ResultadoEmissaoNFSe } from "./types";
 
 // Núcleo da emissão de NFS-e, sem sessão. Serve tanto para a ação do usuário
 // (que faz a checagem de permissão antes) quanto para o robô dos contratos
 // recorrentes, que roda sem ninguém logado.
-
-export type EmitirNfseInput = {
-  clienteId: string;
-  servicoId: string | null;
-  descricao: string;
-  cTribNac: string;
-  cNBS: string;
-  valorServico: number;
-  aliqISS: number;
-  // 1 = tributável | 2 = imune | 4 = não incidência
-  tribISSQN: string;
-  // Tipo de imunidade (0-5). Só usado quando tribISSQN = 2.
-  tpImunidade: string;
-  // ISS retido pelo tomador — quem recolhe é quem contratou.
-  issRetido: boolean;
-  // Local da prestação (IBGE 7). Vazio = município do emitente.
-  codMunicipioPrestacao: string;
-  competencia: string; // yyyy-mm-dd
-  informacoesAdicionais: string;
-};
-
-export type ResultadoEmissao =
-  | { ok: true; id: string; numero: number; chaveAcesso: string }
-  | { ok: false; erro: string; id?: string };
 
 const so = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
 
@@ -73,7 +49,7 @@ export async function emitirParaEmpresa(
   input: EmitirNfseInput,
   // Amarra a nota ao contrato recorrente que a gerou, quando houver.
   contratoId?: string | null,
-): Promise<ResultadoEmissao> {
+): Promise<ResultadoEmissaoNFSe> {
   try {
     const [empresa, cliente, servico] = await Promise.all([
       prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } }),
