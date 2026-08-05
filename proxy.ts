@@ -24,6 +24,13 @@ async function lerSessao(req: NextRequest): Promise<{ role: string } | null> {
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Rotas de API não têm sessão de navegador: o cron da Vercel autentica por
+  // header e a API pública por chave. Redirecionar um GET dessas para a landing
+  // faz a rotina "rodar" e nunca executar nada.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
   // Server Actions são POST (header Next-Action). NÃO redirecionar — redirecionar
   // um POST de action quebra com "An unexpected response was received from the
   // server". A própria action faz o controle de acesso (exigir*).
