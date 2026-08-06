@@ -769,7 +769,9 @@ export async function cancelarNota(input: CancelarInput): Promise<CancelarResult
   try {
     await exigirFeature("nota_cancelar");
     const empresaId = await exigirEmpresa();
-    if (input.justificativa.trim().length < 15) {
+    // Conta o tamanho já sem acento/quebra de linha — é isso que vai no XML.
+    const justificativa = semAcento(input.justificativa).replace(/\s+/g, " ").trim();
+    if (justificativa.length < 15) {
       return { ok: false, erro: "Justificativa deve ter ao menos 15 caracteres." };
     }
     const nota = await prisma.nota.findFirst({
@@ -790,7 +792,7 @@ export async function cancelarNota(input: CancelarInput): Promise<CancelarResult
       cnpj: nota.emitente.cnpj,
       chave: nota.chaveAcesso,
       nProt: nota.protocolo,
-      justificativa: input.justificativa,
+      justificativa,
     });
 
     if (r.ok) {
@@ -799,7 +801,7 @@ export async function cancelarNota(input: CancelarInput): Promise<CancelarResult
         data: {
           status: "CANCELADA",
           protocoloCancelamento: r.nProt,
-          justificativaCancelamento: input.justificativa,
+          justificativaCancelamento: justificativa,
           canceladaEm: new Date(),
         },
       });

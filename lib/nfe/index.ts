@@ -124,18 +124,36 @@ export async function cancelarNFe(
   const cUF = codigoUF(params.uf);
   if (!cUF) throw new Error(`UF inválida: ${params.uf}`);
   const cnpj = params.cnpj.replace(/\D/g, "");
+  if (cnpj.length !== 14) throw new Error("CNPJ do emitente inválido para o cancelamento.");
+  const chave = params.chave.replace(/\D/g, "");
+  if (chave.length !== 44) throw new Error("Chave de acesso inválida para o cancelamento.");
+  const nProt = params.nProt.replace(/\D/g, "");
+  if (nProt.length !== 15) throw new Error("Protocolo de autorização inválido para o cancelamento.");
+  // xJust segue o tipo TJust do schema: sem acento, sem caractere de controle
+  // (quebra de linha do textarea), sem espaço duplo/nas pontas, 15-255 chars.
+  const justificativa = params.justificativa
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[<>&"']/g, " ")
+    .replace(/[^!-ÿ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 255);
+  if (justificativa.length < 15) {
+    throw new Error("A justificativa do cancelamento deve ter ao menos 15 caracteres.");
+  }
   const dh = dataHoraBrasilia();
   const nSeq = "1";
-  const idEvento = `ID110111${params.chave}${nSeq.padStart(2, "0")}`;
+  const idEvento = `ID110111${chave}${nSeq.padStart(2, "0")}`;
 
   const infEvento =
     `<infEvento Id="${idEvento}">` +
     `<cOrgao>${cUF}</cOrgao><tpAmb>${params.tpAmb}</tpAmb><CNPJ>${cnpj}</CNPJ>` +
-    `<chNFe>${params.chave}</chNFe><dhEvento>${dh}</dhEvento><tpEvento>110111</tpEvento>` +
+    `<chNFe>${chave}</chNFe><dhEvento>${dh}</dhEvento><tpEvento>110111</tpEvento>` +
     `<nSeqEvento>${nSeq}</nSeqEvento><verEvento>1.00</verEvento>` +
     `<detEvento versao="1.00"><descEvento>Cancelamento</descEvento>` +
-    `<nProt>${params.nProt}</nProt>` +
-    `<xJust>${params.justificativa.replace(/[<>&]/g, " ")}</xJust></detEvento></infEvento>`;
+    `<nProt>${nProt}</nProt>` +
+    `<xJust>${justificativa}</xJust></detEvento></infEvento>`;
   const evento = `<evento versao="1.00" xmlns="http://www.portalfiscal.inf.br/nfe">${infEvento}</evento>`;
   const eventoAssinado = assinar(evento, idEvento, cert, "infEvento");
   const envEvento =
