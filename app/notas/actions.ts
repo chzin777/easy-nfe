@@ -10,6 +10,7 @@ import {
   type Certificado,
 } from "@/lib/nfe";
 import { dataHoraBrasilia } from "@/lib/nfe/chave";
+import { cfopPorDestino } from "@/lib/nfe/xml";
 import type { DadosNFe, EnderecoNFe } from "@/lib/nfe/types";
 import { resolverCodMunicipio } from "@/lib/nfe/ibge";
 import { prisma } from "@/lib/prisma";
@@ -35,6 +36,22 @@ function certDaEmpresa(certData: string | null): { pfxBase64: string; senha: str
 async function sefazDaUfNoAr(cert: Certificado, uf: string, tpAmb: "1" | "2"): Promise<boolean> {
   try {
     const r = await consultarStatus(cert, { uf, mod: "55", tpAmb });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+// A SVC da UF está aceitando nota? Só responde 107 quando a SEFAZ de origem
+// declarou a contingência — emitir antes disso volta rejeição 114.
+async function svcAtiva(
+  cert: Certificado,
+  uf: string,
+  tpAmb: "1" | "2",
+  tpEmis: "6" | "7",
+): Promise<boolean> {
+  try {
+    const r = await consultarStatus(cert, { uf, mod: "55", tpAmb, tpEmis });
     return r.ok;
   } catch {
     return false;
@@ -316,6 +333,14 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     const destUf = cliente.uf ?? empresa.uf;
     const cMunDest = await resolverCodMunicipio(cliente.municipio ?? empresa.municipio, destUf);
 
+    // Venda para outro estado usa CFOP 6xxx. O cadastro guarda o CFOP interno —
+    // corrige aqui também para o DANFE mostrar o mesmo CFOP que foi no XML.
+    if (!nfce) {
+      itensNFe.forEach((it) => {
+        it.cfop = cfopPorDestino(it.cfop, empresa.uf, destUf);
+      });
+    }
+
     // Destinatário: NF-e 55 sempre identificado e com endereço. NFC-e identifica o
     // consumidor só pelo documento/nome (sem endereço, indIEDest=9 não-contribuinte).
     // indIEDest: contribuinte (1) EXIGE IE no schema. Sem IE cadastrada, trata como
@@ -369,7 +394,16 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
           erro: `A SEFAZ-${empresa.uf} voltou a responder. Emita normalmente — a contingência SVC só vale com a autorizadora fora do ar.`,
         };
       }
-      cont = { tpEmis: contingenciaDaUF(empresa.uf).tpEmis, dhCont: dataHoraBrasilia(), xJust: just };
+      // A SVC só aceita nota depois que a SEFAZ de origem DECLARA a contingência
+      // — webservice fora do ar não basta. Sem isso, volta rejeição 114.
+      const svc = contingenciaDaUF(empresa.uf);
+      if (!(await svcAtiva(cert, empresa.uf, tpAmb, svc.tpEmis))) {
+        return {
+          ok: false,
+          erro: `A ${svc.autorizadora} ainda não está liberada para ${empresa.uf} — a SEFAZ de origem precisa declarar a contingência. Tente emitir normalmente daqui a pouco.`,
+        };
+      }
+      cont = { tpEmis: svc.tpEmis, dhCont: dataHoraBrasilia(), xJust: just };
     }
 
     const dados: DadosNFe = {

@@ -123,6 +123,18 @@ function detXml(item: ItemNFe, nItem: number, crt: string): { xml: string; vBC: 
   return { xml, vBC: icms.vBC, vICMS: icms.vICMS };
 }
 
+// CFOP de saída acompanha o destino: 5xxx interna, 6xxx interestadual, 7xxx
+// exterior. O cadastro do produto guarda o CFOP interno — aqui ele é corrigido
+// pelo destino real (senão a SEFAZ rejeita por CFOP incompatível). CFOP fora da
+// faixa de saída passa intacto.
+export function cfopPorDestino(cfop: string, ufEmit: string, ufDest: string): string {
+  const c = (cfop ?? "").replace(/\D/g, "");
+  if (!/^[567]\d{3}$/.test(c)) return cfop;
+  const dest = (ufDest || ufEmit).toUpperCase();
+  const digito = dest === ufEmit.toUpperCase() ? "5" : dest === "EX" ? "7" : "6";
+  return c[0] === digito ? cfop : digito + c.slice(1);
+}
+
 // Monta a <NFe> não assinada e devolve também a chave de acesso.
 // dhEmi e os campos variáveis de chave (cNF) são passados de fora p/ ser determinístico.
 // Quando mod=65 (NFC-e) devolve também o <infNFeSupl> (QR Code), que o emissor
@@ -175,7 +187,14 @@ export function montarNFe(
   );
   const vTotal = vProdTotal - vDescTotal; // vNF (líquido)
   const cMunFG = dados.emit.ender.cMun ?? "";
-  const detsArr = dados.itens.map((it, i) => detXml(it, i + 1, dados.emit.crt));
+  // CFOP de saída acompanha o destino: 5xxx interna, 6xxx interestadual, 7xxx
+  // exterior. O cadastro do produto guarda o CFOP interno — aqui ele é corrigido
+  // pelo destino real (senão a SEFAZ rejeita por CFOP incompatível).
+  const itensCfop = dados.itens.map((it) => {
+    const cfop = cfopPorDestino(it.cfop, uf, nfce ? uf : ufDest);
+    return cfop === it.cfop ? it : { ...it, cfop };
+  });
+  const detsArr = itensCfop.map((it, i) => detXml(it, i + 1, dados.emit.crt));
   const dets = detsArr.map((d) => d.xml).join("");
   const vBCTotal = detsArr.reduce((s, d) => s + d.vBC, 0);
   const vICMSTotal = detsArr.reduce((s, d) => s + d.vICMS, 0);
@@ -183,6 +202,11 @@ export function montarNFe(
   // NFC-e: DANFE em cupom (tpImp=4), operação presencial (indPres=1), sempre interna
   // (idDest=1). NF-e 55: DANFE normal (tpImp=1), indPres=1 (mantido como já estava).
   const tpImp = nfce ? "4" : "1";
+
+  // idDest: 1 interna, 2 interestadual, 3 exterior. Fixar em 1 numa venda para
+  // outro estado é rejeição certa (787) e ainda quebra o CFOP.
+  const ufDest = (dados.dest?.ender.uf ?? uf).toUpperCase();
+  const idDest = nfce || ufDest === uf ? "1" : ufDest === "EX" ? "3" : "2";
 
   // Em contingência, dhCont/xJust fecham o <ide> (depois de verProc).
   const cont =
@@ -194,7 +218,7 @@ export function montarNFe(
     `<ide>` +
     `<cUF>${cUF}</cUF><cNF>${cNF}</cNF><natOp>${esc(dados.natOp)}</natOp>` +
     `<mod>${mod}</mod><serie>${dados.serie}</serie><nNF>${dados.nNF}</nNF>` +
-    `<dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>1</idDest>` +
+    `<dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>${idDest}</idDest>` +
     `<cMunFG>${cMunFG}</cMunFG><tpImp>${tpImp}</tpImp><tpEmis>${tpEmis}</tpEmis>` +
     `<cDV>${chave.slice(-1)}</cDV><tpAmb>${dados.tpAmb}</tpAmb><finNFe>1</finNFe>` +
     `<indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi>` +

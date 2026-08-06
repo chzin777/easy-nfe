@@ -6,6 +6,10 @@
 type Explicacao = { resumo: string; acao: string; corrige?: "produto" | "cliente" };
 
 const MAPA: Record<string, Explicacao> = {
+  "114": {
+    resumo: "A SEFAZ do seu estado ainda não liberou a emissão em contingência.",
+    acao: "A contingência (SVC) só vale depois que a SEFAZ de origem declara a parada. Emita normalmente — se o serviço estiver fora, aguarde alguns minutos e tente de novo.",
+  },
   "204": {
     resumo: "Essa nota já foi emitida antes (duplicidade).",
     acao: "Verifique no histórico — provavelmente ela já existe autorizada.",
