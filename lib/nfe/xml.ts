@@ -187,6 +187,12 @@ export function montarNFe(
   );
   const vTotal = vProdTotal - vDescTotal; // vNF (líquido)
   const cMunFG = dados.emit.ender.cMun ?? "";
+
+  // idDest: 1 interna, 2 interestadual, 3 exterior. Fixar em 1 numa venda para
+  // outro estado é rejeição certa (787) e ainda quebra o CFOP.
+  const ufDest = (dados.dest?.ender.uf ?? uf).toUpperCase();
+  const idDest = nfce || ufDest === uf ? "1" : ufDest === "EX" ? "3" : "2";
+
   // CFOP de saída acompanha o destino: 5xxx interna, 6xxx interestadual, 7xxx
   // exterior. O cadastro do produto guarda o CFOP interno — aqui ele é corrigido
   // pelo destino real (senão a SEFAZ rejeita por CFOP incompatível).
@@ -202,11 +208,6 @@ export function montarNFe(
   // NFC-e: DANFE em cupom (tpImp=4), operação presencial (indPres=1), sempre interna
   // (idDest=1). NF-e 55: DANFE normal (tpImp=1), indPres=1 (mantido como já estava).
   const tpImp = nfce ? "4" : "1";
-
-  // idDest: 1 interna, 2 interestadual, 3 exterior. Fixar em 1 numa venda para
-  // outro estado é rejeição certa (787) e ainda quebra o CFOP.
-  const ufDest = (dados.dest?.ender.uf ?? uf).toUpperCase();
-  const idDest = nfce || ufDest === uf ? "1" : ufDest === "EX" ? "3" : "2";
 
   // Em contingência, dhCont/xJust fecham o <ide> (depois de verProc).
   const cont =
