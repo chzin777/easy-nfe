@@ -102,14 +102,14 @@ function detXml(item: ItemNFe, nItem: number, crt: string): { xml: string; vBC: 
   const xml =
     `<det nItem="${nItem}">` +
     `<prod>` +
-    `<cProd>${escLim(item.cProd, 60)}</cProd><cEAN>${esc(item.cEAN)}</cEAN>` +
+    `<cProd>${escLim(item.cProd, 60)}</cProd><cEAN>${escLim(item.cEAN, 14)}</cEAN>` +
     `<xProd>${escLim(item.xProd, 120)}</xProd><NCM>${item.ncm}</NCM>` +
     cestTag +
     cBenefTag(item.cBenef) + // schema: cBenef em <prod>, após CEST e antes do CFOP
-    `<CFOP>${item.cfop}</CFOP><uCom>${esc(item.uCom)}</uCom>` +
+    `<CFOP>${item.cfop}</CFOP><uCom>${escLim(item.uCom, 6)}</uCom>` +
     `<qCom>${n4(item.qCom)}</qCom><vUnCom>${n10(item.vUnCom)}</vUnCom>` +
-    `<vProd>${n2(vProd)}</vProd><cEANTrib>${esc(item.cEAN)}</cEANTrib>` +
-    `<uTrib>${esc(item.uCom)}</uTrib><qTrib>${n4(item.qCom)}</qTrib>` +
+    `<vProd>${n2(vProd)}</vProd><cEANTrib>${escLim(item.cEAN, 14)}</cEANTrib>` +
+    `<uTrib>${escLim(item.uCom, 6)}</uTrib><qTrib>${n4(item.qCom)}</qTrib>` +
     `<vUnTrib>${n10(item.vUnCom)}</vUnTrib>` +
     descTag +
     `<indTot>1</indTot>` +
@@ -217,7 +217,7 @@ export function montarNFe(
 
   const ide =
     `<ide>` +
-    `<cUF>${cUF}</cUF><cNF>${cNF}</cNF><natOp>${esc(dados.natOp)}</natOp>` +
+    `<cUF>${cUF}</cUF><cNF>${cNF}</cNF><natOp>${escLim(dados.natOp, 60)}</natOp>` +
     `<mod>${mod}</mod><serie>${dados.serie}</serie><nNF>${dados.nNF}</nNF>` +
     `<dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>${idDest}</idDest>` +
     `<cMunFG>${cMunFG}</cMunFG><tpImp>${tpImp}</tpImp><tpEmis>${tpEmis}</tpEmis>` +
@@ -261,8 +261,8 @@ export function montarNFe(
 
   const transp = `<transp><modFrete>${dados.modFrete}</modFrete></transp>`;
   const pag = `<pag><detPag><indPag>0</indPag><tPag>01</tPag><vPag>${n2(vTotal)}</vPag></detPag></pag>`;
-  const infAdic = dados.infCpl
-    ? `<infAdic><infCpl>${esc(dados.infCpl)}</infCpl></infAdic>`
+  const infAdic = dados.infCpl?.trim()
+    ? `<infAdic><infCpl>${escLim(dados.infCpl, 5000)}</infCpl></infAdic>`
     : "";
 
   const xml =
