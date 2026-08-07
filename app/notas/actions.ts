@@ -10,6 +10,7 @@ import {
   type Certificado,
 } from "@/lib/nfe";
 import { dataHoraBrasilia } from "@/lib/nfe/chave";
+import { lerNFe, type TotaisNFe } from "@/lib/nfe/danfe-xml";
 import { cfopPorDestino } from "@/lib/nfe/xml";
 import type { DadosNFe, EnderecoNFe } from "@/lib/nfe/types";
 import { resolverCodMunicipio } from "@/lib/nfe/ibge";
@@ -31,30 +32,22 @@ function certDaEmpresa(certData: string | null): { pfxBase64: string; senha: str
   return JSON.parse(decriptar(certData)) as { pfxBase64: string; senha: string };
 }
 
-// A SEFAZ da UF está respondendo? Erro de rede/timeout conta como fora do ar —
-// é exatamente o cenário que autoriza a contingência.
-async function sefazDaUfNoAr(cert: Certificado, uf: string, tpAmb: "1" | "2"): Promise<boolean> {
-  try {
-    const r = await consultarStatus(cert, { uf, mod: "55", tpAmb });
-    return r.ok;
-  } catch {
-    return false;
-  }
-}
-
-// A SVC da UF está aceitando nota? Só responde 107 quando a SEFAZ de origem
-// declarou a contingência — emitir antes disso volta rejeição 114.
-async function svcAtiva(
+// Status da SEFAZ da UF (autorizadora de origem). Erro de rede/timeout conta
+// como fora do ar — é exatamente o cenário que autoriza a contingência.
+//
+// A consulta de status da SVC NÃO serve de prova: ela responde "em operação"
+// mesmo antes da SEFAZ de origem declarar a parada, e a nota volta rejeitada
+// com 114. Quem manda é o status da origem.
+async function statusSefazDaUf(
   cert: Certificado,
   uf: string,
   tpAmb: "1" | "2",
-  tpEmis: "6" | "7",
-): Promise<boolean> {
+): Promise<{ emOperacao: boolean; cStat: string | null }> {
   try {
-    const r = await consultarStatus(cert, { uf, mod: "55", tpAmb, tpEmis });
-    return r.ok;
+    const r = await consultarStatus(cert, { uf, mod: "55", tpAmb });
+    return { emOperacao: r.ok, cStat: r.cStat };
   } catch {
-    return false;
+    return { emOperacao: false, cStat: null };
   }
 }
 
@@ -100,6 +93,10 @@ export type EmitirInput = {
   }[];
   // Desconto geral da nota (rateado entre os itens). % ou R$.
   descontoNota?: { tipo: DescontoTipo; valor: number };
+  // CFOP da nota: sobrescreve o CFOP padrão de TODOS os itens. Vazio = cada
+  // item usa o do próprio cadastro. O primeiro dígito ainda é ajustado pelo
+  // destino (5 interna, 6 interestadual, 7 exterior).
+  cfop?: string;
   // Emissão em contingência SVC (só NF-e 55), quando a autorizadora da UF está fora.
   // A justificativa vai no XML (xJust, 15-256 chars) e é definitiva.
   contingencia?: { justificativa: string };
@@ -292,6 +289,23 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       };
     });
 
+    // CFOP informado na emissão vale para a nota inteira e vence o cadastro do
+    // produto. Entrada usa 1/2/3; saída, 5/6/7.
+    const cfopNota = (input.cfop ?? "").replace(/\D/g, "");
+    if (cfopNota) {
+      const entrada = input.tipoNota.includes("entrada");
+      const inicio = entrada ? /^[123]/ : /^[567]/;
+      if (!/^\d{4}$/.test(cfopNota) || !inicio.test(cfopNota)) {
+        return {
+          ok: false,
+          erro: `CFOP ${cfopNota || "vazio"} inválido: precisa ter 4 dígitos e começar com ${
+            entrada ? "1, 2 ou 3 (entrada)" : "5, 6 ou 7 (saída)"
+          }.`,
+        };
+      }
+      itensNFe.forEach((it) => { it.cfop = cfopNota; });
+    }
+
     // ----- Descontos (por item + desconto geral rateado) -----
     const bases = itensNFe.map((it) => it.qCom * it.vUnCom);
     const descItem = itensNFe.map((_it, i) => {
@@ -388,21 +402,16 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       }
       // Emitir em SVC com a autorizadora de origem no ar é uso indevido e volta
       // rejeitado — checa antes de transmitir.
-      if (await sefazDaUfNoAr(cert, empresa.uf, tpAmb)) {
+      const st = await statusSefazDaUf(cert, empresa.uf, tpAmb);
+      if (st.emOperacao) {
         return {
           ok: false,
           erro: `A SEFAZ-${empresa.uf} voltou a responder. Emita normalmente — a contingência SVC só vale com a autorizadora fora do ar.`,
         };
       }
-      // A SVC só aceita nota depois que a SEFAZ de origem DECLARA a contingência
-      // — webservice fora do ar não basta. Sem isso, volta rejeição 114.
+      // Origem fora do ar não garante que ela DECLAROU a contingência: sem a
+      // declaração a SVC devolve rejeição 114 (tratada em lib/nfe/mensagens).
       const svc = contingenciaDaUF(empresa.uf);
-      if (!(await svcAtiva(cert, empresa.uf, tpAmb, svc.tpEmis))) {
-        return {
-          ok: false,
-          erro: `A ${svc.autorizadora} ainda não está liberada para ${empresa.uf} — a SEFAZ de origem precisa declarar a contingência. Tente emitir normalmente daqui a pouco.`,
-        };
-      }
       cont = { tpEmis: svc.tpEmis, dhCont: dataHoraBrasilia(), xJust: just };
     }
 
@@ -574,11 +583,19 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
 
 // SVC que atende a UF da empresa ativa — só existe para NF-e 55, e não vale
 // oferecer contingência quando a própria tentativa já era em contingência.
+// Só oferece se a SEFAZ de origem realmente não estiver em operação: uma
+// instabilidade pontual no envio (com o status da UF respondendo 107) não
+// autoriza SVC e a nota voltaria com rejeição 114.
 async function svcDaEmpresa(input: EmitirInput): Promise<"SVC-AN" | "SVC-RS" | null> {
   if (input.tipoNota.startsWith("65") || input.contingencia) return null;
   try {
     const empresaId = await exigirEmpresa();
     const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
+    const tpAmb = empresa.ambiente === "PRODUCAO" ? "1" : "2";
+    const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
+    const cert = carregarCertificado(pfxBase64, senha);
+    const st = await statusSefazDaUf(cert, empresa.uf, tpAmb);
+    if (st.emOperacao) return null;
     return contingenciaDaUF(empresa.uf).autorizadora;
   } catch {
     return null;
@@ -649,9 +666,14 @@ export type NotaCompleta = {
   transportadora: {
     nome: string; documento: string; tipoTransporte: string; ie: string; endereco: EnderecoUI;
   } | null;
+  // Totais de imposto do XML autorizado. null enquanto a nota não foi
+  // autorizada — nesse caso o DANFE não tem o que imprimir nesses campos.
+  totais: TotaisNFe | null;
   itens: {
     codigo: string; nome: string; ncm: string; cfop: string;
     unidade: string; quantidade: number; precoUnitario: number; valorTotal: number;
+    // Tributação do item, também vinda do XML (ausente em nota não autorizada).
+    cst?: string; vBC?: number; vICMS?: number; pICMS?: number; vIPI?: number; pIPI?: number;
   }[];
 };
 
@@ -670,7 +692,10 @@ const INCLUDE_NOTA = {
 
 type NotaRow = Prisma.NotaGetPayload<{ include: typeof INCLUDE_NOTA }>;
 
-function mapNota(n: NotaRow): NotaCompleta {
+// comXml: lê o XML autorizado p/ trazer tributos e itens exatamente como a
+// SEFAZ recebeu. Só vale a pena no DANFE — a listagem não usa esses campos.
+function mapNota(n: NotaRow, comXml = false): NotaCompleta {
+  const doXml = comXml ? lerNFe(n.xmlAutorizado) : null;
   return {
     id: n.id,
     numero: n.numero,
@@ -723,12 +748,22 @@ function mapNota(n: NotaRow): NotaCompleta {
           },
         }
       : null,
-    itens: n.itens.map((i) => ({
-      codigo: i.produto ? String(i.produto.codigoInterno) : "—",
-      nome: i.nome, ncm: i.ncm ?? "", cfop: i.cfop ?? "",
-      unidade: i.unidade ?? "UN", quantidade: Number(i.quantidade), precoUnitario: Number(i.precoUnitario),
-      valorTotal: Number(i.valorTotal), // líquido (já com desconto)
-    })),
+    totais: doXml?.totais ?? null,
+    // Com XML autorizado os itens saem dele (fonte da verdade, e com tributos).
+    // Sem XML — rascunho, rejeitada — caem no snapshot do banco.
+    itens:
+      doXml?.itens.map((i) => ({
+        codigo: i.codigo, nome: i.nome, ncm: i.ncm, cfop: i.cfop,
+        unidade: i.unidade, quantidade: i.quantidade, precoUnitario: i.precoUnitario,
+        valorTotal: i.valorTotal,
+        cst: i.cst, vBC: i.vBC, vICMS: i.vICMS, pICMS: i.pICMS, vIPI: i.vIPI, pIPI: i.pIPI,
+      })) ??
+      n.itens.map((i) => ({
+        codigo: i.produto ? String(i.produto.codigoInterno) : "—",
+        nome: i.nome, ncm: i.ncm ?? "", cfop: i.cfop ?? "",
+        unidade: i.unidade ?? "UN", quantidade: Number(i.quantidade), precoUnitario: Number(i.precoUnitario),
+        valorTotal: Number(i.valorTotal), // líquido (já com desconto)
+      })),
   };
 }
 
@@ -739,7 +774,7 @@ export async function listarNotas(): Promise<NotaCompleta[]> {
     orderBy: { emitidaEm: "desc" },
     include: INCLUDE_NOTA,
   });
-  return notas.map(mapNota);
+  return notas.map((n) => mapNota(n));
 }
 
 // Uma nota completa (p/ DANFE), escopada à empresa ativa. Usada após emitir.
@@ -749,7 +784,7 @@ export async function obterNota(notaId: string): Promise<NotaCompleta | null> {
     where: { id: notaId, emitenteId: empresaId },
     include: INCLUDE_NOTA,
   });
-  return n ? mapNota(n) : null;
+  return n ? mapNota(n, true) : null;
 }
 
 // ----------------------------------------------------------------------------

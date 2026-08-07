@@ -6,6 +6,14 @@
 type Explicacao = { resumo: string; acao: string; corrige?: "produto" | "cliente" };
 
 const MAPA: Record<string, Explicacao> = {
+  "108": {
+    resumo: "O serviço da SEFAZ está paralisado momentaneamente.",
+    acao: "Aguarde alguns minutos e emita de novo — nada foi perdido.",
+  },
+  "109": {
+    resumo: "O serviço da SEFAZ está paralisado sem previsão de volta.",
+    acao: "Aguarde a SEFAZ voltar. Se demorar, a nota pode sair em contingência quando a SEFAZ do seu estado liberar.",
+  },
   "114": {
     resumo: "A SEFAZ do seu estado ainda não liberou a emissão em contingência.",
     acao: "A contingência (SVC) só vale depois que a SEFAZ de origem declara a parada. Emita normalmente — se o serviço estiver fora, aguarde alguns minutos e tente de novo.",
@@ -78,7 +86,11 @@ export function explicarRejeicao(
   cStat: string | null,
   xMotivo: string | null,
 ): { resumo: string; acao: string | null; corrige?: "produto" | "cliente" } {
-  if (cStat && MAPA[cStat]) return MAPA[cStat];
+  // cStat pode chegar com espaço/zero à esquerda conforme a autorizadora — normaliza
+  // antes de procurar no mapa p/ não cair no texto genérico à toa.
+  const digitos = (cStat ?? "").replace(/\D/g, "");
+  const cod = digitos ? String(Number(digitos)) : null;
+  if (cod && MAPA[cod]) return MAPA[cod];
   return {
     resumo: xMotivo || "A SEFAZ recusou a nota.",
     acao: cStat ? `Código ${cStat}. Se não souber resolver, envie esse código ao suporte.` : null,
