@@ -22,6 +22,15 @@ function escLim(s: string, max: number): string {
   return esc(t.length > max ? t.slice(0, max) : t);
 }
 
+// Campos de texto do endereço/nome têm minLength 2 no schema 4.00. Endereço real
+// como "Rua B" cadastrado só com "B" derruba a nota por schema (rejeição 225).
+// Completa com ponto até o mínimo — mantém o dado e passa na validação.
+function escMin2(s: string, max: number): string {
+  const t = s.trim();
+  if (!t) return "";
+  return escLim(t.length === 1 ? `${t}.` : t, max);
+}
+
 const n2 = (v: number) => v.toFixed(2);
 const n4 = (v: number) => v.toFixed(4);
 const n10 = (v: number) => v.toFixed(10);
@@ -37,10 +46,10 @@ function enderXml(tag: string, e: EnderecoNFe): string {
   const cep = e.cep.replace(/\D/g, "");
   return (
     `<${tag}>` +
-    `<xLgr>${escLim(e.xLgr, 60)}</xLgr><nro>${escLim(e.nro, 60)}</nro>` +
-    (e.xCpl ? `<xCpl>${escLim(e.xCpl, 60)}</xCpl>` : "") +
-    `<xBairro>${escLim(e.xBairro, 60)}</xBairro>` +
-    `<cMun>${cMun}</cMun><xMun>${escLim(e.municipio, 60)}</xMun><UF>${e.uf}</UF>` +
+    `<xLgr>${escMin2(e.xLgr, 60)}</xLgr><nro>${escLim(e.nro, 60)}</nro>` +
+    (e.xCpl?.trim() ? `<xCpl>${escMin2(e.xCpl, 60)}</xCpl>` : "") +
+    `<xBairro>${escMin2(e.xBairro, 60)}</xBairro>` +
+    `<cMun>${cMun}</cMun><xMun>${escMin2(e.municipio, 60)}</xMun><UF>${e.uf}</UF>` +
     `<CEP>${cep}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais>` +
     (e.fone ? `<fone>${e.fone.replace(/\D/g, "")}</fone>` : "") +
     `</${tag}>`
@@ -229,8 +238,8 @@ export function montarNFe(
 
   const emit =
     `<emit>` +
-    `<CNPJ>${cnpj}</CNPJ><xNome>${escLim(dados.emit.xNome, 60)}</xNome>` +
-    (dados.emit.xFant ? `<xFant>${escLim(dados.emit.xFant, 60)}</xFant>` : "") +
+    `<CNPJ>${cnpj}</CNPJ><xNome>${escMin2(dados.emit.xNome, 60)}</xNome>` +
+    (dados.emit.xFant?.trim() ? `<xFant>${escLim(dados.emit.xFant, 60)}</xFant>` : "") +
     enderXml("enderEmit", dados.emit.ender) +
     `<IE>${dados.emit.ie.replace(/\D/g, "")}</IE><CRT>${dados.emit.crt}</CRT>` +
     `</emit>`;
@@ -241,7 +250,7 @@ export function montarNFe(
   const dest = d
     ? `<dest>` +
       tagDoc(d.doc) +
-      `<xNome>${escLim(d.xNome, 60)}</xNome>` +
+      `<xNome>${escMin2(d.xNome, 60)}</xNome>` +
       // enderDest é opcional no schema; só inclui se houver logradouro (evita tags vazias = rejeição 225).
       (d.ender?.xLgr?.trim() ? enderXml("enderDest", d.ender) : "") +
       // Schema NFe 4.00: indIEDest precede IE. Inverter gera rejeição 225 (falha de schema).

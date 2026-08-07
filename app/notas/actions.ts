@@ -359,6 +359,24 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     // consumidor só pelo documento/nome (sem endereço, indIEDest=9 não-contribuinte).
     // indIEDest: contribuinte (1) EXIGE IE no schema. Sem IE cadastrada, trata como
     // não contribuinte (9) para não estourar rejeição 225 (falha de schema).
+    // Endereço do destinatário incompleto vira tag vazia no XML e a SEFAZ derruba
+    // por schema (225). Melhor avisar qual campo falta do que emitir e ser rejeitado.
+    if (!nfce) {
+      const faltando = [
+        [cliente.logradouro, "logradouro"],
+        [cliente.bairro, "bairro"],
+        [cliente.municipio, "município"],
+        [cliente.cep, "CEP"],
+        [cliente.numero, "número"],
+      ].filter(([v]) => !(v ?? "").trim()).map(([, nome]) => nome);
+      if (faltando.length) {
+        return {
+          ok: false,
+          erro: `O endereço do cliente "${cliente.nome}" está incompleto (falta ${faltando.join(", ")}). Complete o cadastro do cliente e emita de novo.`,
+        };
+      }
+    }
+
     const ieDest = (cliente.inscricaoEstadual ?? "").replace(/\D/g, "");
     let indIEDest = cliente.tipoContribuinte || "9";
     if (indIEDest === "1" && !ieDest) indIEDest = "9";
