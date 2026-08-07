@@ -2,6 +2,7 @@
 
 import { formatBRL, formatData } from "@/lib/format";
 import { TIPOS_TRANSPORTE, rotulo } from "@/lib/mock-data";
+import { code128c } from "@/lib/code128";
 import type { NotaCompleta } from "@/app/notas/actions";
 
 // DANFE — Documento Auxiliar da NF-e (protótipo, leiaute fiel ao padrão nacional).
@@ -16,16 +17,29 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
   const natureza = entrada
     ? "COMPRA / ENTRADA DE MERCADORIA"
     : "VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCEIROS";
-  const totalProdutos = nota.itens.reduce((s, i) => s + i.quantidade * i.precoUnitario, 0);
   // Desconto por item = bruto − líquido (valorTotal já vem com desconto aplicado).
   const descItem = (i: NotaCompleta["itens"][number]) => Math.max(0, i.quantidade * i.precoUnitario - i.valorTotal);
-  const totalDesconto = nota.itens.reduce((s, i) => s + descItem(i), 0);
+
+  // Quadro de impostos: vem do XML autorizado. Sem XML (rascunho/rejeitada) só
+  // dá para mostrar o que o sistema calculou — imposto fica em branco.
+  const t = nota.totais ?? {
+    vBC: 0, vICMS: 0, vBCST: 0, vST: 0,
+    vProd: nota.itens.reduce((s, i) => s + i.quantidade * i.precoUnitario, 0),
+    vFrete: 0, vSeg: 0,
+    vDesc: nota.itens.reduce((s, i) => s + descItem(i), 0),
+    vOutro: 0, vIPI: 0, vNF: nota.valorTotal,
+  };
   const dataEmissao = formatData(nota.emitidaEm);
   const horaEmissao = formatHora(nota.emitidaEm);
 
+  // Data/hora da impressão = agora. Server e client calculam em instantes
+  // diferentes; o span usa suppressHydrationWarning por isso.
+  const agora = new Date().toISOString();
+  const impresso = `${formatData(agora)} ${formatHora(agora)}`;
+
   const protocolo =
     nota.status === "autorizada"
-      ? `152${nota.chaveAcesso.slice(-13)} · ${dataEmissao} ${horaEmissao}`
+      ? `${nota.protocolo ?? "—"} · ${dataEmissao} ${horaEmissao}`
       : nota.status === "cancelada"
         ? "NF-e CANCELADA"
         : "NF-e sem Autorização de Uso da SEFAZ";
@@ -125,7 +139,7 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
             </div>
 
             {/* Barcode + chave */}
-            <div className="flex w-[42%] flex-col justify-center p-2">
+            <div className="flex w-[42%] flex-col justify-center px-1 py-2">
               <Barcode chave={nota.chaveAcesso} />
               <p className="mt-1 text-[7px] uppercase text-slate-600">Chave de acesso</p>
               <p className="font-mono text-[9px] font-semibold tracking-tight">{espacar(nota.chaveAcesso)}</p>
@@ -181,20 +195,20 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
         <Titulo>Cálculo do imposto</Titulo>
         <div className="border border-black">
           <div className="flex">
-            <Cel label="Base de cálculo do ICMS" className="flex-1" alinhar="right">0,00</Cel>
-            <Cel label="Valor do ICMS" className="flex-1 border-l border-black" alinhar="right">0,00</Cel>
-            <Cel label="Base de cálc. ICMS subst." className="flex-1 border-l border-black" alinhar="right">0,00</Cel>
-            <Cel label="Valor do ICMS subst." className="flex-1 border-l border-black" alinhar="right">0,00</Cel>
-            <Cel label="Valor total dos produtos" className="flex-1 border-l border-black" alinhar="right">{moeda(totalProdutos)}</Cel>
+            <Cel label="Base de cálculo do ICMS" className="flex-1" alinhar="right">{moeda(t.vBC)}</Cel>
+            <Cel label="Valor do ICMS" className="flex-1 border-l border-black" alinhar="right">{moeda(t.vICMS)}</Cel>
+            <Cel label="Base de cálc. ICMS subst." className="flex-1 border-l border-black" alinhar="right">{moeda(t.vBCST)}</Cel>
+            <Cel label="Valor do ICMS subst." className="flex-1 border-l border-black" alinhar="right">{moeda(t.vST)}</Cel>
+            <Cel label="Valor total dos produtos" className="flex-1 border-l border-black" alinhar="right">{moeda(t.vProd)}</Cel>
           </div>
           <div className="flex border-t border-black">
-            <Cel label="Valor do frete" className="flex-1" alinhar="right">0,00</Cel>
-            <Cel label="Valor do seguro" className="flex-1 border-l border-black" alinhar="right">0,00</Cel>
-            <Cel label="Desconto" className="flex-1 border-l border-black" alinhar="right">{moeda(totalDesconto)}</Cel>
-            <Cel label="Outras desp. acessórias" className="flex-1 border-l border-black" alinhar="right">0,00</Cel>
-            <Cel label="Valor do IPI" className="flex-1 border-l border-black" alinhar="right">0,00</Cel>
+            <Cel label="Valor do frete" className="flex-1" alinhar="right">{moeda(t.vFrete)}</Cel>
+            <Cel label="Valor do seguro" className="flex-1 border-l border-black" alinhar="right">{moeda(t.vSeg)}</Cel>
+            <Cel label="Desconto" className="flex-1 border-l border-black" alinhar="right">{moeda(t.vDesc)}</Cel>
+            <Cel label="Outras desp. acessórias" className="flex-1 border-l border-black" alinhar="right">{moeda(t.vOutro)}</Cel>
+            <Cel label="Valor do IPI" className="flex-1 border-l border-black" alinhar="right">{moeda(t.vIPI)}</Cel>
             <Cel label="Valor total da nota" className="flex-1 border-l border-black bg-slate-50" alinhar="right">
-              <strong>{moeda(nota.valorTotal)}</strong>
+              <strong>{moeda(t.vNF)}</strong>
             </Cel>
           </div>
         </div>
@@ -256,18 +270,18 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
                 <Td>{it.codigo}</Td>
                 <td className="border border-black px-1 py-0.5 text-left">{it.nome}</td>
                 <Td>{it.ncm || "—"}</Td>
-                <Td>0300</Td>
-                <Td>{it.cfop || (entrada ? "1102" : "5102")}</Td>
+                <Td>{it.cst || "—"}</Td>
+                <Td>{it.cfop || "—"}</Td>
                 <Td>{it.unidade}</Td>
                 <Td alinhar="right">{it.quantidade.toFixed(2).replace(".", ",")}</Td>
                 <Td alinhar="right">{moeda(it.precoUnitario)}</Td>
                 <Td alinhar="right">{moeda(descItem(it))}</Td>
                 <Td alinhar="right">{moeda(it.quantidade * it.precoUnitario)}</Td>
-                <Td alinhar="right">0,00</Td>
-                <Td alinhar="right">0,00</Td>
-                <Td alinhar="right">0,00</Td>
-                <Td alinhar="right">0,00</Td>
-                <Td alinhar="right">0,00</Td>
+                <Td alinhar="right">{moeda(it.vBC ?? 0)}</Td>
+                <Td alinhar="right">{moeda(it.vICMS ?? 0)}</Td>
+                <Td alinhar="right">{moeda(it.vIPI ?? 0)}</Td>
+                <Td alinhar="right">{moeda(it.pICMS ?? 0)}</Td>
+                <Td alinhar="right">{moeda(it.pIPI ?? 0)}</Td>
               </tr>
             ))}
             {/* linhas em branco para preencher visualmente */}
@@ -290,9 +304,11 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
           <Cel label="Reservado ao fisco" className="w-[38%] border-l border-black" />
         </div>
 
+        {/* Rodapé: só a impressão. Aviso de "sem valor fiscal" é a tarja de
+            homologação — em produção não pode aparecer nada disso. */}
         <div className="mt-1 flex justify-between text-[7px] text-slate-500">
-          <span>Data e hora da impressão: {dataEmissao} {horaEmissao}</span>
-          <span>Easy-NFe · documento de demonstração · sem valor fiscal</span>
+          <span suppressHydrationWarning>Data e hora da impressão: {impresso}</span>
+          <span>Chave: {nota.chaveAcesso}</span>
         </div>
       </div>
     </div>
@@ -338,25 +354,36 @@ function Td({ children, alinhar = "left" }: { children: React.ReactNode; alinhar
   );
 }
 
-// Código de barras fictício derivado da chave (apenas visual).
+// Código de barras da chave de acesso — CODE-128C, como exige o DANFE.
+// SVG em unidades de módulo esticado até a largura do bloco (o leitor lê pela
+// proporção entre barras, então esticar não atrapalha).
+const QUIET = 10; // margem clara obrigatória nas pontas (≥10 módulos)
+
 function Barcode({ chave }: { chave: string }) {
-  const bars = chave.split("").flatMap((ch, i) => {
-    const n = (parseInt(ch, 36) || 1) % 4;
-    return [
-      { w: n + 1, preto: true, k: `b${i}` },
-      { w: ((n + i) % 3) + 1, preto: false, k: `w${i}` },
-    ];
+  const modulos = code128c(chave);
+  const total = modulos.reduce((s, m) => s + m, 0) + QUIET * 2;
+
+  let x = QUIET;
+  const barras: { x: number; w: number }[] = [];
+  modulos.forEach((m, i) => {
+    if (i % 2 === 0) barras.push({ x, w: m }); // índice par = barra
+    x += m;
   });
+
   return (
-    <div className="flex h-9 w-full items-stretch overflow-hidden">
-      {bars.map((b) => (
-        <span
-          key={b.k}
-          style={{ width: `${b.w}px`, background: b.preto ? "#000" : "#fff" }}
-          className="shrink-0"
-        />
+    <svg
+      className="h-10 w-full"
+      viewBox={`0 0 ${total} 40`}
+      preserveAspectRatio="none"
+      shapeRendering="crispEdges"
+      role="img"
+      aria-label={`Código de barras da chave de acesso ${chave}`}
+    >
+      <rect width={total} height={40} fill="#fff" />
+      {barras.map((b) => (
+        <rect key={b.x} x={b.x} y={0} width={b.w} height={40} fill="#000" />
       ))}
-    </div>
+    </svg>
   );
 }
 
