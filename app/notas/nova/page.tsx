@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Button,
   Field,
+  Input,
   PageHeader,
   SectionTitle,
   Select,
@@ -69,6 +70,8 @@ export default function NovaNotaPage() {
   const [info, setInfo] = useState("");
   const [itens, setItens] = useState<LinhaItem[]>([]);
   const [descNota, setDescNota] = useState<{ tipo: DescontoTipo; valor: number }>({ tipo: "valor", valor: 0 });
+  // CFOP da nota inteira. Vazio = cada item usa o CFOP do próprio cadastro.
+  const [cfopNota, setCfopNota] = useState("");
 
   const [produtoSel, setProdutoSel] = useState("");
   const [qtd, setQtd] = useState(1);
@@ -120,6 +123,7 @@ export default function NovaNotaPage() {
     setInfo(padroes.infoComplementarPadrao);
     setItens([]);
     setDescNota({ tipo: "valor", valor: 0 });
+    setCfopNota("");
     setProdutoSel("");
     setQtd(1);
     setPassoEmissao(1);
@@ -320,6 +324,7 @@ export default function NovaNotaPage() {
         salvarPreco: i.salvarPreco,
       })),
       descontoNota: descNota.valor > 0 ? descNota : undefined,
+      cfop: cfopNota.trim() || undefined,
       contingencia,
     };
 
@@ -686,6 +691,7 @@ export default function NovaNotaPage() {
             <Resumo rotulo="Tipo de nota" valor={rotulo(TIPOS_NOTA, tipoNota)} />
             <Resumo rotulo="Destinatário" valor={cliente?.nome ?? "—"} />
             <Resumo rotulo="Documento" valor={cliente?.documento ?? "—"} />
+            <Resumo rotulo="CFOP" valor={cfopNota || "Do cadastro de cada produto"} />
             <Resumo rotulo="Modalidade do frete" valor={rotulo(MODALIDADES_FRETE, modFrete)} />
             <Resumo rotulo="Transportadora" valor={transportadora?.nome ?? "Sem transporte / retirada"} />
           </div>
@@ -737,10 +743,24 @@ export default function NovaNotaPage() {
             </div>
           </div>
 
-          <div className="mt-4">
-            <Field label="Informações complementares">
-              <Textarea value={info} onChange={(e) => setInfo(e.target.value)} placeholder="Dados adicionais de interesse do fisco ou do destinatário…" />
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Field
+              label="CFOP da nota"
+              hint="Vazio = o CFOP de cada produto. Preenchido, vale para todos os itens."
+            >
+              <Input
+                inputMode="numeric"
+                maxLength={4}
+                value={cfopNota}
+                onChange={(e) => setCfopNota(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                placeholder={tipoNota.includes("entrada") ? "Ex.: 1102" : "Ex.: 5102"}
+              />
             </Field>
+            <div className="sm:col-span-2">
+              <Field label="Informações complementares">
+                <Textarea value={info} onChange={(e) => setInfo(e.target.value)} placeholder="Dados adicionais de interesse do fisco ou do destinatário…" />
+              </Field>
+            </div>
           </div>
         </Step>
       </Stepper>
