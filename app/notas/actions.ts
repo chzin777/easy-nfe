@@ -80,6 +80,9 @@ export type EmitirInput = {
   transportadoraId: string | null;
   tipoNota: string;
   modFrete: string; // 0-4, 9 (NT 2016.002)
+  // Valor do frete da nota. Rateado entre os itens no XML e somado ao total.
+  // Ignorado quando a modalidade é 9 (sem ocorrência de transporte).
+  valorFrete?: number;
   infCpl?: string;
   // precoUnitario: preço praticado nesta nota. Ausente = usa o do cadastro.
   // salvarPreco: além de emitir com o novo preço, grava no cadastro do produto.
@@ -329,6 +332,17 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       it.vDesc = Number(Math.min(descItem[i] + rateio, bases[i]).toFixed(2));
     });
 
+    // Frete: só entra quando há transporte contratado. Modalidade 9 (sem
+    // ocorrência) com valor de frete é contradição — o valor é descartado.
+    const modFreteNota = input.modFrete || "9";
+    const valorFrete =
+      modFreteNota !== "9" &&
+      typeof input.valorFrete === "number" &&
+      Number.isFinite(input.valorFrete) &&
+      input.valorFrete > 0
+        ? Number(input.valorFrete.toFixed(2))
+        : 0;
+
     // NCM precisa ter 8 dígitos — senão a SEFAZ rejeita por schema (225).
     const ncmInvalido = itensNFe.find((it) => !/^\d{8}$/.test((it.ncm ?? "").replace(/\D/g, "")));
     if (ncmInvalido) {
@@ -444,6 +458,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       nNF: String(numero),
       natOp: "VENDA DE MERCADORIA",
       modFrete: input.modFrete || "9",
+      vFrete: valorFrete,
       infCpl: input.infCpl,
       csc: empresa.cscNFCe ?? undefined,
       idCsc: empresa.idCscNFCe ?? undefined,
@@ -474,7 +489,8 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       r = await emitirNFe(cert, dados);
     }
 
-    const valorTotal = itensNFe.reduce((s, it) => s + it.qCom * it.vUnCom - (it.vDesc ?? 0), 0);
+    const valorTotal =
+      itensNFe.reduce((s, it) => s + it.qCom * it.vUnCom - (it.vDesc ?? 0), 0) + valorFrete;
 
     let avisoPersistencia: string | undefined;
     let notaId: string | undefined;

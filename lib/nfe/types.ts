@@ -67,6 +67,9 @@ export type DadosNFe = {
   itens: ItemNFe[];
   infCpl?: string;
   modFrete: string; // 0-4, 9
+  // Valor do frete da nota inteira. É rateado entre os itens (prod/vFrete) e
+  // somado no total (ICMSTot/vFrete e vNF) — a SEFAZ confere as duas somas.
+  vFrete?: number;
   // CSC + idCSC (cIdToken) — obrigatórios para gerar o QR Code da NFC-e.
   csc?: string;
   idCsc?: string;

@@ -31,6 +31,7 @@ export type Rascunho = {
   clienteId: string;
   transportadoraId: string;
   modFrete: string;
+  valorFrete?: string;
   info: string;
   descNota: { tipo: DescontoTipo; valor: number };
   itens: ItemRascunho[];

@@ -55,6 +55,11 @@ import { lerRascunho, limparRascunho, salvarRascunho, reidratarItens, type Rascu
 function arred(v: number, casas: number) {
   return Number(v.toFixed(casas));
 }
+// Lê um valor em reais digitado à brasileira ("1.234,56") como número.
+function lerValorBR(s: string) {
+  const n = Number(s.replace(/[^\d.,]/g, "").replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? Number(n.toFixed(2)) : 0;
+}
 // Formata a quantidade conforme as casas decimais configuradas (vírgula BR).
 function fmtQtd(v: number, casas: number) {
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: casas });
@@ -67,6 +72,8 @@ export default function NovaNotaPage() {
   const [clienteId, setClienteId] = useState("");
   const [transportadoraId, setTransportadoraId] = useState("");
   const [modFrete, setModFrete] = useState("9");
+  // Valor do frete da nota (texto enquanto digita; vira número na emissão).
+  const [valorFrete, setValorFrete] = useState("");
   const [info, setInfo] = useState("");
   const [itens, setItens] = useState<LinhaItem[]>([]);
   const [descNota, setDescNota] = useState<{ tipo: DescontoTipo; valor: number }>({ tipo: "valor", valor: 0 });
@@ -120,6 +127,7 @@ export default function NovaNotaPage() {
     setClienteId(padroes.clientePadraoId);
     setTransportadoraId("");
     setModFrete(padroes.modFretePadrao);
+    setValorFrete("");
     setInfo(padroes.infoComplementarPadrao);
     setItens([]);
     setDescNota({ tipo: "valor", valor: 0 });
@@ -174,6 +182,7 @@ export default function NovaNotaPage() {
       clienteId,
       transportadoraId,
       modFrete,
+      valorFrete,
       info,
       descNota,
       itens: itens.map((i) => ({
@@ -186,7 +195,7 @@ export default function NovaNotaPage() {
         precoVisto: i.precoOriginal,
       })),
     });
-  }, [carregando, rascunho, emitindo, resultado, tipoNota, clienteId, transportadoraId, modFrete, info, descNota, itens]);
+  }, [carregando, rascunho, emitindo, resultado, tipoNota, clienteId, transportadoraId, modFrete, valorFrete, info, descNota, itens]);
 
   // Retoma o rascunho reidratando os itens contra o catálogo atual.
   function retomarRascunho() {
@@ -196,6 +205,7 @@ export default function NovaNotaPage() {
     if (clientes.some((c) => c.id === rascunho.clienteId)) setClienteId(rascunho.clienteId);
     if (transportadoras.some((t) => t.id === rascunho.transportadoraId)) setTransportadoraId(rascunho.transportadoraId);
     setModFrete(rascunho.modFrete);
+    setValorFrete(rascunho.valorFrete ?? "");
     setInfo(rascunho.info);
     setDescNota(rascunho.descNota);
     setItens(recuperados);
@@ -222,7 +232,9 @@ export default function NovaNotaPage() {
     const descTotal = descItens + descGeral;
     return { bruto, descTotal, total: liquidoItens - descGeral };
   }, [itens, descNota]);
-  const total = totais.total;
+  // Frete só conta quando há transporte contratado (modalidade 9 = sem frete).
+  const freteNota = modFrete === "9" ? 0 : lerValorBR(valorFrete);
+  const total = totais.total + freteNota;
   const cliente = clientes.find((c) => c.id === clienteId);
   const transportadora = transportadoras.find((t) => t.id === transportadoraId);
 
@@ -314,6 +326,7 @@ export default function NovaNotaPage() {
       transportadoraId: transportadoraId || null,
       tipoNota,
       modFrete,
+      valorFrete: freteNota || undefined,
       infCpl: info || undefined,
       itens: itens.map((i) => ({
         produtoId: i.produtoId,
@@ -657,10 +670,26 @@ export default function NovaNotaPage() {
                 onChange={(e) => {
                   const v = e.target.value;
                   setModFrete(v);
-                  if (v === "9") setTransportadoraId(""); // sem ocorrência → sem transportadora
+                  if (v === "9") {
+                    setTransportadoraId(""); // sem ocorrência → sem transportadora
+                    setValorFrete(""); // e sem valor de frete
+                  }
                 }}
               />
             </Field>
+            {modFrete !== "9" && (
+              <Field
+                label="Valor do frete"
+                hint="Entra no XML (vFrete), rateado nos itens, e soma ao total da nota."
+              >
+                <Input
+                  inputMode="decimal"
+                  value={valorFrete}
+                  onChange={(e) => setValorFrete(e.target.value.replace(/[^\d.,]/g, ""))}
+                  placeholder="0,00"
+                />
+              </Field>
+            )}
             <Field label="Transportadora" required={!transpOpcional} hint={transpOpcional ? "Opcional para esta modalidade" : "Obrigatória para esta modalidade"}>
               <TransportadoraPicker
                 transportadoras={transportadoras}
@@ -694,6 +723,7 @@ export default function NovaNotaPage() {
             <Resumo rotulo="CFOP" valor={cfopNota || "Do cadastro de cada produto"} />
             <Resumo rotulo="Modalidade do frete" valor={rotulo(MODALIDADES_FRETE, modFrete)} />
             <Resumo rotulo="Transportadora" valor={transportadora?.nome ?? "Sem transporte / retirada"} />
+            <Resumo rotulo="Valor do frete" valor={freteNota > 0 ? formatBRL(freteNota) : "—"} />
           </div>
 
           {/* Produtos da nota */}
@@ -734,6 +764,12 @@ export default function NovaNotaPage() {
                 <div className="flex items-center justify-between text-sm text-[var(--danger)]">
                   <span>Descontos (itens + nota)</span>
                   <span className="font-medium">− {formatBRL(totais.descTotal)}</span>
+                </div>
+              )}
+              {freteNota > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[var(--muted)]">Frete</span>
+                  <span className="font-medium">+ {formatBRL(freteNota)}</span>
                 </div>
               )}
             </div>

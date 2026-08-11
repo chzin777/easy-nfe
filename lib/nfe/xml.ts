@@ -98,12 +98,21 @@ function icmsXml(crt: string, item: ItemNFe, base: number): { xml: string; vBC: 
   return { xml: `<ICMS><ICMS40><orig>${orig}</orig><CST>40</CST></ICMS40></ICMS>`, vBC: 0, vICMS: 0 };
 }
 
-function detXml(item: ItemNFe, nItem: number, crt: string): { xml: string; vBC: number; vICMS: number } {
+function detXml(
+  item: ItemNFe,
+  nItem: number,
+  crt: string,
+  vFrete = 0,
+): { xml: string; vBC: number; vICMS: number } {
   const vProd = item.qCom * item.vUnCom;
   // Desconto do item (vDesc) — limitado ao valor do produto. Só inclui se > 0.
   const vDesc = Math.min(Math.max(item.vDesc ?? 0, 0), vProd);
   const descTag = vDesc > 0 ? `<vDesc>${n2(vDesc)}</vDesc>` : "";
-  const icms = icmsXml(crt, item, vProd - vDesc);
+  // Frete rateado do item. No schema 4.00 vFrete vem depois de vUnTrib e antes
+  // de vDesc — trocar a ordem é rejeição 225.
+  const freteTag = vFrete > 0 ? `<vFrete>${n2(vFrete)}</vFrete>` : "";
+  // O frete integra a base de cálculo do ICMS (LC 87/96 art. 13).
+  const icms = icmsXml(crt, item, vProd - vDesc + vFrete);
   // CEST tem EXATAMENTE 7 dígitos no schema 4.00. Valor inválido (ex.: 8 dígitos)
   // gera rejeição 225 — então só inclui quando bater os 7 dígitos.
   const cestDig = (item.cest ?? "").replace(/\D/g, "");
@@ -120,6 +129,7 @@ function detXml(item: ItemNFe, nItem: number, crt: string): { xml: string; vBC: 
     `<vProd>${n2(vProd)}</vProd><cEANTrib>${escLim(item.cEAN, 14)}</cEANTrib>` +
     `<uTrib>${escLim(item.uCom, 6)}</uTrib><qTrib>${n4(item.qCom)}</qTrib>` +
     `<vUnTrib>${n10(item.vUnCom)}</vUnTrib>` +
+    freteTag +
     descTag +
     `<indTot>1</indTot>` +
     `</prod>` +
@@ -194,7 +204,25 @@ export function montarNFe(
     (s, i) => s + Math.min(Math.max(i.vDesc ?? 0, 0), i.qCom * i.vUnCom),
     0,
   );
-  const vTotal = vProdTotal - vDescTotal; // vNF (líquido)
+  // Frete da nota: a SEFAZ exige que o vFrete do total bata com a soma do
+  // vFrete dos itens — então rateia pelo valor de cada item e joga a sobra de
+  // arredondamento no último.
+  const vFreteTotal = Math.max(0, Number((dados.vFrete ?? 0).toFixed(2)));
+  const fretePorItem = dados.itens.map(() => 0);
+  if (vFreteTotal > 0 && vProdTotal > 0) {
+    let acumulado = 0;
+    dados.itens.forEach((it, i) => {
+      if (i === dados.itens.length - 1) {
+        fretePorItem[i] = Number((vFreteTotal - acumulado).toFixed(2));
+        return;
+      }
+      const parte = Number(((vFreteTotal * (it.qCom * it.vUnCom)) / vProdTotal).toFixed(2));
+      fretePorItem[i] = parte;
+      acumulado += parte;
+    });
+  }
+
+  const vTotal = vProdTotal - vDescTotal + vFreteTotal; // vNF (líquido + frete)
   const cMunFG = dados.emit.ender.cMun ?? "";
 
   // idDest: 1 interna, 2 interestadual, 3 exterior. Fixar em 1 numa venda para
@@ -209,7 +237,7 @@ export function montarNFe(
     const cfop = cfopPorDestino(it.cfop, uf, nfce ? uf : ufDest);
     return cfop === it.cfop ? it : { ...it, cfop };
   });
-  const detsArr = itensCfop.map((it, i) => detXml(it, i + 1, dados.emit.crt));
+  const detsArr = itensCfop.map((it, i) => detXml(it, i + 1, dados.emit.crt, fretePorItem[i]));
   const dets = detsArr.map((d) => d.xml).join("");
   const vBCTotal = detsArr.reduce((s, d) => s + d.vBC, 0);
   const vICMSTotal = detsArr.reduce((s, d) => s + d.vICMS, 0);
@@ -263,7 +291,7 @@ export function montarNFe(
     `<total><ICMSTot>` +
     `<vBC>${n2(vBCTotal)}</vBC><vICMS>${n2(vICMSTotal)}</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP>` +
     `<vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet>` +
-    `<vProd>${n2(vProdTotal)}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>${n2(vDescTotal)}</vDesc>` +
+    `<vProd>${n2(vProdTotal)}</vProd><vFrete>${n2(vFreteTotal)}</vFrete><vSeg>0.00</vSeg><vDesc>${n2(vDescTotal)}</vDesc>` +
     `<vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS>` +
     `<vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${n2(vTotal)}</vNF><vTotTrib>0.00</vTotTrib>` +
     `</ICMSTot></total>`;
