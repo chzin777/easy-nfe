@@ -156,6 +156,7 @@ export function htmlCobranca(vars: {
   pagarUrl: string;
   atrasada: boolean;
   logoCid?: string;
+  comBoletoAnexo?: boolean; // avisa que o PDF do boleto vai anexado
 }): string {
   const venc = vars.vencimento.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
   const selo = vars.atrasada
@@ -175,6 +176,9 @@ export function htmlCobranca(vars: {
       ${linhaInfo("Vencimento", venc, true)}
     </table>
     ${botao(vars.pagarUrl, "Pagar agora")}
+    ${vars.comBoletoAnexo
+      ? `<p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#98a2b3">📎 O boleto em PDF está anexado a este e-mail.</p>`
+      : ""}
     <p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:#98a2b3">
       Se você já efetuou o pagamento, desconsidere este e-mail. Dúvidas? É só responder esta mensagem.
     </p>`;

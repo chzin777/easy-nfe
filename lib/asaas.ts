@@ -155,6 +155,16 @@ export async function consultarCobranca(paymentId: string): Promise<AsaasCobranc
   return asaas(`/payments/${paymentId}`);
 }
 
+// Baixa o PDF do boleto. `bankSlipUrl` é público (não leva a chave de API) —
+// serve tanto p/ anexar no e-mail quanto p/ o download no admin.
+export async function baixarBoletoPdf(bankSlipUrl: string): Promise<Buffer> {
+  const res = await fetch(bankSlipUrl, { cache: "no-store", headers: { "User-Agent": "easy-nfe" } });
+  if (!res.ok) throw new Error(`Não foi possível baixar o PDF do boleto (HTTP ${res.status}).`);
+  const tipo = res.headers.get("content-type") ?? "";
+  if (!tipo.includes("pdf")) throw new Error("O Asaas não devolveu um PDF do boleto.");
+  return Buffer.from(await res.arrayBuffer());
+}
+
 // ----------------------------------------------------------------------------
 // Assinaturas recorrentes (cartão) — Asaas Subscriptions
 // ----------------------------------------------------------------------------

@@ -906,6 +906,17 @@ async function enviarCobrancaFatura(faturaId: string, reenvio: boolean): Promise
 
     const pagarUrl = `${await baseUrlServidor()}/pagar/${token}`;
     const logo = await logoBase64().catch(() => null);
+
+    // Quando a fatura já tem boleto no Asaas, o PDF vai anexado — o assinante
+    // recebe o boleto pronto, sem depender de abrir o link.
+    let boleto: { filename: string; content: string } | null = null;
+    if (fatura.bankSlipUrl) {
+      const { baixarBoletoPdf } = await import("@/lib/asaas");
+      boleto = await baixarBoletoPdf(fatura.bankSlipUrl)
+        .then((pdf) => ({ filename: `boleto-${fatura.competencia}.pdf`, content: pdf.toString("base64") }))
+        .catch(() => null); // sem o PDF a cobrança segue com o link de pagamento
+    }
+
     const html = htmlCobranca({
       nome: fatura.user.nome ?? para,
       plano: fatura.planoNome,
@@ -914,14 +925,19 @@ async function enviarCobrancaFatura(faturaId: string, reenvio: boolean): Promise
       pagarUrl,
       atrasada: fatura.status === "ATRASADA",
       logoCid: logo ? LOGO_CID : undefined,
+      comBoletoAnexo: !!boleto,
     });
+    const anexos = [
+      ...(logo ? [{ filename: "easy-nfe.png", content: logo, contentId: LOGO_CID }] : []),
+      ...(boleto ? [boleto] : []),
+    ];
     await enviarEmail({
       para,
       assunto: fatura.status === "ATRASADA"
         ? "Sua mensalidade Easy-NFe está em atraso"
         : "Sua mensalidade Easy-NFe está a vencer",
       html,
-      anexos: logo ? [{ filename: "easy-nfe.png", content: logo, contentId: LOGO_CID }] : undefined,
+      anexos: anexos.length ? anexos : undefined,
     });
     await prisma.fatura.update({
       where: { id: fatura.id },
@@ -1003,8 +1019,30 @@ export async function excluirFatura(id: string): Promise<Resultado> {
 // Cobrança da assinatura via boleto (Asaas) — conta única do easy-nfe.
 // ----------------------------------------------------------------------------
 export type BoletoResultado =
-  | { ok: true; bankSlipUrl: string | null; linhaDigitavel: string | null; invoiceUrl: string | null }
+  | { ok: true; bankSlipUrl: string | null; linhaDigitavel: string | null; invoiceUrl: string | null; emailErro?: string }
   | { ok: false; erro: string };
+
+// PDF do boleto p/ download no admin. Volta em base64 porque server action não
+// devolve stream — a UI remonta o arquivo e salva.
+export async function baixarBoletoFatura(faturaId: string): Promise<
+  { ok: true; nome: string; pdfBase64: string } | { ok: false; erro: string }
+> {
+  try {
+    await exigirAdmin();
+    const fatura = await prisma.fatura.findUnique({
+      where: { id: faturaId },
+      select: { competencia: true, bankSlipUrl: true },
+    });
+    if (!fatura) return { ok: false, erro: "Fatura não encontrada." };
+    if (!fatura.bankSlipUrl) return { ok: false, erro: "Esta fatura não tem boleto gerado no Asaas." };
+
+    const { baixarBoletoPdf } = await import("@/lib/asaas");
+    const pdf = await baixarBoletoPdf(fatura.bankSlipUrl);
+    return { ok: true, nome: `boleto-${fatura.competencia}.pdf`, pdfBase64: pdf.toString("base64") };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
 
 export async function gerarBoletoAssinatura(input: {
   userId: string;
@@ -1062,7 +1100,7 @@ export async function gerarBoletoAssinatura(input: {
       data: { cpfCnpj: cpf, telefone: input.telefone || user.telefone, asaasCustomerId: cliente.id },
     });
 
-    await prisma.fatura.upsert({
+    const fatura = await prisma.fatura.upsert({
       where: { userId_competencia: { userId: user.id, competencia: input.competencia } },
       create: {
         userId: user.id, planoNome, competencia: input.competencia, valor: input.valor,
@@ -1073,9 +1111,20 @@ export async function gerarBoletoAssinatura(input: {
         valor: input.valor, vencimento: new Date(input.vencimento), metodo: "boleto",
         asaasPaymentId: cobranca.id, bankSlipUrl: cobranca.bankSlipUrl, invoiceUrl: cobranca.invoiceUrl, linhaDigitavel,
       },
+      select: { id: true },
     });
 
-    return { ok: true, bankSlipUrl: cobranca.bankSlipUrl, linhaDigitavel, invoiceUrl: cobranca.invoiceUrl };
+    // Gerou o boleto, já manda a cobrança com o PDF anexado. Falha no e-mail não
+    // invalida o boleto — fica registrada na fatura e volta como aviso na UI.
+    const envio = await enviarCobrancaFatura(fatura.id, false);
+
+    return {
+      ok: true,
+      bankSlipUrl: cobranca.bankSlipUrl,
+      linhaDigitavel,
+      invoiceUrl: cobranca.invoiceUrl,
+      emailErro: envio.ok ? undefined : envio.erro,
+    };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
   }

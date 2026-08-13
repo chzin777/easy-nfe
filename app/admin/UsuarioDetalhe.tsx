@@ -13,7 +13,7 @@ import {
   listarEmpresasAdmin, type EmpresaAdmin,
   criarEmpresaParaUsuario, vincularUsuarioEmpresa, desvincularUsuarioEmpresa,
   gerarFaturas, marcarFaturaPaga, marcarFaturaPendente, excluirFatura,
-  gerarBoletoAssinatura, reenviarEmailFatura,
+  gerarBoletoAssinatura, baixarBoletoFatura, reenviarEmailFatura,
 } from "./actions";
 
 const ROLES = [
@@ -420,6 +420,7 @@ function Faturas({ d, onMudou, flash }: Sub) {
   const [boletoFor, setBoletoFor] = useState<string | null>(null);
   const [cpf, setCpf] = useState(d.cpfCnpj ?? "");
   const [gerandoBoleto, setGerandoBoleto] = useState(false);
+  const [baixandoId, setBaixandoId] = useState<string | null>(null);
   const [enviandoId, setEnviandoId] = useState<string | null>(null);
 
   async function gerarBoleto(f: Detalhe["faturas"][number]) {
@@ -432,8 +433,28 @@ function Faturas({ d, onMudou, flash }: Sub) {
     setGerandoBoleto(false);
     if (!r.ok) { setErro(r.erro); return; }
     setBoletoFor(null);
-    flash("Boleto gerado no Asaas.");
+    if (r.emailErro) {
+      setErro(`Boleto gerado, mas o e-mail não saiu: ${r.emailErro}`);
+    } else {
+      flash("Boleto gerado e enviado por e-mail com o PDF anexado.");
+    }
     onMudou();
+  }
+
+  // Baixa o PDF do boleto: a action devolve base64, aqui vira arquivo salvo.
+  async function baixarBoleto(id: string) {
+    setErro(null);
+    setBaixandoId(id);
+    const r = await baixarBoletoFatura(id);
+    setBaixandoId(null);
+    if (!r.ok) { setErro(r.erro); return; }
+    const bytes = Uint8Array.from(atob(r.pdfBase64), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = r.nome;
+    a.click();
+    URL.revokeObjectURL(url);
   }
   function copiar(txt: string) {
     navigator.clipboard?.writeText(txt).then(() => flash("Linha digitável copiada."));
@@ -563,6 +584,14 @@ function Faturas({ d, onMudou, flash }: Sub) {
                     {f.bankSlipUrl ? (
                       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-slate-50 p-2.5 text-xs">
                         <a href={f.bankSlipUrl} target="_blank" rel="noreferrer" className="font-medium text-[var(--primary)] hover:underline">Abrir boleto (PDF)</a>
+                        <button
+                          onClick={() => baixarBoleto(f.id)}
+                          disabled={baixandoId === f.id}
+                          className="flex items-center gap-1 rounded border border-[var(--border)] px-2 py-1 font-medium hover:bg-white disabled:opacity-50"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
+                          {baixandoId === f.id ? "Baixando…" : "Baixar PDF"}
+                        </button>
                         {f.linhaDigitavel && (
                           <>
                             <span className="font-mono text-[var(--muted)]">{f.linhaDigitavel}</span>

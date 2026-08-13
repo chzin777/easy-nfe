@@ -75,5 +75,15 @@ export function explicarErro(body: string): { erro: string; mensagens?: { codigo
   } catch {
     // corpo não-JSON: devolve cru, truncado
   }
+  // Página HTML no lugar do JSON = o serviço nacional caiu (503/502 do servidor
+  // deles). Sem isso, o HTML inteiro ia parar na tela do usuário.
+  if (/^\s*(<!doctype html|<html)/i.test(body)) {
+    const fora = /service unavailable|503|502|bad gateway/i.test(body);
+    return {
+      erro: fora
+        ? "O serviço nacional da NFS-e está fora do ar no momento. Tente emitir novamente em alguns minutos."
+        : "O serviço nacional da NFS-e respondeu de forma inesperada. Tente novamente em alguns minutos.",
+    };
+  }
   return { erro: body.slice(0, 500) || "Resposta vazia do serviço." };
 }
