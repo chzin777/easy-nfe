@@ -34,9 +34,15 @@ export function formatCep(valor: string): string {
 
 export function formatData(iso: string): string {
   const d = new Date(iso);
+  // Data sem hora (vencimento, data de pagamento) é gravada como meia-noite UTC.
+  // Formatada no fuso do Brasil ela voltaria um dia — 13/08 virava 12/08. Nesse
+  // caso lê-se em UTC; datas com hora de verdade seguem no fuso local.
+  const soData =
+    d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
   return d.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    ...(soData ? { timeZone: "UTC" } : {}),
   });
 }
