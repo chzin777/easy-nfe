@@ -14,6 +14,15 @@ import type { AmbienteNFSe, EmitirNfseInput, ResultadoEmissaoNFSe } from "./type
 
 const so = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "");
 
+// E0039 = o município não aderiu ao emissor público nacional; mantém sistema
+// próprio e só compartilha as notas com o ADN. Não é erro de preenchimento e
+// não adianta tentar de novo — por isso a mensagem crua vira uma explicação.
+function explicarE0039(erro: string, municipio: string | null): string {
+  if (!/\bE0039\b/.test(erro)) return erro;
+  const onde = municipio ? `${municipio} não usa` : "Este município não usa";
+  return `${onde} o emissor nacional da NFS-e: a prefeitura mantém sistema próprio e só envia as notas ao ambiente nacional. Enquanto isso valer, a nota de serviço precisa ser emitida no site da prefeitura.`;
+}
+
 function certDaEmpresa(certData: string | null): { pfxBase64: string; senha: string } {
   if (!certData) {
     throw new Error("Certificado não configurado. Envie o A1 em Configurações › Certificado.");
@@ -148,7 +157,7 @@ export async function emitirParaEmpresa(
         where: { id: registro.id },
         data: { status: "REJEITADA", xMotivo: r.erro, cStat: r.status ? String(r.status) : null, xmlDps: r.xmlDps },
       });
-      return { ok: false, erro: r.erro, id: registro.id };
+      return { ok: false, erro: explicarE0039(r.erro, empresa.municipio), id: registro.id };
     }
 
     const aplicado = valoresAplicados(r.xmlNfse);
