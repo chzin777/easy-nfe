@@ -65,3 +65,6 @@ next-env.d.ts
 .vercel
 
 .gitmsg.tmp
+
+# previews de e-mail gerados pelos scripts (têm dados de cliente real)
+preview-*.html
