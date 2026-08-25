@@ -21,10 +21,13 @@ const STATUS_UI: Record<string, StatusOrcamentoUI> = Object.fromEntries(
 
 // Um item é de produto (NF-e/NFC-e) ou de serviço (NFS-e) — nunca dos dois.
 // Qual dos dois vale é decidido pelo tipoNota do orçamento.
+// precoUnitario: preço praticado neste orçamento. Ausente (ou <= 0) usa o do
+// cadastro — igual à emissão de nota, onde o cadastro é só o ponto de partida.
 export type ItemOrcamentoInput = {
   produtoId?: string;
   servicoId?: string;
   quantidade: number;
+  precoUnitario?: number;
   descTipo: DescontoTipo;
   descValor: number;
 };
@@ -154,6 +157,12 @@ type LinhaItem = {
 const totalLinha = (qtd: number, preco: number, tipo: DescontoTipo, valor: number) =>
   Math.round((qtd * preco - calcDesc(qtd * preco, tipo, valor)) * 100) / 100;
 
+// Preço da linha: o informado na tela, se veio; senão o do cadastro.
+const precoDoItem = (i: ItemOrcamentoInput, cadastro: number) =>
+  typeof i.precoUnitario === "number" && Number.isFinite(i.precoUnitario) && i.precoUnitario > 0
+    ? Number(i.precoUnitario.toFixed(2))
+    : cadastro;
+
 // Monta os dados de itens (snapshot dos produtos) + total, validando produtos.
 async function montarItens(empresaId: string, itens: ItemOrcamentoInput[]): Promise<LinhaItem[]> {
   const ids = itens.map((i) => i.produtoId).filter(Boolean) as string[];
@@ -163,7 +172,7 @@ async function montarItens(empresaId: string, itens: ItemOrcamentoInput[]): Prom
     .filter((i) => i.produtoId && porId.has(i.produtoId) && i.quantidade > 0)
     .map((i) => {
       const p = porId.get(i.produtoId!)!;
-      const preco = Number(p.preco);
+      const preco = precoDoItem(i, Number(p.preco));
       return {
         produtoId: p.id, nome: p.nome, ncm: p.ncm, cfop: p.cfopPadrao || "5102",
         unidade: p.unidade, quantidade: i.quantidade, precoUnitario: preco,
@@ -183,7 +192,7 @@ async function montarItensServico(empresaId: string, itens: ItemOrcamentoInput[]
     .filter((i) => i.servicoId && porId.has(i.servicoId) && i.quantidade > 0)
     .map((i) => {
       const s = porId.get(i.servicoId!)!;
-      const preco = Number(s.valorUnit);
+      const preco = precoDoItem(i, Number(s.valorUnit));
       return {
         servicoId: s.id, nome: s.nome, unidade: "UN",
         descricao: s.descricao || s.nome,
@@ -408,6 +417,7 @@ export async function converterEmNota(id: string): Promise<EmitirResultado> {
     .map((i) => ({
       produtoId: i.produtoId as string,
       quantidade: Number(i.quantidade),
+      precoUnitario: Number(i.precoUnitario),
       descTipo: (i.descontoTipo as DescontoTipo) || "valor",
       descValor: Number(i.descontoValor),
     }));

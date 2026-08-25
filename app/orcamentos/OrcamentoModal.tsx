@@ -11,19 +11,27 @@ import type { Servico } from "@/app/servicos/actions";
 import type { DescontoTipo } from "@/app/notas/actions";
 import ClientePicker from "@/app/notas/nova/ClientePicker";
 import ProdutoPicker from "@/app/notas/nova/ProdutoPicker";
-import { QtyStepper, DescInput } from "@/app/ui/ItensFields";
+import { QtyStepper, DescInput, PrecoInput } from "@/app/ui/ItensFields";
 import {
   criarOrcamento, atualizarOrcamento, type OrcamentoCompleto, type OrcamentoInput,
 } from "./actions";
 
 // Uma linha do orçamento. `refId` é o id do produto OU do serviço, conforme o
 // modelo escolhido — a tela é a mesma, o catálogo é que muda.
-type Linha = { refId: string; nome: string; unidade: string; quantidade: number; precoUnitario: number; descTipo: DescontoTipo; descValor: number };
+type Linha = { refId: string; nome: string; unidade: string; quantidade: number; precoUnitario: number; precoOriginal: number; descTipo: DescontoTipo; descValor: number };
 
 // Data local de hoje (yyyy-mm-dd) — evita o desvio de fuso do toISOString (UTC).
 function hojeISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Preço atual do catálogo, para saber se a linha salva foi ajustada à mão.
+function precoCadastro(refId: string, produtos: Produto[], servicos: Servico[]): number | null {
+  const p = produtos.find((x) => x.id === refId);
+  if (p) return p.preco;
+  const s = servicos.find((x) => x.id === refId);
+  return s ? s.valorUnit : null;
 }
 
 function calcDesc(base: number, tipo: DescontoTipo, valor: number): number {
@@ -64,7 +72,7 @@ export default function OrcamentoModal({
   const [validade, setValidade] = useState(inicial?.validade ?? hojeISO());
   const [descNota, setDescNota] = useState<{ tipo: DescontoTipo; valor: number }>(inicial?.desconto ?? { tipo: "valor", valor: 0 });
   const [itens, setItens] = useState<Linha[]>(
-    inicial?.itens.map((i) => ({ refId: i.servicoId ?? i.produtoId ?? "", nome: i.nome, unidade: i.unidade, quantidade: i.quantidade, precoUnitario: i.precoUnitario, descTipo: i.descTipo, descValor: i.descValor })) ?? [],
+    inicial?.itens.map((i) => ({ refId: i.servicoId ?? i.produtoId ?? "", nome: i.nome, unidade: i.unidade, quantidade: i.quantidade, precoUnitario: i.precoUnitario, precoOriginal: precoCadastro(i.servicoId ?? i.produtoId ?? "", produtos, servicos) ?? i.precoUnitario, descTipo: i.descTipo, descValor: i.descValor })) ?? [],
   );
   const [produtoSel, setProdutoSel] = useState("");
   const [servicoSel, setServicoSel] = useState("");
@@ -98,12 +106,12 @@ export default function OrcamentoModal({
     if (servico) {
       const sv = servicos.find((x) => x.id === servicoSel);
       if (!sv) return;
-      juntar({ refId: sv.id, nome: sv.nome, unidade: "UN", quantidade: qtd, precoUnitario: sv.valorUnit, descTipo: "valor", descValor: 0 });
+      juntar({ refId: sv.id, nome: sv.nome, unidade: "UN", quantidade: qtd, precoUnitario: sv.valorUnit, precoOriginal: sv.valorUnit, descTipo: "valor", descValor: 0 });
       setServicoSel("");
     } else {
       const p = produtos.find((x) => x.id === produtoSel);
       if (!p) return;
-      juntar({ refId: p.id, nome: p.nome, unidade: p.unidade, quantidade: qtd, precoUnitario: p.preco, descTipo: "valor", descValor: 0 });
+      juntar({ refId: p.id, nome: p.nome, unidade: p.unidade, quantidade: qtd, precoUnitario: p.preco, precoOriginal: p.preco, descTipo: "valor", descValor: 0 });
       setProdutoSel("");
     }
     setQtd(1);
@@ -111,6 +119,10 @@ export default function OrcamentoModal({
   const menorQtd = casas > 0 ? Number(Math.pow(10, -casas).toFixed(casas)) : 1;
   function definirQtd(refId: string, v: number) {
     setItens((l) => l.map((x) => (x.refId === refId ? { ...x, quantidade: Math.max(menorQtd, Number(v.toFixed(casas))) } : x)));
+  }
+  // Preço praticado neste orçamento — o do cadastro é só o ponto de partida.
+  function definirPreco(refId: string, v: number) {
+    setItens((l) => l.map((x) => (x.refId === refId ? { ...x, precoUnitario: Math.max(0, Number(v.toFixed(2))) } : x)));
   }
   function definirDesc(refId: string, patch: Partial<Pick<Linha, "descTipo" | "descValor">>) {
     setItens((l) => l.map((x) => (x.refId === refId ? { ...x, ...patch } : x)));
@@ -130,7 +142,7 @@ export default function OrcamentoModal({
         observacoes, validade: validade || null, desconto: descNota,
         itens: itens.map((i) => ({
           ...(servico ? { servicoId: i.refId } : { produtoId: i.refId }),
-          quantidade: i.quantidade, descTipo: i.descTipo, descValor: i.descValor,
+          quantidade: i.quantidade, precoUnitario: i.precoUnitario, descTipo: i.descTipo, descValor: i.descValor,
         })),
       };
       const o = inicial ? await atualizarOrcamento(inicial.id, payload) : await criarOrcamento(payload);
@@ -255,11 +267,15 @@ export default function OrcamentoModal({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate font-medium">{i.nome}</p>
-                        <p className="text-xs text-[var(--muted)]">{formatBRL(i.precoUnitario)}/{servico ? "serviço" : "un"}</p>
+                        <p className="text-xs text-[var(--muted)]">preço por {servico ? "serviço" : "unidade"}</p>
                       </div>
                       <button onClick={() => removerItem(i.refId)} aria-label="Remover item" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--danger-soft)] text-[var(--danger)] transition hover:bg-red-100">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
                       </button>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-xs text-[var(--muted)]">Preço un.</span>
+                      <PrecoInput valor={i.precoUnitario} original={i.precoOriginal} onChange={(v) => definirPreco(i.refId, v)} />
                     </div>
                     <div className="mt-3 flex items-center justify-between">
                       <QtyStepper valor={i.quantidade} onChange={(v) => definirQtd(i.refId, v)} casas={casas} />
@@ -296,7 +312,7 @@ export default function OrcamentoModal({
                     <tr key={i.refId} className="border-b border-[var(--border)] last:border-0">
                       <td className="px-4 py-3 font-medium">{i.nome}</td>
                       <td className="px-4 py-3"><div className="flex justify-center"><QtyStepper valor={i.quantidade} onChange={(v) => definirQtd(i.refId, v)} casas={casas} compacto /></div></td>
-                      <td className="px-4 py-3 text-right">{formatBRL(i.precoUnitario)}</td>
+                      <td className="px-4 py-3 text-right"><div className="flex justify-end"><PrecoInput valor={i.precoUnitario} original={i.precoOriginal} onChange={(v) => definirPreco(i.refId, v)} compacto /></div></td>
                       <td className="px-4 py-3"><div className="flex justify-center"><DescInput tipo={i.descTipo} valor={i.descValor} onTipo={(t) => definirDesc(i.refId, { descTipo: t })} onValor={(v) => definirDesc(i.refId, { descValor: v })} /></div></td>
                       <td className="px-4 py-3 text-right font-medium">{formatBRL(i.quantidade * i.precoUnitario - calcDesc(i.quantidade * i.precoUnitario, i.descTipo, i.descValor))}</td>
                       <td className="px-4 py-3 text-right">
