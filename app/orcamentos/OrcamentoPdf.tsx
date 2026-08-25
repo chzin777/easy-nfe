@@ -17,7 +17,8 @@ export default function OrcamentoPdf({
   orc: OrcamentoCompleto;
   empresa: EmpresaDados | null;
 }) {
-  const modelo = orc.tipoNota.startsWith("65") ? "NFC-e (65)" : "NF-e (55)";
+  const servico = orc.tipoNota === "nfse";
+  const modelo = servico ? "NFS-e (serviço)" : orc.tipoNota.startsWith("65") ? "NFC-e (65)" : "NF-e (55)";
   const e = empresa;
   const end = e?.endereco;
   const endLinha = end
@@ -91,7 +92,7 @@ export default function OrcamentoPdf({
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
         <thead>
           <tr style={{ background: "#f1f5f9", textAlign: "left" }}>
-            <th style={thStyle}>Produto</th>
+            <th style={thStyle}>{servico ? "Serviço" : "Produto"}</th>
             <th style={{ ...thStyle, textAlign: "right" }}>Qtd</th>
             <th style={{ ...thStyle, textAlign: "right" }}>Preço un.</th>
             <th style={{ ...thStyle, textAlign: "right" }}>Subtotal</th>

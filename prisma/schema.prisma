@@ -810,8 +810,9 @@ model Servico {
   aliqISS          Decimal? @db.Decimal(5, 2) // alíquota ISS % (quando destacado)
   valorUnit        Decimal  @db.Decimal(15, 2)
 
-  notasServico NotaServico[]
-  contratos    ContratoServico[]
+  notasServico   NotaServico[]
+  contratos      ContratoServico[]
+  itensOrcamento ItemOrcamento[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -939,6 +940,9 @@ model NotaServico {
   // rejeição
   cStat   String?
   xMotivo String?
+
+  // Linha de orçamento que gerou esta nota, quando veio de um orçamento.
+  itemOrcamento ItemOrcamento?
 
   emitidaEm DateTime @default(now())
   createdAt DateTime @default(now())
@@ -1113,7 +1117,7 @@ model Orcamento {
   transportadoraId String?
   transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id])
 
-  tipoNota    String    @default("55-saida") // modelo da NF ao fechar
+  tipoNota    String    @default("55-saida") // modelo ao fechar: 55 | 65 | "nfse"
   modFrete    String    @default("9")
   observacoes String?
   validade    DateTime? // até quando o orçamento vale
@@ -1148,6 +1152,21 @@ model ItemOrcamento {
 
   produtoId String?
   produto   Produto? @relation(fields: [produtoId], references: [id])
+
+  // Orçamento de serviço (tipoNota "nfse"): a linha aponta para o catálogo de
+  // serviços e guarda a classificação municipal em vez de NCM/CFOP.
+  servicoId String?
+  servico   Servico? @relation(fields: [servicoId], references: [id])
+
+  descricao        String? // base do xDescServ quando virar NFS-e
+  cTribNac         String?
+  itemListaServico String?
+  cNBS             String?
+  aliqISS          Decimal? @db.Decimal(5, 2)
+
+  // NFS-e emitida a partir desta linha (uma DPS = um serviço).
+  notaServicoId String?      @unique
+  notaServico   NotaServico? @relation(fields: [notaServicoId], references: [id])
 
   nome          String // snapshot
   ncm           String?
