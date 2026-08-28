@@ -3,6 +3,29 @@ import { montarQrCode } from "./qrcode";
 import { codigoUF, type TpEmis } from "./ufs";
 import type { DadosNFe, EnderecoNFe, ItemNFe } from "./types";
 
+// O schema NF-e 4.00 só aceita caracteres de U+0020 a U+00FF (TString =
+// "[!-ÿ]{1}[ -ÿ]{0,}[!-ÿ]{1}|[!-ÿ]{1}"). Texto colado do Word/WhatsApp traz
+// travessão, aspas curvas, reticências, espaço fixo e emoji — todos fora dessa
+// faixa — e a SEFAZ devolve rejeição 225 (falha no schema) sem dizer o campo.
+const TROCAS: Record<string, string> = {
+  "\u2012": "-", "\u2013": "-", "\u2014": "-", "\u2015": "-", "\u2212": "-",
+  "\u2018": "'", "\u2019": "'", "\u201A": "'", "\u201B": "'",
+  "\u201C": '"', "\u201D": '"', "\u201E": '"', "\u201F": '"',
+  "\u2026": "...", "\u2022": "-", "\u00A0": " ", "\u2007": " ", "\u2009": " ",
+  "\u200A": " ", "\u202F": " ", "\u2028": " ", "\u2029": " ", "\u20AC": "EUR",
+  "\u2122": "TM", "\u00AD": "",
+};
+
+// Deixa o texto dentro da faixa aceita pelo schema: quebra de linha e tabulação
+// viram espaço, o que dá para transliterar é trocado, o resto é descartado.
+function limpar(s: string): string {
+  return (s ?? "")
+    .normalize("NFC")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/[^\u0020-\u00FF]/g, (c) => TROCAS[c] ?? "")
+    .replace(/ {2,}/g, " ");
+}
+
 // Escapa caracteres reservados de XML em conteúdo textual.
 function esc(s: string): string {
   return s
@@ -18,15 +41,16 @@ function esc(s: string): string {
 // o schema (rejeição 225 — ex.: razão social de associação com 105 chars em dest/xNome).
 // Trunca no limite (a SEFAZ aceita o nome cortado) em vez de deixar a nota ser recusada.
 function escLim(s: string, max: number): string {
-  const t = s.trim();
-  return esc(t.length > max ? t.slice(0, max) : t);
+  const t = limpar(s).trim();
+  // o corte pode deixar espaço no fim, e espaço final também reprova no schema.
+  return esc((t.length > max ? t.slice(0, max) : t).trim());
 }
 
 // Campos de texto do endereço/nome têm minLength 2 no schema 4.00. Endereço real
 // como "Rua B" cadastrado só com "B" derruba a nota por schema (rejeição 225).
 // Completa com ponto até o mínimo — mantém o dado e passa na validação.
 function escMin2(s: string, max: number): string {
-  const t = s.trim();
+  const t = limpar(s).trim();
   if (!t) return "";
   return escLim(t.length === 1 ? `${t}.` : t, max);
 }
@@ -47,7 +71,7 @@ function enderXml(tag: string, e: EnderecoNFe): string {
   return (
     `<${tag}>` +
     `<xLgr>${escMin2(e.xLgr, 60)}</xLgr><nro>${escLim(e.nro, 60)}</nro>` +
-    (e.xCpl?.trim() ? `<xCpl>${escMin2(e.xCpl, 60)}</xCpl>` : "") +
+    (limpar(e.xCpl ?? "").trim() ? `<xCpl>${escMin2(e.xCpl ?? "", 60)}</xCpl>` : "") +
     `<xBairro>${escMin2(e.xBairro, 60)}</xBairro>` +
     `<cMun>${cMun}</cMun><xMun>${escMin2(e.municipio, 60)}</xMun><UF>${e.uf}</UF>` +
     `<CEP>${cep}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais>` +
@@ -267,7 +291,7 @@ export function montarNFe(
   const emit =
     `<emit>` +
     `<CNPJ>${cnpj}</CNPJ><xNome>${escMin2(dados.emit.xNome, 60)}</xNome>` +
-    (dados.emit.xFant?.trim() ? `<xFant>${escLim(dados.emit.xFant, 60)}</xFant>` : "") +
+    (limpar(dados.emit.xFant ?? "").trim() ? `<xFant>${escLim(dados.emit.xFant ?? "", 60)}</xFant>` : "") +
     enderXml("enderEmit", dados.emit.ender) +
     `<IE>${dados.emit.ie.replace(/\D/g, "")}</IE><CRT>${dados.emit.crt}</CRT>` +
     `</emit>`;
@@ -280,7 +304,7 @@ export function montarNFe(
       tagDoc(d.doc) +
       `<xNome>${escMin2(d.xNome, 60)}</xNome>` +
       // enderDest é opcional no schema; só inclui se houver logradouro (evita tags vazias = rejeição 225).
-      (d.ender?.xLgr?.trim() ? enderXml("enderDest", d.ender) : "") +
+      (limpar(d.ender?.xLgr ?? "").trim() ? enderXml("enderDest", d.ender) : "") +
       // Schema NFe 4.00: indIEDest precede IE. Inverter gera rejeição 225 (falha de schema).
       `<indIEDest>${d.indIEDest}</indIEDest>` +
       (d.indIEDest === "1" && d.ie ? `<IE>${d.ie.replace(/\D/g, "")}</IE>` : "") +
@@ -298,8 +322,8 @@ export function montarNFe(
 
   const transp = `<transp><modFrete>${dados.modFrete}</modFrete></transp>`;
   const pag = `<pag><detPag><indPag>0</indPag><tPag>01</tPag><vPag>${n2(vTotal)}</vPag></detPag></pag>`;
-  const infAdic = dados.infCpl?.trim()
-    ? `<infAdic><infCpl>${escLim(dados.infCpl, 5000)}</infCpl></infAdic>`
+  const infAdic = limpar(dados.infCpl ?? "").trim()
+    ? `<infAdic><infCpl>${escLim(dados.infCpl ?? "", 5000)}</infCpl></infAdic>`
     : "";
 
   const xml =
