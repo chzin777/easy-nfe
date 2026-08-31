@@ -46,6 +46,8 @@ export type VendaCompleta = {
   status: "concluida" | "cancelada";
   clienteId: string | null;
   clienteNome: string;
+  clienteDocumento: string;
+  clienteTelefone: string;
   formaPagamento: FormaPagamento;
   observacoes: string;
   baixaEstoque: boolean;
@@ -67,7 +69,7 @@ type VendaRow = {
   id: string; numero: number; status: string;
   clienteId: string | null; formaPagamento: string; observacoes: string | null;
   baixaEstoque: boolean; fiado: boolean; valorTotal: unknown; data: Date; createdAt: Date;
-  cliente: { nome: string } | null;
+  cliente: { nome: string; documento: string; telefone: string | null } | null;
   itens: { id: string; produtoId: string | null; nome: string; unidade: string | null; quantidade: unknown; precoUnitario: unknown; valorTotal: unknown }[];
 };
 
@@ -78,6 +80,8 @@ function paraUI(v: VendaRow): VendaCompleta {
     status: v.status === "CANCELADA" ? "cancelada" : "concluida",
     clienteId: v.clienteId,
     clienteNome: v.cliente?.nome ?? "Consumidor",
+    clienteDocumento: v.cliente?.documento ?? "",
+    clienteTelefone: v.cliente?.telefone ?? "",
     formaPagamento: (v.formaPagamento as FormaPagamento) || "dinheiro",
     observacoes: v.observacoes ?? "",
     baixaEstoque: v.baixaEstoque,
@@ -97,7 +101,10 @@ function paraUI(v: VendaRow): VendaCompleta {
   };
 }
 
-const INCLUDE = { cliente: { select: { nome: true } }, itens: true } as const;
+const INCLUDE = {
+  cliente: { select: { nome: true, documento: true, telefone: true } },
+  itens: true,
+} as const;
 
 export async function listarVendas(): Promise<VendaCompleta[]> {
   await exigirFeature("vendas");

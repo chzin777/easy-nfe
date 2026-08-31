@@ -25,6 +25,9 @@ import ProdutoPicker from "@/app/notas/nova/ProdutoPicker";
 import type { Cliente, Produto } from "@/lib/types";
 import { listarClientes } from "@/app/clientes/actions";
 import { listarProdutos } from "@/app/produtos/actions";
+import { obterEmpresaAtiva, type EmpresaDados } from "@/app/configuracoes/actions";
+import { baixarElementoPdf } from "@/app/ui/danfePdf";
+import ReciboPdf from "./ReciboPdf";
 import {
   listarVendas,
   criarVenda,
@@ -52,6 +55,8 @@ export default function VendasPage() {
   const [detalhe, setDetalhe] = useState<VendaCompleta | null>(null);
   const [pagina, setPagina] = useState(1);
   const [porPagina, setPorPagina] = useState(10);
+  // Cabeçalho do recibo sai dos dados da empresa; carrega uma vez junto da lista.
+  const [empresa, setEmpresa] = useState<EmpresaDados | null>(null);
 
   async function recarregar() {
     try {
@@ -61,6 +66,7 @@ export default function VendasPage() {
     }
   }
   useEffect(() => { void recarregar(); }, []);
+  useEffect(() => { void obterEmpresaAtiva().then(setEmpresa); }, []);
 
   const totalMes = useMemo(() => {
     const agora = new Date();
@@ -172,6 +178,7 @@ export default function VendasPage() {
       {detalhe && (
         <DetalheVendaModal
           venda={detalhe}
+          empresa={empresa}
           onFechar={() => setDetalhe(null)}
           onCancelar={() => setCancelarId(detalhe.id)}
         />
@@ -209,17 +216,31 @@ export default function VendasPage() {
 // estoque e fiado).
 function DetalheVendaModal({
   venda,
+  empresa,
   onFechar,
   onCancelar,
 }: {
   venda: VendaCompleta;
+  empresa: EmpresaDados | null;
   onFechar: () => void;
   onCancelar: () => void;
 }) {
   const subtotal = venda.itens.reduce((s, i) => s + i.valorTotal, 0);
   const desconto = Math.max(0, Math.round((subtotal - venda.valorTotal) * 100) / 100);
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [erroPdf, setErroPdf] = useState<string | null>(null);
+
+  async function salvarRecibo() {
+    setGerandoPdf(true); setErroPdf(null);
+    try {
+      await baixarElementoPdf(`recibo-pdf-${venda.id}`, `recibo-venda-${venda.numero}`);
+    } catch (e) {
+      setErroPdf(e instanceof Error ? e.message : String(e));
+    } finally { setGerandoPdf(false); }
+  }
 
   return (
+    <>
     <Modal
       aberto
       onFechar={onFechar}
@@ -234,7 +255,12 @@ function DetalheVendaModal({
           ) : (
             <span className="text-xs text-[var(--muted)]">Venda cancelada</span>
           )}
-          <Button variante="secondary" onClick={onFechar}>Fechar</Button>
+          <div className="flex gap-2">
+            <Button variante="secondary" onClick={salvarRecibo} disabled={gerandoPdf}>
+              {gerandoPdf ? "Gerando…" : "Salvar recibo (PDF)"}
+            </Button>
+            <Button variante="secondary" onClick={onFechar}>Fechar</Button>
+          </div>
         </div>
       }
     >
@@ -297,8 +323,14 @@ function DetalheVendaModal({
             <p className="mt-1 whitespace-pre-wrap text-sm">{venda.observacoes}</p>
           </div>
         )}
+
+        {erroPdf && <p className="text-sm text-[var(--danger)]">{erroPdf}</p>}
       </div>
     </Modal>
+
+    {/* Recibo imprimível (fora da tela) capturado pelo botão Salvar recibo */}
+    <ReciboPdf id={`recibo-pdf-${venda.id}`} venda={venda} empresa={empresa} />
+    </>
   );
 }
 
