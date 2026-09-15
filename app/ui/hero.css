@@ -1,0 +1,258 @@
+/* HERO — tela dividida. Ver HeroPrincipal.tsx para o porquê de cada medida. */
+
+.heroi {
+  --divisa: 52%;
+  --nav-h: 60px;
+  position: relative;
+  overflow: hidden;
+  min-height: 100svh;
+  background: #07090f;
+  color: #fff;
+}
+
+/* O painel claro é vertical no desktop e horizontal no celular: a divisa
+   continua existindo, só muda de eixo. */
+.heroi__lado {
+  position: absolute;
+  inset-inline: 0;
+  top: 56%;
+  bottom: 0;
+  background: linear-gradient(200deg, #efedff, #dcd7fa);
+}
+@media (min-width: 1024px) {
+  .heroi__lado { inset-block: 0; left: var(--divisa); right: 0; top: 0; }
+}
+
+.heroi__halo {
+  position: absolute;
+  left: -10%;
+  top: 8%;
+  width: 46%;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  opacity: 0.5;
+  filter: blur(90px);
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(82, 39, 255, 0.85), transparent 70%);
+}
+
+.heroi__grade {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  align-items: center;
+  gap: 32px;
+  min-height: 100svh;
+  max-width: 1360px;
+  margin-inline: auto;
+  padding: calc(var(--nav-h) + clamp(28px, 6vh, 64px)) clamp(20px, 4vw, 64px) clamp(28px, 5vh, 64px);
+}
+@media (min-width: 1024px) {
+  .heroi__grade { grid-template-columns: 1fr 0.92fr; gap: 40px; }
+}
+
+.heroi__coluna { padding-bottom: clamp(20px, 4vh, 48px); }
+
+.heroi__medida {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+.heroi__ponto {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #7c5cff;
+  box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.18);
+}
+
+.heroi__titulo {
+  margin: 20px 0 0;
+  max-width: 17ch;
+  font-size: clamp(2.2rem, 4.6vw, 3.9rem);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+}
+.heroi__titulo-acento { color: #a78bfa; }
+
+.heroi__apoio {
+  margin: 20px 0 0;
+  max-width: 48ch;
+  font-size: 15px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.heroi__acoes { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+
+.heroi__botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding-inline: 28px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(to right, var(--primary), var(--primary-2));
+  box-shadow: 0 18px 40px -18px rgba(82, 39, 255, 0.9);
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+.heroi__botao:hover { transform: translateY(-1px); box-shadow: 0 22px 46px -18px rgba(82, 39, 255, 1); }
+.heroi__botao:active { transform: scale(0.98); }
+
+.heroi__botao--fantasma {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: none;
+}
+.heroi__botao--fantasma:hover { background: rgba(255, 255, 255, 0.14); box-shadow: none; }
+
+.heroi__selos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.55);
+}
+.heroi__selos li { display: inline-flex; align-items: center; gap: 7px; }
+.heroi__selos svg { color: #a78bfa; }
+
+/* ---------- o palco do produto ---------- */
+.heroi__palco {
+  position: relative;
+  height: clamp(300px, 46vh, 460px);
+  perspective: 1500px;
+  perspective-origin: 30% 50%;
+}
+@media (min-width: 1024px) {
+  .heroi__palco { height: 100%; min-height: 520px; }
+}
+
+/* A CENA — o que gira. Tudo dentro dela vive no mesmo espaço 3D
+   (preserve-3d), então o translateZ de cada peça vira paralaxe de verdade
+   quando o ponteiro anda: as placas andam mais que o painel. */
+.heroi__cena {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--gx, 0deg)) rotateY(var(--gy, 0deg));
+}
+
+/* o quadro invade o lado escuro: começa antes da divisa e sangra à direita */
+.heroi__quadro {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 50px 90px -40px rgba(11, 16, 32, 0.7);
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  overflow: hidden;
+  transform-style: preserve-3d;
+}
+
+/* o reflexo diagonal: é o que faz o vidro parecer vidro quando a cena gira */
+.heroi__brilho {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 20px;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0) 38%);
+  mix-blend-mode: overlay;
+}
+@media (min-width: 1024px) {
+  .heroi__quadro {
+    left: -16%;
+    right: -12%;
+    top: 50%;
+    bottom: auto;
+    height: auto;
+    /* o enquadramento de base; o giro do ponteiro é da cena, acima */
+    transform: translateY(-50%) rotateY(-9deg) rotateX(3deg);
+    transform-origin: left center;
+  }
+}
+.heroi__print {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+}
+
+/* ---------- as placas de vidro (mesmas do login) ---------- */
+/* o invólucro guarda posição e profundidade; a placa de dentro guarda a
+   flutuação. Separados porque as duas coisas escrevem em `transform` e uma
+   apagava a outra. */
+.placa-fundo {
+  position: absolute;
+  display: none;
+  transform-style: preserve-3d;
+}
+@media (min-width: 1024px) { .placa-fundo { display: block; } }
+
+.placa-heroi {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 15px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 18px 40px -20px rgba(11, 16, 32, 0.55);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  animation: boiar-heroi 7s ease-in-out infinite;
+}
+.placa-heroi__icone {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 10px;
+  background: rgba(82, 39, 255, 0.1);
+  color: var(--primary);
+}
+.placa-heroi__texto { display: flex; flex-direction: column; line-height: 1.25; }
+.placa-heroi__texto b { font-size: 0.86rem; font-weight: 600; color: var(--foreground); }
+.placa-heroi__texto i {
+  font-style: normal;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+/* fases diferentes: com a mesma, viram um bloco só subindo e descendo */
+.placa-fundo.ph-1 { left: -22%; top: 12%; transform: translateZ(90px); }
+.placa-fundo.ph-2 { right: 2%; top: 4%; transform: translateZ(140px); }
+.placa-fundo.ph-3 { left: -18%; bottom: 10%; transform: translateZ(60px); }
+
+.ph-1 .placa-heroi { animation-delay: -0.4s; }
+.ph-2 .placa-heroi { animation-delay: -2.6s; animation-duration: 8.5s; }
+.ph-3 .placa-heroi { animation-delay: -4.1s; animation-duration: 9s; }
+
+@keyframes boiar-heroi {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .placa-heroi { animation: none; }
+}

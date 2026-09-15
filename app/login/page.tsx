@@ -1,12 +1,14 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { motion } from "motion/react";
-import Image from "next/image";
 import Link from "next/link";
-import { Button, Field, Input } from "@/app/ui/primitives";
+import Portao from "@/app/ui/Portao";
 import { entrar, type AuthResultado } from "../auth/actions";
 
+/**
+ * LOGIN — o formulário dentro do Portão (a casca compartilhada com o
+ * cadastro). O acesso continua sendo por e-mail e senha.
+ */
 export default function LoginPage() {
   const [estado, formAction, pendente] = useActionState<AuthResultado | null, FormData>(
     entrar,
@@ -23,116 +25,66 @@ export default function LoginPage() {
   }, [estado]);
 
   return (
-    <div className="relative grid min-h-screen lg:grid-cols-2">
-      {/* Logo no canto superior esquerdo da página (fora do form) — volta à landing */}
-      <Link href="/" aria-label="Voltar à página inicial" className="absolute left-6 top-6 z-20 sm:left-8 sm:top-8">
-        <Image
-          src="/images/logo/logo-completa.png"
-          alt="Easy-NFe"
-          width={863}
-          height={309}
-          priority
-          className="h-20 w-auto transition hover:opacity-80"
-        />
-      </Link>
+    <Portao>
+      <h1 className="portao__titulo">Entrar no painel</h1>
+      <p className="portao__linha">
+        Suas notas, seus clientes e seus documentos fiscais em um lugar só.
+      </p>
 
-      {/* Lado esquerdo — formulário */}
-      <div className="flex items-center justify-center bg-white px-6 py-12">
-        <div className="w-full max-w-sm">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Bem-vindo de volta</h1>
-          <p className="mt-1.5 text-sm text-[var(--muted)]">Acesse sua conta para emitir e gerenciar suas notas.</p>
+      <form className="portao__forma" action={formAction}>
+        <label className="campo" htmlFor="email">
+          <span className="campo__rotulo">E-mail</span>
+          <input
+            id="email"
+            name="email"
+            className="campo__entrada"
+            type="email"
+            autoComplete="email"
+            placeholder="voce@empresa.com"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </label>
 
-          <form action={formAction} className="mt-8 space-y-4">
-            <Field label="E-mail" required>
-              <Input name="email" type="email" placeholder="voce@empresa.com" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-            </Field>
-            <Field label="Senha" required>
-              <Input name="senha" type="password" placeholder="••••••••" autoComplete="current-password" required value={senha} onChange={(e) => setSenha(e.target.value)} />
-            </Field>
+        <label className="campo" htmlFor="senha">
+          <span className="campo__rotulo">Senha</span>
+          <input
+            id="senha"
+            name="senha"
+            className="campo__entrada"
+            type="password"
+            autoComplete="current-password"
+            placeholder="••••••••"
+            required
+            value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+          />
+        </label>
 
-            <div className="-mt-1 text-right">
-              <Link href="/recuperar-senha" className="text-sm font-medium text-[var(--primary)] hover:underline">
-                Esqueceu a senha?
-              </Link>
-            </div>
-
-            {erro && (
-              <p className="flex items-center gap-2 rounded-lg bg-[var(--danger-soft,#fee2e2)] px-3 py-2 text-sm font-medium text-[var(--danger)]">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" /></svg>
-                {erro}
-              </p>
-            )}
-
-            <Button type="submit" disabled={pendente} className="w-full justify-center bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] py-2.5 text-white shadow-lg shadow-violet-500/25">
-              {pendente ? "Entrando…" : "Entrar"}
-            </Button>
-          </form>
-
-          <div className="mt-6 flex items-center gap-3">
-            <span className="h-px flex-1 bg-[var(--border)]" />
-            <span className="text-xs text-[var(--muted)]">ou</span>
-            <span className="h-px flex-1 bg-[var(--border)]" />
-          </div>
-
-          <motion.a
-            href="/cadastro"
-            whileHover={{ scale: 1.03, y: -1 }}
-            whileTap={{ scale: 0.96 }}
-            transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            className="mt-4 flex w-full items-center justify-center rounded-lg border border-[var(--primary)] py-2.5 text-sm font-semibold text-[var(--primary)] transition-colors hover:bg-[var(--primary)] hover:text-white"
-          >
-            Criar conta grátis
-          </motion.a>
-
-          <p className="mt-6 text-center text-xs text-[var(--muted)]">
-            Teste grátis por 7 dias. Sem cartão de crédito.
+        {erro && (
+          <p className="portao__aviso" role="status">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" /></svg>
+            {erro}
           </p>
-        </div>
-      </div>
+        )}
 
-      {/* Lado direito — imagem de fundo + texto por cima */}
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-[var(--primary)] via-[var(--primary-2)] to-indigo-700 lg:flex lg:flex-col lg:justify-center lg:px-14">
-        <Image
-          src="https://wallpapers.com/images/hd/purple-abstract-2gf414bg9xvsakmf.jpg"
-          alt="Easy-NFe"
-          fill
-          priority
-          sizes="50vw"
-          className="object-cover"
-        />
-        {/* Overlay p/ legibilidade do texto */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/85 via-[var(--primary-2)]/80 to-indigo-900/85" />
+        <button className="botao--cheio" type="submit" disabled={pendente}>
+          {pendente ? "Entrando…" : "Entrar"}
+        </button>
+      </form>
 
-        <div className="relative z-10 max-w-md text-white">
-          <h2 className="text-3xl font-bold leading-tight">Emita NF-e em segundos, direto do seu sistema.</h2>
-          <p className="mt-4 text-sm leading-relaxed text-white/85">
-            Assinatura digital A1, envio à SEFAZ, DANFE e cancelamento — tudo em um só lugar, com integrações que economizam seu tempo.
-          </p>
+      <p className="mt-5 text-[14px] text-[var(--muted)]">
+        <Link href="/recuperar-senha" className="-my-3 inline-flex min-h-[44px] items-center hover:text-[var(--foreground)]">
+          Esqueci minha senha
+        </Link>
+        {" · "}
+        <Link href="/cadastro" className="portao__elo -my-3 inline-flex min-h-[44px] items-center">
+          criar conta
+        </Link>
+      </p>
 
-          <ul className="mt-8 space-y-3 text-sm">
-            {[
-              "Vendas online viram NF-e automática",
-              "Integração com WhatsApp",
-              "Envio automático de NF-e por e-mail",
-              "Multiempresa e multiusuário",
-            ].map((t) => (
-              <li key={t} className="flex items-center gap-2.5">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/20">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                </span>
-                {t}
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-10 rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur-sm">
-            <p className="text-sm italic leading-relaxed text-white/90">
-              “Reduzimos o tempo de emissão de notas em 80%. A integração com nosso ERP foi o divisor de águas.”
-            </p>
-            <p className="mt-3 text-xs font-semibold text-white/70">— Cliente Easy-NFe</p>
-          </div>
-        </div>
-      </div>
-    </div>
+      <p className="portao__rodape">Easy-NFe · teste grátis por 7 dias</p>
+    </Portao>
   );
 }

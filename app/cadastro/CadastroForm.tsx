@@ -1,10 +1,8 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { motion } from "motion/react";
-import Image from "next/image";
 import Link from "next/link";
-import { Button, Field, Input } from "@/app/ui/primitives";
+import Portao from "@/app/ui/Portao";
 import { formatBRL } from "@/lib/format";
 import PagamentoCliente from "@/app/pagar/PagamentoCliente";
 import {
@@ -19,6 +17,15 @@ import type { PlanoOpcao } from "./page";
 
 type Modo = "trial" | "assinatura" | "contato";
 
+/* Quantos benefícios cada cartão mostra na escolha de plano. Quatro é o que
+   cabe na fileira sem o cartão passar da curva na tela de 1080. */
+const VISIVEIS = 4;
+
+/**
+ * CADASTRO — mesma casca do login (o Portão), com os quatro estados desta
+ * tela dentro da curva: escolher plano, assinar, testar grátis e falar com
+ * a equipe. Os campos usam os mesmos rótulos em mono do login.
+ */
 export default function CadastroForm({
   planos = [],
   selecionado: selProp,
@@ -73,328 +80,286 @@ export default function CadastroForm({
   const precisaEscolher = !selecionado && planos.length > 0;
 
   return (
-    <div className="relative grid min-h-screen lg:grid-cols-2">
-      <Image
-        src="/images/logo/logo-completa.png"
-        alt="Easy-NFe"
-        width={863}
-        height={309}
-        priority
-        className="absolute left-6 top-6 z-20 h-20 w-auto sm:left-8 sm:top-8"
-      />
+    <Portao alto={!precisaEscolher} largo={!precisaEscolher} planos={precisaEscolher}>
+      {assinOk ? (
+        <>
+          <h1 className="portao__titulo">Conta criada. Falta pagar</h1>
+          <p className="portao__linha">
+            Escolha Pix ou boleto abaixo. Seu acesso já está liberado — pode pagar agora ou pelo
+            link a qualquer momento.
+          </p>
+          <div className="mt-7">
+            <PagamentoCliente token={assinOk.token} />
+          </div>
+          <a href={assinOk.destino} className="portao__elo mt-5 inline-block text-sm font-medium">
+            Pular e ir para o sistema →
+          </a>
+        </>
+      ) : precisaEscolher ? (
+        <>
+          <h1 className="portao__titulo">Escolha seu plano</h1>
+          <p className="portao__linha">Depois é só preencher seus dados e começar.</p>
 
-      {/* Form */}
-      <div className="flex items-center justify-center bg-white px-6 py-12">
-        <div className="w-full max-w-sm">
-          {assinOk ? (
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Conta criada! Pague para ativar</h1>
-              <p className="mt-1.5 text-sm text-[var(--muted)]">Escolha Pix ou boleto abaixo. Seu acesso já está liberado — você pode pagar agora ou pelo link a qualquer momento.</p>
-              <div className="mt-6">
-                <PagamentoCliente token={assinOk.token} />
-              </div>
-              <a href={assinOk.destino} className="mt-5 inline-block text-sm font-medium text-[var(--primary)] hover:underline">Pular e ir para o sistema →</a>
-            </div>
-          ) : precisaEscolher ? (
-            <>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Escolha seu plano</h1>
-              <p className="mt-1.5 text-sm text-[var(--muted)]">Selecione o plano para criar sua conta.</p>
-
-              <div className="mt-6 space-y-3">
-                {planos.map((p) => (
-                  <div key={p.id} className="rounded-xl border border-[var(--border)] p-4 transition hover:border-[var(--primary)]/40 hover:shadow-sm">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="font-semibold text-slate-900">{p.nome}</span>
-                      {p.sobConsulta ? (
-                        <span className="text-sm font-medium text-[var(--muted)]">Sob consulta</span>
-                      ) : (
-                        <span className="font-bold text-[var(--primary)]">
-                          {formatBRL(p.preco)}<span className="text-xs font-medium text-[var(--muted)]">/{p.periodicidade === "anual" ? "ano" : "mês"}</span>
-                        </span>
-                      )}
-                    </div>
-                    {p.beneficios.length > 0 && (
-                      <ul className="mt-3 space-y-1.5">
-                        {p.beneficios.map((b, j) => (
-                          <li key={j} className="flex gap-2 text-xs text-slate-600">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="mt-px shrink-0 text-[var(--success)]"><path d="M20 6 9 17l-5-5" /></svg>
-                            <span>{b}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {p.sobConsulta ? (
-                        <Button variante="secondary" onClick={() => escolherPlano(p, "assinatura")} className="!py-1.5 !text-xs">Falar com a equipe</Button>
-                      ) : (
-                        <>
-                          <Button onClick={() => escolherPlano(p, "assinatura")} className="!py-1.5 !text-xs">Assinar</Button>
-                          {p.permiteTrial && (
-                            <Button variante="secondary" onClick={() => escolherPlano(p, "trial")} className="!py-1.5 !text-xs">Testar grátis 7 dias</Button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : modo === "assinatura" ? (
-            <>
-              <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Criar conta e assinar</h1>
-                {planos.length > 1 && (
-                  <button type="button" onClick={() => setSel(null)} className="text-xs font-medium text-[var(--primary)] hover:underline">Trocar plano</button>
-                )}
-              </div>
-              <p className="mt-1.5 text-sm text-[var(--muted)]">Confira o plano e crie sua conta. Depois você escolhe pagar com Pix ou boleto.</p>
-
-              {/* Resumo do que está sendo contratado */}
-              <div className="mt-5 rounded-xl border border-[var(--primary)]/20 bg-[var(--primary-soft)]/40 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Você está contratando</p>
-                <div className="mt-1 flex items-baseline justify-between gap-2">
-                  <span className="text-lg font-bold text-slate-900">{planoNomeSel || "Plano"}</span>
-                  {temPreco && (
-                    <span className="text-lg font-bold text-[var(--primary)]">
-                      {formatBRL(selecionado!.preco)}
-                      <span className="text-xs font-medium text-[var(--muted)]">/{selecionado!.periodicidade === "anual" ? "ano" : "mês"}</span>
+          <div className="planos-fila">
+            {planos.map((p) => (
+              <div key={p.id} className="plano-cartao">
+                <div className="plano-cartao__topo">
+                  <span className="plano-cartao__nome">{p.nome}</span>
+                  {p.sobConsulta ? (
+                    <span className="plano-cartao__consulta">Sob consulta</span>
+                  ) : (
+                    <span className="plano-cartao__preco">
+                      {formatBRL(p.preco)}
+                      <span>/{p.periodicidade === "anual" ? "ano" : "mês"}</span>
                     </span>
                   )}
                 </div>
-                <p className="mt-1.5 text-xs text-[var(--muted)]">Cobrança recorrente {selecionado?.periodicidade === "anual" ? "anual" : "mensal"}. Cancele quando quiser.</p>
-              </div>
-
-              <form action={assinAction} className="mt-6 space-y-4">
-                <Field label="Nome" required>
-                  <Input name="nome" placeholder="Seu nome" autoComplete="name" required />
-                </Field>
-                <Field label="CPF/CNPJ" required hint="Usado na cobrança">
-                  <Input name="cpfCnpj" placeholder="Somente números" inputMode="numeric" required />
-                </Field>
-                <Field label="E-mail" required>
-                  <Input name="email" type="email" placeholder="voce@empresa.com" autoComplete="email" required />
-                </Field>
-                <Field label="Telefone (WhatsApp)">
-                  <Input name="telefone" placeholder="(00) 00000-0000" autoComplete="tel" />
-                </Field>
-                <Field label="Senha" required hint="Mín. 8 caracteres">
-                  <Input name="senha" type="password" placeholder="••••••••" autoComplete="new-password" required />
-                </Field>
-                <input type="hidden" name="planoId" value={selecionado?.id ?? ""} />
-
-                <label className="flex items-start gap-2.5 text-xs text-[var(--muted)]">
-                  <input type="checkbox" name="aceite" checked={aceite} onChange={(e) => setAceite(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--primary)]" />
-                  <span>
-                    Li e aceito os{" "}
-                    <a href="/termos" target="_blank" rel="noopener noreferrer" className="font-medium text-[var(--primary)] hover:underline">Termos de Uso</a>{" "}
-                    e a{" "}
-                    <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="font-medium text-[var(--primary)] hover:underline">Política de Privacidade</a>.
-                  </span>
-                </label>
-
-                {assinErro && <ErroBox>{assinErro}</ErroBox>}
-
-                <Button
-                  type="submit"
-                  disabled={assinPend || !aceite}
-                  className="w-full justify-center bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] py-2.5 text-white shadow-lg shadow-violet-500/25"
-                >
-                  {assinPend ? "Criando conta…" : temPreco ? `Continuar para pagamento · ${formatBRL(selecionado!.preco)}` : "Criar conta e continuar"}
-                </Button>
-                <p className="text-center text-[11px] text-[var(--muted)]">Nenhuma cobrança é feita automaticamente — você escolhe Pix ou boleto na próxima etapa.</p>
-              </form>
-
-              <div className="mt-6 space-y-1.5 text-center text-xs text-[var(--muted)]">
-                {podeTrial && (
-                  <p>
-                    Prefere testar antes?{" "}
-                    <button type="button" onClick={() => setModo("trial")} className="font-medium text-[var(--primary)] hover:underline">
-                      Teste grátis por 7 dias
-                    </button>
-                  </p>
+                {p.beneficios.length > 0 && (
+                  <>
+                    {/* Só os primeiros itens: a fileira fica dentro da curva, e
+                        um plano com lista longa esticaria o arco para fora dela. */}
+                    <ul className="plano-cartao__lista">
+                      {p.beneficios.slice(0, VISIVEIS).map((b, j) => (
+                        <li key={j}>
+                          <Visto />
+                          <span>{b}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {p.beneficios.length > VISIVEIS && (
+                      <p className="plano-cartao__mais">+{p.beneficios.length - VISIVEIS} benefícios</p>
+                    )}
+                  </>
                 )}
-                <p>
-                  Quer falar antes?{" "}
-                  <button type="button" onClick={() => setModo("contato")} className="font-medium text-[var(--primary)] hover:underline">
-                    Fale com nossa equipe
-                  </button>
-                </p>
-              </div>
-            </>
-          ) : modo === "trial" ? (
-            <>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Teste grátis por 7 dias</h1>
-              <p className="mt-1.5 text-sm text-[var(--muted)]">
-                Sem cartão. Crie sua conta e comece a emitir no plano Básico.
-              </p>
-
-              <form action={trialAction} className="mt-8 space-y-4">
-                <Field label="Nome" required>
-                  <Input name="nome" placeholder="Seu nome" autoComplete="name" required />
-                </Field>
-                <Field label="CPF/CNPJ" required hint="Usado na cobrança ao assinar">
-                  <Input name="cpfCnpj" placeholder="Somente números" inputMode="numeric" required />
-                </Field>
-                <Field label="E-mail" required>
-                  <Input name="email" type="email" placeholder="voce@empresa.com" autoComplete="email" required />
-                </Field>
-                <Field label="Telefone (WhatsApp)">
-                  <Input name="telefone" placeholder="(00) 00000-0000" autoComplete="tel" />
-                </Field>
-                <Field label="Senha" required hint="Mín. 8 caracteres">
-                  <Input name="senha" type="password" placeholder="••••••••" autoComplete="new-password" required />
-                </Field>
-
-                {trialErro && <ErroBox>{trialErro}</ErroBox>}
-
-                <Button
-                  type="submit"
-                  disabled={trialPend}
-                  className="w-full justify-center bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] py-2.5 text-white shadow-lg shadow-violet-500/25"
-                >
-                  {trialPend ? "Criando conta…" : "Começar teste grátis"}
-                </Button>
-              </form>
-
-              <div className="mt-6 space-y-1.5 text-center text-xs text-[var(--muted)]">
-                {temPreco && (
-                  <p>
-                    Já quer assinar?{" "}
-                    <button type="button" onClick={() => setModo("assinatura")} className="font-medium text-[var(--primary)] hover:underline">
-                      Assinar e pagar agora
+                <div className="plano-cartao__acoes">
+                  {p.sobConsulta ? (
+                    <button type="button" className="plano-cartao__botao plano-cartao__botao--fantasma" onClick={() => escolherPlano(p, "assinatura")}>
+                      Falar com a equipe
                     </button>
-                  </p>
-                )}
-                <p>
-                  Prefere conversar antes?{" "}
-                  <button type="button" onClick={() => setModo("contato")} className="font-medium text-[var(--primary)] hover:underline">
-                    Fale com nossa equipe
-                  </button>
-                </p>
+                  ) : (
+                    <>
+                      <button type="button" className="plano-cartao__botao" onClick={() => escolherPlano(p, "assinatura")}>
+                        Assinar
+                      </button>
+                      {p.permiteTrial && (
+                        <button type="button" className="plano-cartao__botao plano-cartao__botao--fantasma" onClick={() => escolherPlano(p, "trial")}>
+                          Testar grátis 7 dias
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-            </>
-          ) : leadOk ? (
-            <div className="rounded-2xl border border-[var(--border)] bg-slate-50 p-8 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[var(--success-soft)] text-[var(--success)]">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-              </div>
-              <h1 className="mt-4 text-xl font-bold text-slate-900">Recebemos seu contato!</h1>
-              <p className="mt-2 text-sm text-[var(--muted)]">Nossa equipe vai falar com você em breve.</p>
-              <Link href="/" className="mt-6 inline-block text-sm font-medium text-[var(--primary)] hover:underline">Voltar ao início</Link>
-            </div>
-          ) : (
-            <>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Fale com nossa equipe</h1>
-              <p className="mt-1.5 text-sm text-[var(--muted)]">
-                Deixe seus dados e entramos em contato.
-              </p>
+            ))}
+          </div>
+        </>
+      ) : modo === "assinatura" ? (
+        <>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="portao__titulo">Criar conta e assinar</h1>
+            {planos.length > 1 && (
+              <button type="button" onClick={() => setSel(null)} className="portao__elo mt-8 shrink-0 text-xs font-medium">
+                Trocar plano
+              </button>
+            )}
+          </div>
+          <p className="portao__linha">
+            Confira o plano e crie sua conta. Depois você escolhe Pix ou boleto.
+          </p>
 
-              <form action={leadAction} className="mt-8 space-y-4">
-                <Field label="Nome" required>
-                  <Input name="nome" placeholder="Seu nome" autoComplete="name" required />
-                </Field>
-                <Field label="E-mail" required>
-                  <Input name="email" type="email" placeholder="voce@empresa.com" autoComplete="email" required />
-                </Field>
-                <Field label="Telefone (WhatsApp)" required>
-                  <Input name="telefone" placeholder="(00) 00000-0000" autoComplete="tel" required />
-                </Field>
-                <Field label="Empresa">
-                  <Input name="empresa" placeholder="Razão social / nome fantasia" autoComplete="organization" />
-                </Field>
-                <Field label="Mensagem">
-                  <Input name="mensagem" placeholder="Conte rapidamente o que precisa" />
-                </Field>
-                <input type="hidden" name="planoId" value={selecionado?.id ?? ""} />
-                <input type="hidden" name="planoNome" value={planoNomeSel} />
-
-                {leadErro && <ErroBox>{leadErro}</ErroBox>}
-
-                <Button
-                  type="submit"
-                  disabled={leadPend}
-                  className="w-full justify-center bg-gradient-to-r from-[var(--primary)] to-[var(--primary-2)] py-2.5 text-white shadow-lg shadow-violet-500/25"
-                >
-                  {leadPend ? "Enviando…" : "Quero ser contatado"}
-                </Button>
-              </form>
-
-              {!selecionado?.sobConsulta && (
-                <p className="mt-6 text-center text-xs text-[var(--muted)]">
-                  Quer começar agora?{" "}
-                  <button type="button" onClick={() => setModo(temPreco ? "assinatura" : "trial")} className="font-medium text-[var(--primary)] hover:underline">
-                    {temPreco ? "Assinar e pagar" : "Começar teste grátis de 7 dias"}
-                  </button>
-                </p>
+          <div className="resumo">
+            <p className="resumo__medida">Você está contratando</p>
+            <div className="resumo__linha">
+              <span className="resumo__nome">{planoNomeSel || "Plano"}</span>
+              {temPreco && (
+                <span className="resumo__preco">
+                  {formatBRL(selecionado!.preco)}
+                  <span>/{selecionado!.periodicidade === "anual" ? "ano" : "mês"}</span>
+                </span>
               )}
-            </>
-          )}
-
-          <div className="mt-6 flex items-center gap-3">
-            <span className="h-px flex-1 bg-[var(--border)]" />
-            <span className="text-xs text-[var(--muted)]">ou</span>
-            <span className="h-px flex-1 bg-[var(--border)]" />
+            </div>
+            <p className="resumo__nota">
+              Cobrança recorrente {selecionado?.periodicidade === "anual" ? "anual" : "mensal"}. Cancele quando quiser.
+            </p>
           </div>
 
-          <motion.a
-            href="/login"
-            whileHover={{ scale: 1.03, y: -1 }}
-            whileTap={{ scale: 0.96 }}
-            transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            className="mt-4 flex w-full items-center justify-center rounded-lg border border-[var(--primary)] py-2.5 text-sm font-semibold text-[var(--primary)] transition-colors hover:bg-[var(--primary)] hover:text-white"
-          >
-            Entrar
-          </motion.a>
+          <form action={assinAction} className="portao__forma">
+            <Campo rotulo="Nome" nome="nome" placeholder="Seu nome" autoComplete="name" required />
+            <Campo rotulo="CPF/CNPJ" dica="usado na cobrança" nome="cpfCnpj" placeholder="Somente números" inputMode="numeric" required />
+            <Campo rotulo="E-mail" nome="email" tipo="email" placeholder="voce@empresa.com" autoComplete="email" required />
+            <Campo rotulo="Telefone" dica="WhatsApp" nome="telefone" placeholder="(00) 00000-0000" autoComplete="tel" />
+            <Campo rotulo="Senha" dica="mín. 8 caracteres" nome="senha" tipo="password" placeholder="••••••••" autoComplete="new-password" required />
+            <input type="hidden" name="planoId" value={selecionado?.id ?? ""} />
 
-          <p className="mt-6 text-center text-xs text-[var(--muted)]">
-            Já tem conta? Acesse com seu e-mail e senha.
-          </p>
-        </div>
-      </div>
+            <Aceite marcado={aceite} aoMudar={setAceite} />
 
-      {/* Painel direito */}
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-[var(--primary)] via-[var(--primary-2)] to-indigo-700 lg:flex lg:flex-col lg:justify-center lg:px-14">
-        <Image
-          src="https://wallpapers.com/images/hd/purple-abstract-2gf414bg9xvsakmf.jpg"
-          alt="Easy-NFe"
-          fill
-          priority
-          sizes="50vw"
-          className="object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/85 via-[var(--primary-2)]/80 to-indigo-900/85" />
+            {assinErro && <Aviso>{assinErro}</Aviso>}
 
-        <div className="relative z-10 max-w-md text-white">
-          <h2 className="text-3xl font-bold leading-tight">Comece a emitir hoje, sem burocracia.</h2>
-          <p className="mt-4 text-sm leading-relaxed text-white/85">
-            Assinatura A1, envio à SEFAZ, DANFE e integrações. Pague com Pix, boleto ou cartão.
-          </p>
-          <ul className="mt-8 space-y-3 text-sm">
-            {[
-              "Configure sua empresa em minutos",
-              "Emita NF-e e NFC-e direto do sistema",
-              "Multiempresa e multiusuário",
-              "Suporte humano de verdade",
-            ].map((t) => (
-              <li key={t} className="flex items-center gap-2.5">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/20">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                </span>
-                {t}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </div>
+            <button type="submit" className="botao--cheio" disabled={assinPend || !aceite}>
+              {assinPend
+                ? "Criando conta…"
+                : temPreco
+                  ? `Continuar para o pagamento · ${formatBRL(selecionado!.preco)}`
+                  : "Criar conta e continuar"}
+            </button>
+            <p className="text-center text-[11px] text-[var(--muted)]">
+              Nada é cobrado automaticamente — você escolhe Pix ou boleto na próxima etapa.
+            </p>
+          </form>
+
+          <div className="portao__troca">
+            {podeTrial && (
+              <p>
+                Prefere testar antes?{" "}
+                <button type="button" onClick={() => setModo("trial")}>Teste grátis por 7 dias</button>
+              </p>
+            )}
+            <p>
+              Quer falar antes?{" "}
+              <button type="button" onClick={() => setModo("contato")}>Fale com nossa equipe</button>
+            </p>
+          </div>
+        </>
+      ) : modo === "trial" ? (
+        <>
+          <h1 className="portao__titulo">Teste grátis por 7 dias</h1>
+          <p className="portao__linha">Sem cartão. Crie sua conta e comece a emitir no plano Básico.</p>
+
+          <form action={trialAction} className="portao__forma">
+            <Campo rotulo="Nome" nome="nome" placeholder="Seu nome" autoComplete="name" required />
+            <Campo rotulo="CPF/CNPJ" dica="usado na cobrança ao assinar" nome="cpfCnpj" placeholder="Somente números" inputMode="numeric" required />
+            <Campo rotulo="E-mail" nome="email" tipo="email" placeholder="voce@empresa.com" autoComplete="email" required />
+            <Campo rotulo="Telefone" dica="WhatsApp" nome="telefone" placeholder="(00) 00000-0000" autoComplete="tel" />
+            <Campo rotulo="Senha" dica="mín. 8 caracteres" nome="senha" tipo="password" placeholder="••••••••" autoComplete="new-password" required />
+
+            {trialErro && <Aviso>{trialErro}</Aviso>}
+
+            <button type="submit" className="botao--cheio" disabled={trialPend}>
+              {trialPend ? "Criando conta…" : "Começar teste grátis"}
+            </button>
+          </form>
+
+          <div className="portao__troca">
+            {temPreco && (
+              <p>
+                Já quer assinar?{" "}
+                <button type="button" onClick={() => setModo("assinatura")}>Assinar e pagar agora</button>
+              </p>
+            )}
+            <p>
+              Prefere conversar antes?{" "}
+              <button type="button" onClick={() => setModo("contato")}>Fale com nossa equipe</button>
+            </p>
+          </div>
+        </>
+      ) : leadOk ? (
+        <>
+          <h1 className="portao__titulo">Recebemos seu contato</h1>
+          <p className="portao__linha">Nossa equipe vai falar com você em breve.</p>
+          <Link href="/" className="portao__elo mt-6 inline-block text-sm font-medium">
+            Voltar ao início
+          </Link>
+        </>
+      ) : (
+        <>
+          <h1 className="portao__titulo">Fale com nossa equipe</h1>
+          <p className="portao__linha">Deixe seus dados e entramos em contato.</p>
+
+          <form action={leadAction} className="portao__forma">
+            <Campo rotulo="Nome" nome="nome" placeholder="Seu nome" autoComplete="name" required />
+            <Campo rotulo="E-mail" nome="email" tipo="email" placeholder="voce@empresa.com" autoComplete="email" required />
+            <Campo rotulo="Telefone" dica="WhatsApp" nome="telefone" placeholder="(00) 00000-0000" autoComplete="tel" required />
+            <Campo rotulo="Empresa" nome="empresa" placeholder="Razão social / nome fantasia" autoComplete="organization" />
+            <Campo rotulo="Mensagem" nome="mensagem" placeholder="Conte rapidamente o que precisa" />
+            <input type="hidden" name="planoId" value={selecionado?.id ?? ""} />
+            <input type="hidden" name="planoNome" value={planoNomeSel} />
+
+            {leadErro && <Aviso>{leadErro}</Aviso>}
+
+            <button type="submit" className="botao--cheio" disabled={leadPend}>
+              {leadPend ? "Enviando…" : "Quero ser contatado"}
+            </button>
+          </form>
+
+          {!selecionado?.sobConsulta && (
+            <div className="portao__troca">
+              <p>
+                Quer começar agora?{" "}
+                <button type="button" onClick={() => setModo(temPreco ? "assinatura" : "trial")}>
+                  {temPreco ? "Assinar e pagar" : "Começar teste grátis de 7 dias"}
+                </button>
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      <p className="portao__ou">ou</p>
+
+      <Link href="/login" className="botao--vazio mt-4">Já tenho conta</Link>
+
+      <p className="portao__rodape">Easy-NFe · emissão de NF-e, NFC-e e NFS-e</p>
+    </Portao>
   );
 }
 
-function ErroBox({ children }: { children: React.ReactNode }) {
+function Campo({
+  rotulo, dica, nome, tipo = "text", placeholder, autoComplete, inputMode, required,
+}: {
+  rotulo: string;
+  dica?: string;
+  nome: string;
+  tipo?: string;
+  placeholder?: string;
+  autoComplete?: string;
+  inputMode?: "numeric" | "text" | "tel" | "email";
+  required?: boolean;
+}) {
   return (
-    <p className="flex items-center gap-2 rounded-lg bg-[var(--danger-soft,#fee2e2)] px-3 py-2 text-sm font-medium text-[var(--danger)]">
+    <label className="campo" htmlFor={nome}>
+      <span className="campo__rotulo">
+        {rotulo}
+        {dica && <span className="campo__dica">{dica}</span>}
+      </span>
+      <input
+        id={nome}
+        name={nome}
+        className="campo__entrada"
+        type={tipo}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        inputMode={inputMode}
+        required={required}
+      />
+    </label>
+  );
+}
+
+function Aceite({ marcado, aoMudar }: { marcado: boolean; aoMudar: (v: boolean) => void }) {
+  return (
+    <label className="portao__aceite">
+      <input type="checkbox" name="aceite" checked={marcado} onChange={(e) => aoMudar(e.target.checked)} />
+      <span>
+        Li e aceito os{" "}
+        <a href="/termos" target="_blank" rel="noopener noreferrer" className="portao__elo">Termos de Uso</a>{" "}
+        e a{" "}
+        <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="portao__elo">Política de Privacidade</a>.
+      </span>
+    </label>
+  );
+}
+
+function Aviso({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="portao__aviso" role="status">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" /></svg>
       {children}
     </p>
+  );
+}
+
+function Visto() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
   );
 }

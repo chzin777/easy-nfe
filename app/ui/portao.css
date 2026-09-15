@@ -1,0 +1,413 @@
+/* Tela de acesso (login e cadastro) — mesma gramática do Easy MEI: cena ao
+   fundo, meia-lua de vidro à esquerda com o formulário dentro da curva,
+   rótulos em mono maiúsculo, botão sólido e placas de vidro flutuando. */
+
+.portao {
+  position: relative;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #e9e5fa;
+}
+
+/* A cena é decoração inteira: nenhuma camada dela pode interceptar clique. */
+.cena { position: absolute; inset: 0; pointer-events: none; }
+
+.portao__palco { position: relative; z-index: 1; min-height: 100dvh; }
+
+/* A MEIA-LUA: o formulário fica DENTRO de uma curva que abre, e as pontas
+   do arco saem da tela em vez de fecharem dentro dela. */
+.meia-lua {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  width: min(58vw, 940px);
+  height: 138dvh;
+  padding: 48px clamp(48px, 7vw, 150px) 48px clamp(56px, 13vw, 280px);
+  background: rgba(252, 251, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-left: 0;
+  border-top-right-radius: 69dvh;
+  border-bottom-right-radius: 69dvh;
+  box-shadow: 30px 0 90px -50px rgba(11, 16, 32, 0.5);
+  backdrop-filter: blur(26px) saturate(1.35);
+  -webkit-backdrop-filter: blur(26px) saturate(1.35);
+}
+
+.portao__coluna { width: 100%; max-width: 380px; }
+
+/* A coluna larga é a do cadastro: tem lista de planos e resumo do que está
+   sendo contratado, e nos 380px do login isso quebra em duas palavras por linha. */
+.portao__coluna--largo { max-width: 470px; }
+
+/* O cadastro é mais alto que a tela. Nessa variante o arco deixa de ser
+   centralizado e vira uma faixa que rola junto; a cena fica presa à tela. */
+.portao--alto .meia-lua {
+  position: relative;
+  top: auto;
+  transform: none;
+  height: auto;
+  min-height: 100dvh;
+  padding-block: clamp(48px, 8vh, 96px);
+  border-top-right-radius: min(69dvh, 620px);
+  border-bottom-right-radius: min(69dvh, 620px);
+}
+.portao--alto .cena { position: fixed; }
+
+.portao__marca {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-block: 10px;
+  margin-block: -10px;
+  transition: opacity 0.2s ease;
+}
+.portao__marca:hover { opacity: 0.8; }
+
+.portao__titulo {
+  margin: 30px 0 0;
+  font-size: clamp(1.7rem, 3vw, 2.2rem);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+.portao__linha {
+  margin: 10px 0 0;
+  max-width: 40ch;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.portao__forma { display: flex; flex-direction: column; gap: 16px; margin-top: 30px; }
+
+.campo { display: flex; flex-direction: column; gap: 8px; }
+.campo__rotulo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.campo__dica { text-transform: none; letter-spacing: 0.04em; opacity: 0.75; }
+.campo__entrada {
+  width: 100%;
+  padding: 13px 16px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--foreground);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.campo__entrada::placeholder { color: color-mix(in srgb, var(--muted) 60%, transparent); }
+.campo__entrada:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(82, 39, 255, 0.16);
+}
+.campo__entrada:focus-visible { outline: none; }
+
+.botao--cheio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  padding: 15px 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: #fff;
+  background: var(--primary);
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.15s ease;
+}
+.botao--cheio:hover:not(:disabled) { background: var(--primary-hover); }
+.botao--cheio:active:not(:disabled) { transform: scale(0.99); }
+.botao--cheio:disabled { background: #e6e3f5; color: var(--muted); cursor: not-allowed; }
+
+.botao--vazio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 13px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--primary);
+  background: transparent;
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.botao--vazio:hover { background: var(--primary); color: #fff; }
+
+.portao__aviso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  background: var(--danger-soft);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--danger);
+}
+
+.portao__elo { color: var(--primary); }
+.portao__elo:hover { text-decoration: underline; }
+
+.portao__ou {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 26px;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.portao__ou::before,
+.portao__ou::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.portao__rodape {
+  margin: 40px 0 0;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+/* ---------- cartão de plano (cadastro) ---------- */
+.plano-cartao {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.plano-cartao:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  box-shadow: 0 14px 30px -22px rgba(82, 39, 255, 0.6);
+}
+.plano-cartao__topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.plano-cartao__nome { font-weight: 600; color: var(--foreground); }
+.plano-cartao__preco { font-weight: 700; color: var(--primary); }
+.plano-cartao__preco span { font-size: 11px; font-weight: 500; color: var(--muted); }
+.plano-cartao__consulta { font-size: 13px; font-weight: 500; color: var(--muted); }
+.plano-cartao__lista { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.plano-cartao__lista li { display: flex; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.plano-cartao__lista svg { flex: none; margin-top: 1px; color: var(--success); }
+.plano-cartao__acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.plano-cartao__botao {
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #fff;
+  background: var(--primary);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.plano-cartao__botao:hover { background: var(--primary-hover); }
+.plano-cartao__botao--fantasma {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+.plano-cartao__botao--fantasma:hover { background: color-mix(in srgb, var(--primary) 18%, #fff); }
+
+/* o resumo do que está sendo contratado */
+.resumo {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--primary-soft) 55%, transparent);
+}
+.resumo__medida {
+  margin: 0;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.resumo__linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+.resumo__nome { font-size: 17px; font-weight: 700; color: var(--foreground); }
+.resumo__preco { font-size: 17px; font-weight: 700; color: var(--primary); }
+.resumo__preco span { font-size: 11px; font-weight: 500; color: var(--muted); }
+.resumo__nota { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+
+.portao__aceite {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.portao__aceite input { margin-top: 2px; width: 16px; height: 16px; flex: none; accent-color: var(--primary); }
+
+.portao__troca {
+  margin-top: 24px;
+  display: grid;
+  gap: 6px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.portao__troca button {
+  font-weight: 500;
+  color: var(--primary);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.portao__troca button:hover { text-decoration: underline; }
+
+/* ---------- as placas de vidro ---------- */
+.placa-vidro {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 15px;
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 14px;
+  box-shadow: 0 18px 40px -22px rgba(11, 16, 32, 0.45);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  animation: boiar 7s ease-in-out infinite;
+}
+.placa-vidro__icone {
+  display: grid;
+  place-items: center;
+  width: 34px; height: 34px;
+  flex: none;
+  border-radius: 10px;
+  background: rgba(82, 39, 255, 0.08);
+  color: var(--primary);
+}
+.placa-vidro__texto { display: flex; flex-direction: column; line-height: 1.25; }
+.placa-vidro__texto b { font-weight: 600; font-size: 0.86rem; color: var(--foreground); }
+.placa-vidro__texto i {
+  font-style: normal;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+/* fases diferentes: com a mesma, viram um bloco só subindo e descendo */
+.placa-vidro.p-1 { left: 56%; top: 18%; animation-delay: -0.4s; }
+.placa-vidro.p-2 { right: 10%; top: 12%; animation-delay: -2.6s; animation-duration: 8.5s; }
+.placa-vidro.p-3 { left: 55%; bottom: 30%; animation-delay: -4.1s; animation-duration: 9s; }
+.placa-vidro.p-4 { right: 12%; bottom: 20%; animation-delay: -1.5s; animation-duration: 7.6s; }
+
+@keyframes boiar {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+
+@media (max-width: 900px) {
+  .meia-lua,
+  .portao--alto .meia-lua {
+    position: static;
+    transform: none;
+    width: 100%;
+    height: auto;
+    min-height: 100dvh;
+    padding: 40px clamp(22px, 6vw, 48px);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: rgba(252, 251, 255, 0.92);
+  }
+  .portao__coluna { max-width: none; }
+  .placa-vidro { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .placa-vidro { animation: none; }
+}
+
+/* ---------- a escolha de plano, em linha dentro do arco ----------
+   O arco é uma elipse: o ponto mais largo é o meio da altura. Por isso a
+   escolha de plano NÃO usa a variante alta — ela fica centrada, onde há
+   espaço horizontal, e o arco cresce para caber a fileira. O recuo da
+   direita é o que impede os cartões de cruzarem a curva. */
+.portao--planos .meia-lua {
+  width: min(76vw, 1180px);
+  padding-right: clamp(60px, 9vw, 210px);
+}
+.portao__coluna--planos { max-width: 680px; }
+
+.planos-fila {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-top: 26px;
+}
+.planos-fila .plano-cartao {
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+}
+.planos-fila .plano-cartao__topo { flex-direction: column; align-items: flex-start; gap: 2px; }
+.planos-fila .plano-cartao__lista { flex: 1; }
+.planos-fila .plano-cartao__acoes { margin-top: 14px; }
+.planos-fila .plano-cartao__botao { width: 100%; }
+
+.plano-cartao__mais {
+  margin: 8px 0 0;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Abaixo de 1240px a fileira não cabe dentro da curva sem encostar nela:
+   a partir daí o arco volta a ser faixa e os cartões empilham. */
+@media (max-width: 1240px) {
+  .portao--planos .meia-lua {
+    position: relative;
+    top: auto;
+    transform: none;
+    width: min(58vw, 940px);
+    height: auto;
+    min-height: 100dvh;
+    padding-block: clamp(48px, 8vh, 96px);
+    border-top-right-radius: min(69dvh, 620px);
+    border-bottom-right-radius: min(69dvh, 620px);
+  }
+  .portao--planos .cena { position: fixed; }
+  .portao__coluna--planos { max-width: 470px; }
+  .planos-fila { grid-template-columns: 1fr; }
+}

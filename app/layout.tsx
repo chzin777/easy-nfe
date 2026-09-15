@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Easy Nfe",
+  title: "Easy NFe",
   description: "Sistema de emissão de NF-e",
 };
 
