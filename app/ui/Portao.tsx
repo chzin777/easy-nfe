@@ -46,7 +46,7 @@ export default function Portao({
           className="object-cover"
         />
         {/* véu claro: a foto é escura demais p/ o vidro da meia-lua aparecer */}
-        <div className="absolute inset-0 bg-[linear-gradient(150deg,rgba(239,235,255,0.82),rgba(222,215,251,0.72)_48%,rgba(233,229,250,0.85))]" />
+        <div className="absolute inset-0 bg-[linear-gradient(150deg,rgba(239,235,255,0.55),rgba(222,215,251,0.42)_48%,rgba(233,229,250,0.58))]" />
 
         {/* arcos largos, o gesto de fundo */}
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1200 900" preserveAspectRatio="xMidYMid slice">
