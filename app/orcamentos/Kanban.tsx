@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { formatBRL, formatCpfCnpj } from "@/lib/format";
 import type { OrcamentoCompleto, StatusOrcamentoUI } from "./actions";
+import { tipoOrcamentoDe } from "./tipos";
+import { IconBox, IconWrench, IconLayers } from "./Icones";
 
 // Colunas do funil (kanban). "cancelado" fica fora do quadro (terminal).
 const COLUNAS: { status: StatusOrcamentoUI; titulo: string; cor: string }[] = [
@@ -79,8 +81,17 @@ export default function Kanban({
                   {o.clienteDocumento && (
                     <p className="truncate text-[11px] text-[var(--muted)]">{formatCpfCnpj(o.clienteDocumento)}</p>
                   )}
-                  <p className="text-[11px] text-[var(--muted)]">
-                    {o.itens.length} {o.itens.length === 1 ? "item" : "itens"}
+                  <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[var(--muted)]">
+                    <span className="inline-flex items-center text-slate-500">
+                      {tipoOrcamentoDe(o.tipoNota, o.itens) === "ambos" ? (
+                        <IconLayers className="h-3 w-3" />
+                      ) : tipoOrcamentoDe(o.tipoNota, o.itens) === "servico" ? (
+                        <IconWrench className="h-3 w-3" />
+                      ) : (
+                        <IconBox className="h-3 w-3" />
+                      )}
+                    </span>
+                    <span>{o.itens.length} {o.itens.length === 1 ? "item" : "itens"}</span>
                     {o.validade ? ` · vence ${o.validade.split("-").reverse().join("/")}` : ""}
                   </p>
                 </button>

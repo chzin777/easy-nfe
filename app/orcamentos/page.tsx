@@ -19,15 +19,19 @@ import OrcamentoModal from "./OrcamentoModal";
 import OrcamentoPdf from "./OrcamentoPdf";
 import Kanban from "./Kanban";
 import {
-  listarOrcamentos, moverStatus, cancelarOrcamento, marcarPerdido, excluirOrcamento, converterEmNota,
-  converterEmNotasServico,
+  listarOrcamentos, moverStatus, cancelarOrcamento, marcarPerdido, excluirOrcamento,
+  fecharOrcamento,
   type OrcamentoCompleto, type StatusOrcamentoUI,
 } from "./actions";
+import { tipoOrcamentoDe } from "./tipos";
+import { IconBox, IconWrench, IconLayers } from "./Icones";
 
-// Orçamento de serviço: fecha em NFS-e, uma por serviço da lista.
-const ehServico = (o: { tipoNota: string }) => o.tipoNota === "nfse";
-const rotuloModelo = (tipoNota: string) =>
-  tipoNota === "nfse" ? "NFS-e (serviço)" : tipoNota.startsWith("65") ? "NFC-e (65)" : "NF-e (55)";
+const rotuloModelo = (tipoNota: string) => {
+  if (tipoNota.startsWith("misto")) {
+    return tipoNota.includes("65") ? "Ambos (NFC-e + NFS-e)" : "Ambos (NF-e + NFS-e)";
+  }
+  return tipoNota === "nfse" ? "NFS-e (serviço)" : tipoNota.startsWith("65") ? "NFC-e (65)" : "NF-e (55)";
+};
 
 const STATUS_LABEL: Record<StatusOrcamentoUI, string> = {
   rascunho: "Rascunho", enviado: "Enviado", negociacao: "Em negociação",
@@ -126,8 +130,28 @@ export default function OrcamentosPage() {
         </div>
       ),
     },
-    { chave: "status", cabecalho: "Status", render: (o) => <Badge tom={STATUS_TOM[o.status]}>{STATUS_LABEL[o.status]}</Badge> },
-    { chave: "itens", cabecalho: "Itens", alinhar: "center", render: (o) => o.itens.length },
+    {
+      chave: "itens",
+      cabecalho: "Itens",
+      alinhar: "center",
+      render: (o) => {
+        const tipo = tipoOrcamentoDe(o.tipoNota, o.itens);
+        return (
+          <span className="inline-flex items-center gap-1.5" title={tipo === "ambos" ? "Produtos e Serviços" : tipo === "servico" ? "Serviços" : "Produtos"}>
+            <span className="text-slate-500">
+              {tipo === "ambos" ? (
+                <IconLayers className="h-3.5 w-3.5" />
+              ) : tipo === "servico" ? (
+                <IconWrench className="h-3.5 w-3.5" />
+              ) : (
+                <IconBox className="h-3.5 w-3.5" />
+              )}
+            </span>
+            <span>{o.itens.length}</span>
+          </span>
+        );
+      },
+    },
     { chave: "validade", cabecalho: "Validade", render: (o) => fmtData(o.validade) },
     { chave: "total", cabecalho: "Total", alinhar: "right", render: (o) => <span className="font-semibold">{formatBRL(o.valorTotal)}</span> },
   ];
@@ -202,6 +226,7 @@ export default function OrcamentosPage() {
           casas={casas}
           onClientes={(c) => setClientes((l) => [c, ...l.filter((x) => x.id !== c.id)])}
           onProdutos={(p) => setProdutos((l) => [p, ...l.filter((x) => x.id !== p.id)])}
+          onServicos={(s) => setServicos((l) => [s, ...l.filter((x) => x.id !== s.id)])}
           onSalvo={(o) => { setCriando(false); setEditar(null); recarregar(); }}
           onFechar={() => { setCriando(false); setEditar(null); }}
         />
@@ -241,7 +266,9 @@ function DetalheOrcamento({
   onMudou: () => void;
 }) {
   const [proc, setProc] = useState(false);
-  const servico = ehServico(orc);
+  const tipo = tipoOrcamentoDe(orc.tipoNota, orc.itens);
+  const ehAmbos = tipo === "ambos";
+  const ehServico = tipo === "servico";
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [dialog, setDialog] = useState<null | "fechar" | "cancelar" | "perdido" | "excluir">(null);
@@ -267,24 +294,19 @@ function DetalheOrcamento({
   async function fecharVenda() {
     setProc(true); setMsg(null); setDialog(null);
     try {
-      if (servico) {
-        // Uma DPS = um serviço: sai uma NFS-e por linha do orçamento.
-        const r = await converterEmNotasServico(orc.id);
-        if (r.ok) {
-          const quantas = r.numeros.length;
-          setMsg({ tipo: "ok", texto: quantas > 1 ? `${quantas} NFS-e autorizadas (nº ${r.numeros.join(", ")}).` : `NFS-e autorizada (nº ${r.numeros[0]}).` });
-          setTimeout(onMudou, 1200);
-        } else {
-          const parcial = r.emitidas > 0 ? ` ${r.emitidas} de ${r.total} já saíram — fechar de novo continua de onde parou.` : "";
-          setMsg({ tipo: "erro", texto: r.erro + parcial });
-        }
-        return;
+      const r = await fecharOrcamento(orc.id);
+      if (r.ok) {
+        setMsg({ tipo: "ok", texto: r.mensagem || "Venda fechada com sucesso!" });
+        setTimeout(onMudou, 1200);
+      } else {
+        const parcial = r.nfseEmitidas && r.nfseTotal ? ` (${r.nfseEmitidas} de ${r.nfseTotal} NFS-e já emitidas)` : "";
+        setMsg({ tipo: "erro", texto: (r.erro || "Falha ao fechar venda.") + parcial });
       }
-      const r = await converterEmNota(orc.id);
-      if (r.ok && r.autorizada) { setMsg({ tipo: "ok", texto: `NF-e autorizada (nº ${r.numero}).` }); setTimeout(onMudou, 1200); }
-      else if (r.ok) setMsg({ tipo: "erro", texto: `Recusada pela SEFAZ (${r.cStat}): ${r.xMotivo ?? ""}` });
-      else setMsg({ tipo: "erro", texto: r.erro });
-    } finally { setProc(false); }
+    } catch (e) {
+      setMsg({ tipo: "erro", texto: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setProc(false);
+    }
   }
   async function executar(fn: () => Promise<void>) {
     setProc(true); setDialog(null);
@@ -301,8 +323,7 @@ function DetalheOrcamento({
 
   // Rodapé em três blocos: o que se faz sempre (PDF, editar) à esquerda, o que
   // encerra o orçamento escondido no menu, e só a ação principal em destaque à
-  // direita. Antes eram até seis botões lado a lado, com "Excluir" competindo
-  // em peso visual com "Fechar venda".
+  // direita.
   const acoesDestrutivas = [
     !terminal && orc.status !== "perdido"
       ? { rotulo: "Marcar como perdido", cor: "text-[var(--warning)]", run: () => { setMotivo(""); setDialog("perdido"); } }
@@ -326,7 +347,16 @@ function DetalheOrcamento({
       </div>
       {!terminal && (
         <Button onClick={() => setDialog("fechar")} disabled={proc}>
-          {proc ? "Emitindo…" : <><IconRaio /> {servico ? "Fechar venda (gerar NFS-e)" : "Fechar venda (gerar NF-e)"}</>}
+          {proc ? "Emitindo…" : (
+            <>
+              <IconRaio />{" "}
+              {ehAmbos
+                ? "Fechar venda (NF-e + NFS-e)"
+                : ehServico
+                ? "Fechar venda (gerar NFS-e)"
+                : "Fechar venda (gerar NF-e)"}
+            </>
+          )}
         </Button>
       )}
     </div>
@@ -335,7 +365,9 @@ function DetalheOrcamento({
   const dialogs = {
     fechar: {
       titulo: "Fechar venda",
-      msg: servico
+      msg: ehAmbos
+        ? `Isto emite a NF-e para produtos e a NFS-e para os serviços na SEFAZ e Prefeitura (${orc.itens.length} itens no total) e fecha a venda. Continuar?`
+        : ehServico
         ? `Isto emite uma NFS-e para cada serviço do orçamento (${orc.itens.length} no total) e fecha a venda. Continuar?`
         : "Isto gera uma NF-e na SEFAZ a partir deste orçamento e fecha a venda. Continuar?",
       botao: "Fechar venda", tom: "primary" as const, run: fecharVenda,
@@ -358,9 +390,9 @@ function DetalheOrcamento({
               <IconCheck /> virou NF-e
             </a>
           )}
-          {servico && orc.itens.some((i) => i.notaServicoId) && (
+          {orc.itens.some((i) => i.notaServicoId) && (
             <a href="/notas" className="inline-flex items-center gap-1 text-xs font-medium text-[var(--success)] hover:underline">
-              <IconCheck /> {orc.itens.filter((i) => i.notaServicoId).length} de {orc.itens.length} viraram NFS-e
+              <IconCheck /> {orc.itens.filter((i) => i.notaServicoId).length} de {orc.itens.filter((i) => i.servicoId || i.cTribNac).length} viraram NFS-e
             </a>
           )}
         </div>
@@ -425,7 +457,7 @@ function DetalheOrcamento({
           },
           {
             id: "produtos",
-            label: `${servico ? "Serviços" : "Produtos"} (${orc.itens.length})`,
+            label: `${ehAmbos ? "Itens" : ehServico ? "Serviços" : "Produtos"} (${orc.itens.length})`,
             content: (
               <>
                 <SectionTitle>Itens do orçamento</SectionTitle>
@@ -433,7 +465,7 @@ function DetalheOrcamento({
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-slate-50 text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-                        <th className="px-4 py-2.5">{servico ? "Serviço" : "Produto"}</th>
+                        <th className="px-4 py-2.5">{ehAmbos ? "Item / Tipo" : ehServico ? "Serviço" : "Produto"}</th>
                         <th className="px-4 py-2.5 text-right">Qtd</th>
                         <th className="px-4 py-2.5 text-right">Preço un.</th>
                         <th className="px-4 py-2.5 text-right">Subtotal</th>
@@ -442,7 +474,25 @@ function DetalheOrcamento({
                     <tbody>
                       {orc.itens.map((i) => (
                         <tr key={i.id} className="border-t border-[var(--border)]">
-                          <td className="px-4 py-2.5 font-medium">{i.nome}</td>
+                          <td className="px-4 py-2.5 font-medium">
+                            <div className="flex items-center gap-2">
+                              {ehAmbos && (
+                                <span
+                                  title={i.servicoId ? "Serviço" : "Produto"}
+                                  className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${
+                                    i.servicoId ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+                                  }`}
+                                >
+                                  {i.servicoId ? (
+                                    <IconWrench className="h-3 w-3" />
+                                  ) : (
+                                    <IconBox className="h-3 w-3" />
+                                  )}
+                                </span>
+                              )}
+                              <span>{i.nome}</span>
+                            </div>
+                          </td>
                           <td className="px-4 py-2.5 text-right tabular-nums">{i.quantidade}</td>
                           <td className="px-4 py-2.5 text-right tabular-nums">{formatBRL(i.precoUnitario)}</td>
                           <td className="px-4 py-2.5 text-right tabular-nums font-medium">{formatBRL(i.valorTotal)}</td>
@@ -460,8 +510,8 @@ function DetalheOrcamento({
               </>
             ),
           },
-          // Só existe depois que o orçamento virou nota.
-          ...(orc.notaId && !servico
+          // Só existe depois que o orçamento virou nota (NF-e/NFC-e).
+          ...(orc.notaId
             ? [{
                 id: "nfe",
                 label: "NF-e",
@@ -473,7 +523,7 @@ function DetalheOrcamento({
                   </p>
                 ) : (
                   <>
-                    <SectionTitle>Nota fiscal gerada</SectionTitle>
+                    <SectionTitle>Nota fiscal gerada (produtos)</SectionTitle>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       <Info rotulo="Número / série" valor={`${nota.numero} / ${nota.serie}`} />
                       <Info rotulo="Status" valor={nota.status} />
@@ -489,6 +539,36 @@ function DetalheOrcamento({
                       </div>
                     )}
                     <Button className="mt-4" onClick={() => setVerDanfe(true)}>Ver DANFE / baixar PDF e XML</Button>
+                  </>
+                ),
+              }]
+            : []),
+          // NFS-e geradas para os serviços do orçamento
+          ...(orc.itens.some((i) => i.notaServicoId)
+            ? [{
+                id: "nfse",
+                label: "NFS-e",
+                content: (
+                  <>
+                    <SectionTitle>Notas de serviço geradas (NFS-e)</SectionTitle>
+                    <div className="space-y-2.5">
+                      {orc.itens.filter((i) => i.notaServicoId).map((i) => (
+                        <div key={i.id} className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-slate-50 p-3.5">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
+                                <IconWrench className="h-3 w-3" /> NFS-e
+                              </span>
+                              <p className="font-semibold text-sm">{i.nome}</p>
+                            </div>
+                            <p className="mt-0.5 text-xs text-[var(--muted)]">Valor do serviço: {formatBRL(i.valorTotal)}</p>
+                          </div>
+                          <a href="/notas" className="rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--primary)] hover:bg-slate-50">
+                            Ver em Notas →
+                          </a>
+                        </div>
+                      ))}
+                    </div>
                   </>
                 ),
               }]

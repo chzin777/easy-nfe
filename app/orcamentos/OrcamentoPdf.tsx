@@ -3,6 +3,7 @@
 import { formatBRL, formatCep, formatCpfCnpj, formatTelefone } from "@/lib/format";
 import type { EmpresaDados } from "@/app/configuracoes/actions";
 import type { OrcamentoCompleto } from "./actions";
+import { tipoOrcamentoDe } from "./tipos";
 
 const fmtData = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "—");
 
@@ -17,8 +18,16 @@ export default function OrcamentoPdf({
   orc: OrcamentoCompleto;
   empresa: EmpresaDados | null;
 }) {
-  const servico = orc.tipoNota === "nfse";
-  const modelo = servico ? "NFS-e (serviço)" : orc.tipoNota.startsWith("65") ? "NFC-e (65)" : "NF-e (55)";
+  const tipo = tipoOrcamentoDe(orc.tipoNota, orc.itens);
+  const ehAmbos = tipo === "ambos";
+  const servico = tipo === "servico";
+  const modelo = ehAmbos
+    ? "Produtos (NF-e) + Serviços (NFS-e)"
+    : servico
+    ? "NFS-e (serviço)"
+    : orc.tipoNota.startsWith("65")
+    ? "NFC-e (65)"
+    : "NF-e (55)";
   const e = empresa;
   const end = e?.endereco;
   const endLinha = end
@@ -92,7 +101,7 @@ export default function OrcamentoPdf({
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
         <thead>
           <tr style={{ background: "#f1f5f9", textAlign: "left" }}>
-            <th style={thStyle}>{servico ? "Serviço" : "Produto"}</th>
+            <th style={thStyle}>{ehAmbos ? "Item / Tipo" : servico ? "Serviço" : "Produto"}</th>
             <th style={{ ...thStyle, textAlign: "right" }}>Qtd</th>
             <th style={{ ...thStyle, textAlign: "right" }}>Preço un.</th>
             <th style={{ ...thStyle, textAlign: "right" }}>Subtotal</th>
@@ -101,7 +110,14 @@ export default function OrcamentoPdf({
         <tbody>
           {orc.itens.map((i) => (
             <tr key={i.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
-              <td style={tdStyle}>{i.nome}</td>
+              <td style={tdStyle}>
+                <div style={{ fontWeight: 600 }}>{i.nome}</div>
+                {ehAmbos && (
+                  <div style={{ fontSize: 10, color: i.servicoId ? "#7c3aed" : "#2563eb", marginTop: 2, fontWeight: 600 }}>
+                    {i.servicoId ? "Serviço" : "Produto"}
+                  </div>
+                )}
+              </td>
               <td style={{ ...tdStyle, textAlign: "right" }}>{i.quantidade}</td>
               <td style={{ ...tdStyle, textAlign: "right" }}>{formatBRL(i.precoUnitario)}</td>
               <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600 }}>{formatBRL(i.valorTotal)}</td>

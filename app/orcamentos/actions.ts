@@ -5,6 +5,7 @@ import { exigirEmpresa } from "@/lib/empresa";
 import { exigirFeature } from "@/lib/permissoes";
 import { emitirNota, type DescontoTipo, type EmitirResultado } from "@/app/notas/actions";
 import { emitirParaEmpresa } from "@/lib/nfse/emitir";
+import { tipoOrcamentoDe } from "./tipos";
 
 // ---- Tipos -----------------------------------------------------------------
 
@@ -19,8 +20,8 @@ const STATUS_UI: Record<string, StatusOrcamentoUI> = Object.fromEntries(
   Object.entries(STATUS_DB).map(([ui, db]) => [db, ui as StatusOrcamentoUI]),
 ) as Record<string, StatusOrcamentoUI>;
 
-// Um item é de produto (NF-e/NFC-e) ou de serviço (NFS-e) — nunca dos dois.
-// Qual dos dois vale é decidido pelo tipoNota do orçamento.
+// Um item pode ser de produto (NF-e/NFC-e) ou de serviço (NFS-e).
+// Um mesmo orçamento pode conter ambos quando tipoNota for "misto-55" ou "misto-65".
 // precoUnitario: preço praticado neste orçamento. Ausente (ou <= 0) usa o do
 // cadastro — igual à emissão de nota, onde o cadastro é só o ponto de partida.
 export type ItemOrcamentoInput = {
@@ -32,15 +33,14 @@ export type ItemOrcamentoInput = {
   descValor: number;
 };
 
-// Orçamento de serviço: fecha em NFS-e em vez de NF-e. O valor também vive em
-// lib/tipos-nota.ts, que é de onde a tela lê (um "use server" não exporta
-// constante).
+// Orçamento de serviço: fecha em NFS-e em vez de NF-e.
+// Orçamento misto (ambos): gera NF-e para produtos e NFS-e para serviços ao fechar.
 const TIPO_SERVICO = "nfse";
 
 export type OrcamentoInput = {
   clienteId: string;
   transportadoraId: string | null;
-  tipoNota: string; // "55-saida" | "65-saida" | "nfse"
+  tipoNota: string; // "55-saida" | "65-saida" | "nfse" | "misto-55" | "misto-65"
   modFrete: string;
   observacoes?: string;
   validade?: string | null; // ISO date (yyyy-mm-dd)
@@ -205,17 +205,36 @@ async function montarItensServico(empresaId: string, itens: ItemOrcamentoInput[]
     });
 }
 
-// Escolhe o catálogo certo pelo modelo escolhido no orçamento.
+// Monta linhas do orçamento a partir dos catálogos de produtos e serviços.
 async function montarLinhas(empresaId: string, input: OrcamentoInput): Promise<LinhaItem[]> {
-  return input.tipoNota === TIPO_SERVICO
-    ? montarItensServico(empresaId, input.itens)
-    : montarItens(empresaId, input.itens);
+  const itensProduto = input.itens.filter((i) => !!i.produtoId);
+  const itensServico = input.itens.filter((i) => !!i.servicoId);
+
+  const [linhasProd, linhasServ] = await Promise.all([
+    itensProduto.length ? montarItens(empresaId, itensProduto) : Promise.resolve([]),
+    itensServico.length ? montarItensServico(empresaId, itensServico) : Promise.resolve([]),
+  ]);
+
+  const prodMap = new Map(linhasProd.map((p) => [p.produtoId, p]));
+  const servMap = new Map(linhasServ.map((s) => [s.servicoId, s]));
+
+  const ordenadas: LinhaItem[] = [];
+  for (const it of input.itens) {
+    if (it.produtoId && prodMap.has(it.produtoId)) {
+      ordenadas.push(prodMap.get(it.produtoId)!);
+    } else if (it.servicoId && servMap.has(it.servicoId)) {
+      ordenadas.push(servMap.get(it.servicoId)!);
+    }
+  }
+
+  return ordenadas.length ? ordenadas : [...linhasProd, ...linhasServ];
 }
 
-const SEM_ITEM = (tipoNota: string) =>
-  tipoNota === TIPO_SERVICO
-    ? "Adicione ao menos um serviço ao orçamento."
-    : "Adicione ao menos um produto ao orçamento.";
+const SEM_ITEM = (tipoNota: string) => {
+  if (tipoNota === TIPO_SERVICO) return "Adicione ao menos um serviço ao orçamento.";
+  if (tipoNota.startsWith("misto")) return "Adicione ao menos um item (produto ou serviço) ao orçamento.";
+  return "Adicione ao menos um produto ao orçamento.";
+};
 
 // ---- Actions ---------------------------------------------------------------
 
@@ -357,7 +376,8 @@ export async function converterEmNotasServico(id: string): Promise<FecharServico
   const vazio = { emitidas: 0, total: 0, numeros: [] as number[] };
   const o = await prisma.orcamento.findFirst({ where: { id, emitenteId: empresaId }, include: { itens: true } });
   if (!o) return { ok: false, erro: "Orçamento não encontrado.", ...vazio };
-  if (o.tipoNota !== TIPO_SERVICO) return { ok: false, erro: "Este orçamento não é de serviço.", ...vazio };
+  const ehMisto = o.tipoNota.startsWith("misto") || (o.itens.some((i) => i.produtoId) && o.itens.some((i) => i.servicoId));
+  if (o.tipoNota !== TIPO_SERVICO && !ehMisto) return { ok: false, erro: "Este orçamento não possui serviços.", ...vazio };
   if (o.status === "FECHADO") return { ok: false, erro: "Este orçamento já virou nota.", ...vazio };
 
   const itens = o.itens.filter((i) => i.servicoId || i.cTribNac);
@@ -423,10 +443,12 @@ export async function converterEmNota(id: string): Promise<EmitirResultado> {
     }));
   if (!itens.length) return { ok: false, erro: "Orçamento sem produtos válidos para emitir." };
 
+  const tipoNotaFinal = o.tipoNota.includes("65") ? "65-saida" : "55-saida";
+
   const r = await emitirNota({
     clienteId: o.clienteId,
     transportadoraId: o.transportadoraId,
-    tipoNota: o.tipoNota,
+    tipoNota: tipoNotaFinal,
     modFrete: o.modFrete,
     infCpl: o.observacoes ?? undefined,
     itens,
@@ -437,4 +459,176 @@ export async function converterEmNota(id: string): Promise<EmitirResultado> {
     await prisma.orcamento.update({ where: { id }, data: { status: "FECHADO", notaId: r.notaId } });
   }
   return r;
+}
+
+export type FecharOrcamentoResultado = {
+  ok: boolean;
+  erro?: string;
+  nfeEmitida?: boolean;
+  nfeNumero?: number;
+  nfseEmitidas?: number;
+  nfseTotal?: number;
+  nfseNumeros?: number[];
+  mensagem?: string;
+};
+
+// Fecha o orçamento de forma inteligente: suporta produto, serviço ou ambos.
+export async function fecharOrcamento(id: string): Promise<FecharOrcamentoResultado> {
+  await exigirFeature("orcamentos");
+  const empresaId = await exigirEmpresa();
+  const o = await prisma.orcamento.findFirst({
+    where: { id, emitenteId: empresaId },
+    include: { itens: true },
+  });
+  if (!o) return { ok: false, erro: "Orçamento não encontrado." };
+  if (o.status === "FECHADO") return { ok: false, erro: "Este orçamento já virou nota." };
+
+  const ehMisto = o.tipoNota.startsWith("misto") || (o.itens.some((i) => i.produtoId) && o.itens.some((i) => i.servicoId));
+  const ehApenasServico = !ehMisto && o.tipoNota === TIPO_SERVICO;
+
+  if (ehApenasServico) {
+    const r = await converterEmNotasServico(id);
+    if (!r.ok) return { ok: false, erro: r.erro, nfseEmitidas: r.emitidas, nfseTotal: r.total, nfseNumeros: r.numeros };
+    return {
+      ok: true,
+      nfseEmitidas: r.emitidas,
+      nfseTotal: r.total,
+      nfseNumeros: r.numeros,
+      mensagem: r.numeros.length > 1 ? `${r.numeros.length} NFS-e autorizadas (nº ${r.numeros.join(", ")}).` : `NFS-e autorizada (nº ${r.numeros[0]}).`,
+    };
+  }
+
+  if (!ehMisto) {
+    const r = await converterEmNota(id);
+    if (!r.ok) return { ok: false, erro: r.erro };
+    if (!r.autorizada) return { ok: false, erro: `Recusada pela SEFAZ (${r.cStat}): ${r.xMotivo ?? ""}` };
+    return {
+      ok: true,
+      nfeEmitida: true,
+      nfeNumero: r.numero,
+      mensagem: `NF-e autorizada (nº ${r.numero}).`,
+    };
+  }
+
+  // Caso Misto (Ambos: Produtos e Serviços no mesmo orçamento)
+  const itensProd = o.itens.filter((i) => !!i.produtoId);
+  const itensServ = o.itens.filter((i) => !!i.servicoId || !!i.cTribNac);
+
+  let nfeNum: number | undefined;
+  let nfeOk = !!o.notaId;
+
+  // 1. Emitir NF-e para produtos se houver e ainda não emitida
+  if (itensProd.length > 0 && !o.notaId) {
+    const tipoNotaProd = o.tipoNota.includes("65") ? "65-saida" : "55-saida";
+    const somaProd = itensProd.reduce((s, i) => s + Number(i.valorTotal), 0);
+    const somaTotal = o.itens.reduce((s, i) => s + Number(i.valorTotal), 0);
+    const fatorProd = somaTotal > 0 ? somaProd / somaTotal : 1;
+
+    const descProdValor =
+      o.descontoTipo === "percent"
+        ? Number(o.descontoValor)
+        : Math.round(Number(o.descontoValor) * fatorProd * 100) / 100;
+
+    const rNfe = await emitirNota({
+      clienteId: o.clienteId,
+      transportadoraId: o.transportadoraId,
+      tipoNota: tipoNotaProd,
+      modFrete: o.modFrete,
+      infCpl: o.observacoes ?? undefined,
+      itens: itensProd.map((i) => ({
+        produtoId: i.produtoId as string,
+        quantidade: Number(i.quantidade),
+        precoUnitario: Number(i.precoUnitario),
+        descTipo: (i.descontoTipo as DescontoTipo) || "valor",
+        descValor: Number(i.descontoValor),
+      })),
+      descontoNota: { tipo: (o.descontoTipo as DescontoTipo) || "valor", valor: descProdValor },
+    });
+
+    if (!rNfe.ok || !rNfe.autorizada || !rNfe.notaId) {
+      const msgErro = !rNfe.ok ? rNfe.erro : `NF-e recusada pela SEFAZ (${rNfe.cStat}): ${rNfe.xMotivo ?? ""}`;
+      return { ok: false, erro: msgErro };
+    }
+
+    nfeNum = rNfe.numero;
+    nfeOk = true;
+    await prisma.orcamento.update({ where: { id }, data: { notaId: rNfe.notaId } });
+  }
+
+  // 2. Emitir NFS-e para serviços se houver
+  const nfseNumeros: number[] = [];
+  let nfseEmitidas = 0;
+  if (itensServ.length > 0) {
+    await exigirFeature("emitir_nfse");
+    const somaServ = itensServ.reduce((s, i) => s + Number(i.valorTotal), 0);
+    const somaTotal = o.itens.reduce((s, i) => s + Number(i.valorTotal), 0);
+    const fatorServGeral = somaTotal > 0 ? somaServ / somaTotal : 1;
+    const descServTotal = o.descontoTipo === "percent"
+      ? (somaServ * Number(o.descontoValor)) / 100
+      : Number(o.descontoValor) * fatorServGeral;
+
+    const fatorServ = somaServ > 0 ? Math.max(0, (somaServ - descServTotal) / somaServ) : 1;
+    const hoje = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date());
+
+    for (const i of itensServ) {
+      if (i.notaServicoId) {
+        nfseEmitidas++;
+        continue;
+      }
+      const valor = Math.round(Number(i.valorTotal) * fatorServ * 100) / 100;
+      if (valor <= 0) continue;
+
+      const r = await emitirParaEmpresa(empresaId, {
+        clienteId: o.clienteId,
+        servicoId: i.servicoId,
+        descricao: i.descricao || i.nome,
+        cTribNac: i.cTribNac ?? "",
+        cNBS: i.cNBS ?? "",
+        valorServico: valor,
+        aliqISS: i.aliqISS == null ? 0 : Number(i.aliqISS),
+        tribISSQN: "1",
+        tpImunidade: "0",
+        issRetido: false,
+        codMunicipioPrestacao: "",
+        competencia: hoje,
+        informacoesAdicionais: o.observacoes ?? "",
+      });
+
+      if (!r.ok) {
+        const parcialMsg = nfeOk ? "NF-e emitida com sucesso, porém " : "";
+        return {
+          ok: false,
+          erro: `${parcialMsg}NFS-e falhou: ${r.erro}. Tentar novamente continuará de onde parou.`,
+          nfeEmitida: nfeOk,
+          nfeNumero: nfeNum,
+          nfseEmitidas,
+          nfseTotal: itensServ.length,
+          nfseNumeros,
+        };
+      }
+
+      await prisma.itemOrcamento.update({ where: { id: i.id }, data: { notaServicoId: r.id } });
+      nfseNumeros.push(r.numero);
+      nfseEmitidas++;
+    }
+  }
+
+  // 3. Se tudo foi emitido com sucesso, fecha o orçamento
+  await prisma.orcamento.update({ where: { id }, data: { status: "FECHADO" } });
+
+  const msgs: string[] = [];
+  if (nfeOk && (nfeNum || o.notaId)) msgs.push(`NF-e autorizada${nfeNum ? ` (nº ${nfeNum})` : ""}`);
+  if (nfseNumeros.length > 0) {
+    msgs.push(nfseNumeros.length > 1 ? `${nfseNumeros.length} NFS-e autorizadas (nº ${nfseNumeros.join(", ")})` : `NFS-e autorizada (nº ${nfseNumeros[0]})`);
+  }
+
+  return {
+    ok: true,
+    nfeEmitida: nfeOk,
+    nfeNumero: nfeNum,
+    nfseEmitidas,
+    nfseTotal: itensServ.length,
+    nfseNumeros,
+    mensagem: msgs.join(" e ") + ".",
+  };
 }

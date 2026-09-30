@@ -7,35 +7,20 @@ import {
   Button,
   Card,
   EmptyState,
-  Field,
   Input,
   PageHeader,
   Paginacao,
   Tabela,
-  Textarea,
   formatBRL,
   paginar,
   type Coluna,
 } from "@/app/ui/primitives";
-import SeletorLC116 from "./SeletorLC116";
+import NovoServicoModal from "./NovoServicoModal";
 import {
-  atualizarServico,
-  criarServico,
   excluirServico,
   listarServicos,
   type Servico,
-  type ServicoInput,
 } from "./actions";
-
-const VAZIO: ServicoInput = {
-  nome: "",
-  descricao: "",
-  cTribNac: "",
-  itemListaServico: "",
-  cNBS: "",
-  aliqISS: 0,
-  valorUnit: 0,
-};
 
 export default function ServicosPage() {
   const [servicos, setServicos] = useState<Servico[]>([]);
@@ -43,10 +28,8 @@ export default function ServicosPage() {
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(1);
   const [porPagina, setPorPagina] = useState(10);
-  const [form, setForm] = useState<ServicoInput>(VAZIO);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [aberto, setAberto] = useState(false);
-  const [salvando, setSalvando] = useState(false);
+  const [servicoEdit, setServicoEdit] = useState<Servico | null>(null);
+  const [modalAberto, setModalAberto] = useState(false);
   const [confirmar, setConfirmar] = useState<Servico | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -70,41 +53,15 @@ export default function ServicosPage() {
   const pag = paginar(filtrados, pagina, porPagina);
 
   function abrirNovo() {
-    setForm(VAZIO);
-    setEditId(null);
+    setServicoEdit(null);
     setErro(null);
-    setAberto(true);
+    setModalAberto(true);
   }
 
   function abrirEdicao(s: Servico) {
-    setForm({
-      nome: s.nome,
-      descricao: s.descricao,
-      cTribNac: s.cTribNac,
-      itemListaServico: s.itemListaServico,
-      cNBS: s.cNBS,
-      aliqISS: s.aliqISS,
-      valorUnit: s.valorUnit,
-    });
-    setEditId(s.id);
+    setServicoEdit(s);
     setErro(null);
-    setAberto(true);
-  }
-
-  async function salvar() {
-    setSalvando(true);
-    setErro(null);
-    try {
-      const salvo = editId ? await atualizarServico(editId, form) : await criarServico(form);
-      setServicos((l) =>
-        [...l.filter((s) => s.id !== salvo.id), salvo].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
-      );
-      setAberto(false);
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSalvando(false);
-    }
+    setModalAberto(true);
   }
 
   async function remover(s: Servico) {
@@ -160,6 +117,31 @@ export default function ServicosPage() {
       valor: (s) => s.valorUnit,
       render: (s) => <span className="font-medium">{formatBRL(s.valorUnit)}</span>,
     },
+    {
+      chave: "acoes",
+      cabecalho: "",
+      alinhar: "right",
+      render: (s) => (
+        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={() => abrirEdicao(s)}
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            title="Editar serviço"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmar(s)}
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-[var(--danger)]"
+            title="Excluir serviço"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+          </button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -170,7 +152,7 @@ export default function ServicosPage() {
         acao={<Button onClick={abrirNovo}>+ Novo serviço</Button>}
       />
 
-      {erro && !aberto && (
+      {erro && !modalAberto && (
         <p className="rounded-lg bg-[var(--danger-soft,#fee2e2)] px-3 py-2.5 text-sm font-medium text-[var(--danger)]">
           {erro}
         </p>
@@ -213,123 +195,20 @@ export default function ServicosPage() {
         )}
       </Card>
 
-      <Modal
-        aberto={aberto}
-        onFechar={() => setAberto(false)}
-        titulo={editId ? "Editar serviço" : "Novo serviço"}
-        rodape={
-          <div className="flex w-full items-center justify-between gap-2">
-            {editId ? (
-              <Button
-                variante="danger"
-                onClick={() => {
-                  const s = servicos.find((x) => x.id === editId);
-                  if (s) { setAberto(false); setConfirmar(s); }
-                }}
-                disabled={salvando}
-              >
-                Excluir
-              </Button>
-            ) : (
-              <span />
-            )}
-            <div className="flex gap-2">
-              <Button variante="secondary" onClick={() => setAberto(false)} disabled={salvando}>
-                Cancelar
-              </Button>
-              <Button onClick={salvar} disabled={salvando || !form.nome.trim()}>
-                {salvando ? "Salvando…" : "Salvar"}
-              </Button>
-            </div>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          {erro && aberto && (
-            <p className="rounded-lg bg-[var(--danger-soft,#fee2e2)] px-3 py-2 text-sm text-[var(--danger)]">{erro}</p>
-          )}
-
-          <Field label="Nome" required>
-            <Input
-              value={form.nome}
-              onChange={(e) => setForm({ ...form, nome: e.target.value })}
-              placeholder="Troca de óleo"
-            />
-          </Field>
-
-          <Field label="Descrição" hint="Vai na nota como descrição do serviço prestado.">
-            <Textarea
-              rows={2}
-              value={form.descricao}
-              onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-            />
-          </Field>
-
-          <Field label="Classificação do serviço" required hint="Busque pelo que a empresa faz — o código sai daqui.">
-            <SeletorLC116
-              cTribNac={form.cTribNac}
-              itemLista={form.itemListaServico}
-              onEscolher={(v) =>
-                setForm((f) => ({
-                  ...f,
-                  cTribNac: v.cTribNac,
-                  itemListaServico: v.itemListaServico,
-                  // Só sugere a descrição legal quando o campo ainda está vazio.
-                  descricao: f.descricao.trim() ? f.descricao : v.descricao,
-                }))
-              }
-            />
-          </Field>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field
-              label="Código de tributação nacional"
-              required
-              hint="Preenchido pela busca. Os 2 últimos dígitos são o desdobramento — ajuste se a sua prefeitura usar outro."
-            >
-              <Input
-                value={form.cTribNac}
-                onChange={(e) => setForm({ ...form, cTribNac: e.target.value.replace(/\D/g, "").slice(0, 6) })}
-                placeholder="140101"
-                inputMode="numeric"
-              />
-            </Field>
-            <Field label="Item da lista de serviços" hint="Ex.: 14.01">
-              <Input
-                value={form.itemListaServico}
-                onChange={(e) => setForm({ ...form, itemListaServico: e.target.value })}
-                placeholder="14.01"
-              />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Field label="Código NBS" hint="Opcional, 9 dígitos.">
-              <Input
-                value={form.cNBS}
-                onChange={(e) => setForm({ ...form, cNBS: e.target.value.replace(/\D/g, "").slice(0, 9) })}
-                inputMode="numeric"
-              />
-            </Field>
-            <Field label="Alíquota do ISS (%)" hint="A do seu município.">
-              <Input
-                type="number"
-                step="0.01"
-                value={form.aliqISS || ""}
-                onChange={(e) => setForm({ ...form, aliqISS: Number(e.target.value) || 0 })}
-              />
-            </Field>
-            <Field label="Valor padrão">
-              <Input
-                type="number"
-                step="0.01"
-                value={form.valorUnit || ""}
-                onChange={(e) => setForm({ ...form, valorUnit: Number(e.target.value) || 0 })}
-              />
-            </Field>
-          </div>
-        </div>
-      </Modal>
+      {modalAberto && (
+        <NovoServicoModal
+          onFechar={() => setModalAberto(false)}
+          servicoInicial={servicoEdit ?? undefined}
+          onCriado={(salvo) => {
+            setServicos((l) =>
+              [...l.filter((s) => s.id !== salvo.id), salvo].sort((a, b) =>
+                a.nome.localeCompare(b.nome, "pt-BR")
+              )
+            );
+            setModalAberto(false);
+          }}
+        />
+      )}
 
       <Modal
         aberto={!!confirmar}
