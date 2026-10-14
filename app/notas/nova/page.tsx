@@ -843,7 +843,7 @@ export default function NovaNotaPage() {
         {!emitindo && resultado && !resultado.ok && (
           <div className="space-y-3 text-sm">
             <div className="rounded-lg bg-[var(--danger-soft,#fee2e2)] px-3 py-2.5 font-medium text-[var(--danger)]">Falha ao emitir</div>
-            <p className="text-[var(--muted)]">{resultado.erro}</p>
+            <p className="text-[var(--muted)]">{resultado.erro || "Erro desconhecido ao emitir. Verifique os logs do servidor para mais detalhes."}</p>
             {resultado.codigo === "endereco_dest" && (
               <Button
                 onClick={() => {

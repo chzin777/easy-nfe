@@ -600,6 +600,9 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    // Log completo no servidor para diagnóstico — o front-end só vê a mensagem
+    // amigável, mas aqui precisamos do stack trace para identificar a causa raiz.
+    console.error("[emitirNota] Erro inesperado:", e);
     if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
     if (/SEFAZ_INDISPONIVEL|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|socket hang up|network|timed? ?out/i.test(msg)) {
       // Webservice fora do ar: na NF-e 55 dá para emitir pela SVC da UF. A NFC-e
@@ -611,7 +614,12 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
         ...(svc ? { contingencia: { disponivel: true as const, autorizadora: svc } } : {}),
       };
     }
-    return { ok: false, erro: msg };
+    // Fallback: se msg estiver vazia ou for genérica demais, dá uma orientação
+    // ao usuário em vez de mostrar nada. O log acima tem o detalhe técnico.
+    const erroMsg = msg && msg.trim() && !/error|undefined|null/i.test(msg)
+      ? msg
+      : "Erro interno ao processar a emissão. Tente novamente em alguns instantes. Se persistir, verifique os logs do servidor.";
+    return { ok: false, erro: erroMsg };
   }
 }
 
@@ -657,8 +665,12 @@ export async function checarStatusSefaz(modelo: "55" | "65" = "55"): Promise<Sta
     return { ok: r.ok, cStat: r.cStat, xMotivo: r.xMotivo };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error("[checarStatusSefaz] Erro inesperado:", e);
     if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
-    return { ok: false, erro: msg };
+    const erroMsg = msg && msg.trim() && !/error|undefined|null/i.test(msg)
+      ? msg
+      : "Erro interno ao consultar status da SEFAZ. Tente novamente em alguns instantes.";
+    return { ok: false, erro: erroMsg };
   }
 }
 
@@ -884,8 +896,12 @@ export async function cancelarNota(input: CancelarInput): Promise<CancelarResult
     return { ok: r.ok, cStat: r.cStat, xMotivo: r.xMotivo, nProt: r.nProt };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error("[cancelarNFe] Erro inesperado:", e);
     if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
-    return { ok: false, erro: msg };
+    const erroMsg = msg && msg.trim() && !/error|undefined|null/i.test(msg)
+      ? msg
+      : "Erro interno ao cancelar a nota. Tente novamente em alguns instantes.";
+    return { ok: false, erro: erroMsg };
   }
 }
 
@@ -1011,8 +1027,12 @@ export async function enviarNotaPorEmail(
     return { ok: true, para };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error("[envioAutoEmail] Erro inesperado:", e);
     if (/RESEND_API_KEY/.test(msg)) return { ok: false, erro: "Envio de e-mail não configurado no servidor." };
-    return { ok: false, erro: msg };
+    const erroMsg = msg && msg.trim() && !/error|undefined|null/i.test(msg)
+      ? msg
+      : "Erro interno ao enviar e-mail. Tente novamente em alguns instantes.";
+    return { ok: false, erro: erroMsg };
   }
 }
 
