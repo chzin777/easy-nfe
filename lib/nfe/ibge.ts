@@ -11,12 +11,31 @@ function normalizar(s: string): string {
     .trim();
 }
 
+// Fetch com fallback para ambientes sem CAs raiz (Docker, runtimes customizados).
+// O IBGE usa certificado válido, mas alguns ambientes não têm o bundle de CAs
+// e o fetch nativo falha com UNABLE_TO_VERIFY_LEAF_SIGNATURE.
+async function fetchComFallback(url: string): Promise<Response> {
+  try {
+    return await fetch(url);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/UNABLE_TO_VERIFY|CERT|TLS|SSL/i.test(msg)) {
+      // Fallback via https.Agent com rejectUnauthorized: false — seguro aqui
+      // porque é uma API pública read-only (IBGE), sem dados sensíveis.
+      const https = await import("node:https");
+      const agent = new https.Agent({ rejectUnauthorized: false });
+      return await fetch(url, { agent } as RequestInit);
+    }
+    throw e;
+  }
+}
+
 async function mapaDaUF(uf: string): Promise<Map<string, string>> {
   const u = uf.toUpperCase();
   const cache = cachePorUF.get(u);
   if (cache) return cache;
 
-  const r = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${u}/municipios`);
+  const r = await fetchComFallback(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${u}/municipios`);
   if (!r.ok) throw new Error(`Não foi possível consultar a base de municípios do IBGE (HTTP ${r.status}).`);
   const lista = (await r.json()) as { id: number; nome: string }[];
 
