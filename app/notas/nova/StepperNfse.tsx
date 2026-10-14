@@ -112,14 +112,26 @@ export default function StepperNfse({
   async function emitir(): Promise<boolean> {
     setEmitindo(true);
     setErro(null);
-    const r = await emitirNotaServico(form);
-    setEmitindo(false);
-    if (!r.ok) {
-      setErro(r.erro);
+    try {
+      const r = await emitirNotaServico(form);
+      if (!r.ok) {
+        setErro(r.erro);
+        return false;
+      }
+      setSucesso({ numero: r.numero, chaveAcesso: r.chaveAcesso });
+      return true;
+    } catch (e) {
+      // "Fetch failed" é a mensagem genérica do Next.js quando o server action
+      // falha antes de retornar (timeout, corpo muito grande, erro de rede).
+      const msg = e instanceof Error ? e.message : String(e);
+      const amigavel = /fetch failed|network|timed? ?out|aborted/i.test(msg)
+        ? "Não foi possível comunicar com o servidor no momento. Verifique sua conexão e tente novamente."
+        : `Erro inesperado ao emitir: ${msg}`;
+      setErro(amigavel);
       return false;
+    } finally {
+      setEmitindo(false);
     }
-    setSucesso({ numero: r.numero, chaveAcesso: r.chaveAcesso });
-    return true;
   }
 
   function novaEmissao() {

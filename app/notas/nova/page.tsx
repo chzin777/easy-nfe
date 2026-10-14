@@ -344,20 +344,33 @@ export default function NovaNotaPage() {
     setEmitindo(true);
     setResultado(null);
     setNotaEmitida(null);
-    const r = await emitirNota(input);
-    // Emitiu: o rascunho cumpriu o papel e não pode ressuscitar depois.
-    if (r.ok && r.autorizada) limparRascunho();
-    // Autorizada e gravada: abre a visualização do DANFE p/ baixar PDF/XML.
-    if (r.ok && r.autorizada && r.notaId) {
-      const nota = await obterNota(r.notaId);
-      if (nota) setNotaEmitida(nota);
-      // Envio automático por e-mail (se ligado + cliente tem e-mail): o modal
-      // dispara usando o mesmo PDF do site.
-      const pref = await envioAutoEmail(r.notaId);
-      setAutoEnviarEmail(pref.ativo);
+    try {
+      const r = await emitirNota(input);
+      // Emitiu: o rascunho cumpriu o papel e não pode ressuscitar depois.
+      if (r.ok && r.autorizada) limparRascunho();
+      // Autorizada e gravada: abre a visualização do DANFE p/ baixar PDF/XML.
+      if (r.ok && r.autorizada && r.notaId) {
+        const nota = await obterNota(r.notaId);
+        if (nota) setNotaEmitida(nota);
+        // Envio automático por e-mail (se ligado + cliente tem e-mail): o modal
+        // dispara usando o mesmo PDF do site.
+        const pref = await envioAutoEmail(r.notaId);
+        setAutoEnviarEmail(pref.ativo);
+      }
+      setResultado(r);
+    } catch (e) {
+      // "Fetch failed" é a mensagem genérica do Next.js quando o server action
+      // falha antes de retornar (timeout, corpo muito grande, erro de rede).
+      // A action já trata erros da SEFAZ — aqui só traduzimos o que o framework
+      // lançou para o usuário não ver uma mensagem técnica em inglês.
+      const msg = e instanceof Error ? e.message : String(e);
+      const amigavel = /fetch failed|network|timed? ?out|aborted/i.test(msg)
+        ? "Não foi possível comunicar com o servidor no momento. Verifique sua conexão e tente novamente."
+        : `Erro inesperado ao emitir: ${msg}`;
+      setResultado({ ok: false, erro: amigavel });
+    } finally {
+      setEmitindo(false);
     }
-    setEmitindo(false);
-    setResultado(r);
   }
 
   // Fecha a visualização do DANFE e recomeça uma nova emissão do zero.
