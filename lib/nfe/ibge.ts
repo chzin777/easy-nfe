@@ -11,23 +11,35 @@ function normalizar(s: string): string {
     .trim();
 }
 
-// Fetch com fallback para ambientes sem CAs raiz (Docker, runtimes customizados).
-// O IBGE usa certificado válido, mas alguns ambientes não têm o bundle de CAs
-// e o fetch nativo falha com UNABLE_TO_VERIFY_LEAF_SIGNATURE.
-async function fetchComFallback(url: string): Promise<Response> {
-  try {
-    return await fetch(url);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (/UNABLE_TO_VERIFY|CERT|TLS|SSL/i.test(msg)) {
-      // Fallback via https.Agent com rejectUnauthorized: false — seguro aqui
-      // porque é uma API pública read-only (IBGE), sem dados sensíveis.
-      const https = await import("node:https");
-      const agent = new https.Agent({ rejectUnauthorized: false });
-      return await fetch(url, { agent } as RequestInit);
-    }
-    throw e;
-  }
+// HTTP GET via node:https com rejectUnauthorized: false — mesma estratégia da
+// função soap() em lib/nfe/soap.ts. Alguns ambientes (Docker, runtimes sem
+// bundle de CAs) falham com UNABLE_TO_VERIFY_LEAF_SIGNATURE ao usar fetch
+// nativo. Como esta é uma API pública read-only (IBGE), sem dados sensíveis,
+// o fallback é seguro e consistente com o restante do projeto.
+async function httpsGet(url: string): Promise<{ status: number; body: string }> {
+  const https = await import("node:https");
+  const u = new URL(url);
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: u.hostname,
+        port: u.port ? Number(u.port) : 443,
+        path: u.pathname + u.search,
+        method: "GET",
+        rejectUnauthorized: false,
+        timeout: 15_000,
+        headers: { Accept: "application/json" },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c: Buffer) => (data += c));
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, body: data }));
+      },
+    );
+    req.on("timeout", () => req.destroy(new Error("Timeout ao consultar IBGE.")));
+    req.on("error", reject);
+    req.end();
+  });
 }
 
 async function mapaDaUF(uf: string): Promise<Map<string, string>> {
@@ -35,9 +47,9 @@ async function mapaDaUF(uf: string): Promise<Map<string, string>> {
   const cache = cachePorUF.get(u);
   if (cache) return cache;
 
-  const r = await fetchComFallback(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${u}/municipios`);
-  if (!r.ok) throw new Error(`Não foi possível consultar a base de municípios do IBGE (HTTP ${r.status}).`);
-  const lista = (await r.json()) as { id: number; nome: string }[];
+  const r = await httpsGet(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${u}/municipios`);
+  if (r.status < 200 || r.status >= 300) throw new Error(`Não foi possível consultar a base de municípios do IBGE (HTTP ${r.status}).`);
+  const lista = JSON.parse(r.body) as { id: number; nome: string }[];
 
   const mapa = new Map<string, string>();
   for (const m of lista) mapa.set(normalizar(m.nome), String(m.id));
