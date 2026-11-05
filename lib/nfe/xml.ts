@@ -276,15 +276,23 @@ export function montarNFe(
       ? ""
       : `<dhCont>${dados.dhCont}</dhCont><xJust>${escLim(dados.xJust ?? "", 256)}</xJust>`;
 
+  // Devolução: finNFe=4, tpNF=0 (entrada) e referência à nota original (<NFref>).
+  // Venda normal mantém finNFe=1 e tpNF=1 (saída).
+  const finNFe = dados.finNFe ?? "1";
+  const tpNF = dados.tpNF ?? "1";
+  const refChave = (dados.refChave ?? "").replace(/\D/g, "");
+  const nfRefTag = refChave.length === 44 ? `<NFref><refNFe>${refChave}</refNFe></NFref>` : "";
+
   const ide =
     `<ide>` +
     `<cUF>${cUF}</cUF><cNF>${cNF}</cNF><natOp>${escLim(dados.natOp, 60)}</natOp>` +
     `<mod>${mod}</mod><serie>${dados.serie}</serie><nNF>${dados.nNF}</nNF>` +
-    `<dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>${idDest}</idDest>` +
+    `<dhEmi>${dhEmi}</dhEmi><tpNF>${tpNF}</tpNF><idDest>${idDest}</idDest>` +
     `<cMunFG>${cMunFG}</cMunFG><tpImp>${tpImp}</tpImp><tpEmis>${tpEmis}</tpEmis>` +
-    `<cDV>${chave.slice(-1)}</cDV><tpAmb>${dados.tpAmb}</tpAmb><finNFe>1</finNFe>` +
+    `<cDV>${chave.slice(-1)}</cDV><tpAmb>${dados.tpAmb}</tpAmb><finNFe>${finNFe}</finNFe>` +
     `<indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi>` +
     `<verProc>easy-nfe-1.0</verProc>` +
+    nfRefTag +
     cont +
     `</ide>`;
 

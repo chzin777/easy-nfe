@@ -73,6 +73,15 @@ export type DadosNFe = {
   // CSC + idCSC (cIdToken) — obrigatórios para gerar o QR Code da NFC-e.
   csc?: string;
   idCsc?: string;
+  // Finalidade da emissão: 1=Normal, 2=Complementar, 3=Ajuste, 4=Devolução.
+  // Default 1 (normal). Devolução exige refChave (chave da nota original).
+  finNFe?: "1" | "2" | "3" | "4";
+  // Tipo de operação: 0=Entrada, 1=Saída. Devolução de venda é entrada (0).
+  // Default 1 (saída).
+  tpNF?: "0" | "1";
+  // Chave de acesso da nota referenciada (devolução/ajuste/complementar).
+  // Gera o grupo <NFref><refNFe> dentro de <ide>. Obrigatório quando finNFe ≠ 1.
+  refChave?: string;
 };
 
 export type ResultadoEmissao = {

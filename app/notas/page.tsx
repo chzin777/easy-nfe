@@ -39,6 +39,7 @@ import {
 } from "@/app/notas-servico/actions";
 import { MOTIVOS_CANCELAMENTO, type MotivoCancelamento } from "@/lib/nfse/evento";
 import DevolucaoModal from "./DevolucaoModal";
+import DevolucaoFiscalModal from "./DevolucaoFiscalModal";
 
 // Notas de produto (NF-e/NFC-e) e de serviço (NFS-e) na mesma lista. São
 // documentos diferentes em bases diferentes, então a tabela trabalha com uma
@@ -98,6 +99,7 @@ export default function NotasEmitidasPage() {
   const [justificativa, setJustificativa] = useState("");
   const [visualizar, setVisualizar] = useState<NotaCompleta | null>(null);
   const [devolver, setDevolver] = useState<NotaCompleta | null>(null);
+  const [devolverFiscal, setDevolverFiscal] = useState<NotaCompleta | null>(null);
   const [processando, setProcessando] = useState(false);
   const [erroEvento, setErroEvento] = useState<string | null>(null);
   const [gerandoPdf, setGerandoPdf] = useState(false);
@@ -565,7 +567,13 @@ export default function NotasEmitidasPage() {
                   variante="secondary"
                   onClick={() => { if (!visualizar) return; const n = visualizar; setVisualizar(null); setDevolver(n); }}
                 >
-                  Devolução
+                  Devolução (estoque)
+                </Button>
+                <Button
+                  variante="primary"
+                  onClick={() => { if (!visualizar) return; const n = visualizar; setVisualizar(null); setDevolverFiscal(n); }}
+                >
+                  NF-e Devolução
                 </Button>
                 <Button
                   variante="dangerSoft"
@@ -705,6 +713,15 @@ export default function NotasEmitidasPage() {
           numero={devolver.numero}
           onFechar={() => setDevolver(null)}
           onConcluido={() => { setDevolver(null); setToast("Devolução registrada — itens devolvidos ao estoque."); }}
+        />
+      )}
+
+      {devolverFiscal && (
+        <DevolucaoFiscalModal
+          notaId={devolverFiscal.id}
+          numero={devolverFiscal.numero}
+          onFechar={() => setDevolverFiscal(null)}
+          onConcluido={() => { setDevolverFiscal(null); void recarregar(); setToast("NF-e de devolução emitida com sucesso."); }}
         />
       )}
     </div>

@@ -1059,3 +1059,255 @@ export async function obterXmlNota(notaId: string): Promise<{ ok: true; xml: str
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
   }
 }
+
+// ----------------------------------------------------------------------------
+// Emissão de NF-e de Devolução (finNFe=4, tpNF=0). Referencia a nota original
+// via <NFref><refNFe> e usa CFOP de entrada (1xxx/2xxx/3xxx). A nota de
+// devolução é um documento fiscal próprio — diferente do registro interno de
+// devolução de estoque (registrarDevolucao).
+// ----------------------------------------------------------------------------
+export type EmitirDevolucaoInput = {
+  notaOriginalId: string;
+  itens: { produtoId: string; quantidade: number }[];
+  naturezaOperacao?: string;
+  infCpl?: string;
+};
+
+export type EmitirDevolucaoResultado =
+  | { ok: true; autorizada: boolean; cStat: string | null; xMotivo: string | null; chave: string; nProt: string | null; numero: number; notaId: string }
+  | { ok: false; erro: string };
+
+// CFOP de entrada correspondente ao CFOP de saída da nota original.
+// 5xxx → 1xxx (interna), 6xxx → 2xxx (interestadual), 7xxx → 3xxx (exterior).
+function cfopEntrada(cfopSaida: string): string {
+  const c = (cfopSaida ?? "").replace(/\D/g, "");
+  if (!/^[567]\d{3}$/.test(c)) return c || "1949";
+  const mapa: Record<string, string> = { "5": "1", "6": "2", "7": "3" };
+  return (mapa[c[0]] ?? "1") + c.slice(1);
+}
+
+export async function emitirNotaDevolucao(input: EmitirDevolucaoInput): Promise<EmitirDevolucaoResultado> {
+  try {
+    const empresaId = await exigirEmpresa();
+    await exigirFeature("nfe");
+    const lic = await estadoLicencaUsuario();
+    if (lic.bloqueado) return { ok: false, erro: "Licença bloqueada." };
+
+    // Nota original (deve estar autorizada e ter chave de acesso).
+    const original = await prisma.nota.findFirst({
+      where: { id: input.notaOriginalId, emitenteId: empresaId },
+      include: { cliente: true, itens: { include: { produto: true } }, emitente: true },
+    });
+    if (!original) return { ok: false, erro: "Nota original não encontrada." };
+    if (original.status !== "AUTORIZADA") return { ok: false, erro: "A nota original precisa estar autorizada para emitir devolução." };
+    if (!original.chaveAcesso || original.chaveAcesso.length !== 44) {
+      return { ok: false, erro: "A nota original não tem chave de acesso válida (44 dígitos)." };
+    }
+    if (original.modelo === "65") return { ok: false, erro: "Devolução fiscal não está disponível para NFC-e (modelo 65)." };
+
+    const empresa = original.emitente;
+    const tpAmb = empresa.ambiente === "PRODUCAO" ? "1" as const : "2" as const;
+
+    // Certificado.
+    const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
+    const cert = carregarCertificado(pfxBase64, senha);
+
+    // Mapeia itens da devolução pelos itens da nota original.
+    const origPorProd = new Map(original.itens.filter((i) => i.produtoId).map((i) => [i.produtoId!, i]));
+    const itensNFe: DadosNFe["itens"] = [];
+    for (const it of input.itens) {
+      const origItem = origPorProd.get(it.produtoId);
+      if (!origItem) return { ok: false, erro: `Item não encontrado na nota original.` };
+      const qtd = Number(it.quantidade);
+      if (!(qtd > 0)) continue;
+      if (qtd > Number(origItem.quantidade) + 1e-9) {
+        return { ok: false, erro: `Quantidade de "${origItem.nome}" excede o vendido (${Number(origItem.quantidade)}).` };
+      }
+      const preco = Number(origItem.precoUnitario);
+      const p = origItem.produto;
+      itensNFe.push({
+        cProd: p ? String(p.codigoInterno) : (origItem.produtoId ?? "").slice(0, 8),
+        cEAN: p?.codigoBarras || "SEM GTIN",
+        xProd: origItem.nome,
+        ncm: origItem.ncm ?? p?.ncm ?? "00000000",
+        cfop: cfopEntrada(origItem.cfop ?? ""),
+        uCom: origItem.unidade ?? p?.unidade ?? "UN",
+        qCom: qtd,
+        vUnCom: preco,
+        orig: p?.origem ?? "0",
+        cest: p?.cest ?? undefined,
+        cBenef: p?.codigoBeneficio ?? undefined,
+        cst: p?.cst ?? undefined,
+        aliquotaIcms: p?.aliquotaIcms != null ? Number(p.aliquotaIcms) : undefined,
+        reducaoBaseIcms: p?.reducaoBaseIcms != null ? Number(p.reducaoBaseIcms) : undefined,
+      });
+    }
+    if (!itensNFe.length) return { ok: false, erro: "Nenhum item válido para devolução." };
+
+    // Destinatário = cliente da nota original (remetente da devolução).
+    const cliente = original.cliente;
+    const destUf = (cliente.uf ?? empresa.uf).toUpperCase();
+    const cMunDest = await resolverCodMunicipio(cliente.municipio ?? "", destUf);
+    const ieDest = (cliente.inscricaoEstadual ?? "").replace(/\D/g, "");
+    let indIEDest = cliente.tipoContribuinte || "9";
+    if (indIEDest === "1" && !ieDest) indIEDest = "9";
+    const HOMOLOG_XNOME = "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL";
+    const dest: DadosNFe["dest"] = {
+      doc: cliente.documento,
+      xNome: tpAmb === "2" ? HOMOLOG_XNOME : cliente.nome,
+      ie: indIEDest === "1" ? ieDest : undefined,
+      indIEDest,
+      ender: {
+        xLgr: cliente.logradouro ?? "", nro: cliente.numero ?? "",
+        xCpl: cliente.complemento || undefined, xBairro: cliente.bairro ?? "",
+        municipio: cliente.municipio ?? empresa.municipio, uf: destUf,
+        cMun: cMunDest, cep: cliente.cep ?? "",
+      },
+    };
+
+    const cMunEmit = await resolverCodMunicipio(empresa.municipio, empresa.uf);
+    const endEmpresa = (e: typeof empresa): EnderecoNFe => ({
+      xLgr: e.logradouro ?? "", nro: e.numero ?? "",
+      xCpl: e.complemento || undefined, xBairro: e.bairro ?? "",
+      municipio: e.municipio, uf: e.uf, cep: e.cep ?? "",
+    });
+
+    // Numeração: usa a mesma série da nota original e avança o próximo número.
+    const serieDoc = original.serie;
+    let numero = empresa.proximoNumero;
+    const natOp = input.naturezaOperacao?.trim() || "DEVOLUCAO DE VENDA";
+
+    const dados: DadosNFe = {
+      tpAmb,
+      mod: "55",
+      uf: empresa.uf,
+      serie: String(serieDoc),
+      nNF: String(numero),
+      natOp,
+      modFrete: "9",
+      infCpl: input.infCpl,
+      finNFe: "4",
+      tpNF: "0",
+      refChave: original.chaveAcesso,
+      emit: {
+        cnpj: empresa.cnpj,
+        xNome: empresa.razaoSocial,
+        xFant: empresa.nomeFantasia || undefined,
+        ie: empresa.ie,
+        crt: empresa.crt,
+        ender: { ...endEmpresa(empresa), cMun: cMunEmit },
+      },
+      dest,
+      itens: itensNFe,
+    };
+
+    // Auto-correção de numeração (duplicidade 539).
+    let r = await emitirNFe(cert, dados);
+    let salto = 1;
+    let tentativas = 0;
+    while (!r.ok && r.cStat === "539" && tentativas < 25) {
+      numero += salto;
+      salto *= 2;
+      tentativas++;
+      dados.nNF = String(numero);
+      r = await emitirNFe(cert, dados);
+    }
+
+    const valorTotal = itensNFe.reduce((s, it) => s + it.qCom * it.vUnCom - (it.vDesc ?? 0), 0);
+
+    let notaId: string | undefined;
+    try {
+      const [, notaCriada] = await prisma.$transaction([
+        prisma.nota.deleteMany({
+          where: { emitenteId: empresa.id, modelo: "55", serie: serieDoc, numero, status: "REJEITADA" },
+        }),
+        prisma.nota.create({
+          data: {
+            numero,
+            serie: serieDoc,
+            modelo: "55",
+            naturezaOperacao: natOp,
+            tipoNota: "55-devolucao",
+            emitenteId: empresa.id,
+            clienteId: cliente.id,
+            informacoesAdicionais: input.infCpl || null,
+            status: r.ok ? "AUTORIZADA" : "REJEITADA",
+            ambiente: empresa.ambiente,
+            valorTotal,
+            chaveAcesso: r.chave,
+            protocolo: r.nProt,
+            autorizadaEm: r.ok ? new Date() : null,
+            xmlAutorizado: r.xmlAutorizado,
+            tpEmis: r.tpEmis,
+            cStat: r.cStat,
+            xMotivo: r.xMotivo,
+            itens: {
+              create: itensNFe.map((it, idx) => ({
+                produtoId: input.itens[idx].produtoId,
+                nome: it.xProd, ncm: it.ncm, cfop: it.cfop, unidade: it.uCom,
+                quantidade: it.qCom, precoUnitario: it.vUnCom, valorTotal: it.qCom * it.vUnCom,
+              })),
+            },
+          },
+        }),
+        ...(r.ok || r.cStat === "539"
+          ? [prisma.emitente.update({
+              where: { id: empresa.id },
+              data: { proximoNumero: numero + 1 },
+            })]
+          : []),
+      ]);
+      notaId = notaCriada.id;
+
+      // Devolução ao estoque dos itens controlados (só quando autorizada).
+      if (r.ok) {
+        try {
+          const produtos = await prisma.produto.findMany({
+            where: { id: { in: input.itens.map((i) => i.produtoId) }, empresaId },
+            select: { id: true, controlaEstoque: true },
+          });
+          const controlados = new Map(produtos.filter((p) => p.controlaEstoque).map((p) => [p.id, true]));
+          for (const it of input.itens) {
+            if (!controlados.has(it.produtoId)) continue;
+            const upd = await prisma.produto.update({
+              where: { id: it.produtoId },
+              data: { estoque: { increment: it.quantidade } },
+            });
+            await prisma.movimentoEstoque.create({
+              data: {
+                empresaId, produtoId: it.produtoId, notaId: notaCriada.id, tipo: "DEVOLUCAO",
+                quantidade: it.quantidade, saldoApos: Number(upd.estoque),
+                motivo: `Devolução NF ${numero} (ref. NF ${original.numero})`,
+              },
+            });
+          }
+        } catch {
+          // Falha no estoque não invalida a nota fiscal já autorizada.
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { ok: false, erro: r.ok ? `Autorizada na SEFAZ, mas falhou ao gravar: ${msg}` : msg };
+    }
+
+    if (!r.ok) {
+      return { ok: false, erro: `SEFAZ recusou (cStat ${r.cStat}): ${r.xMotivo ?? "—"}` };
+    }
+
+    return {
+      ok: true,
+      autorizada: true,
+      cStat: r.cStat,
+      xMotivo: r.xMotivo,
+      chave: r.chave,
+      nProt: r.nProt,
+      numero,
+      notaId: notaId!,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[emitirNotaDevolucao] Erro inesperado:", e);
+    if (/password|mac|integrity/i.test(msg)) return { ok: false, erro: "Senha do certificado incorreta." };
+    return { ok: false, erro: msg };
+  }
+}
