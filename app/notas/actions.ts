@@ -1068,9 +1068,14 @@ export async function obterXmlNota(notaId: string): Promise<{ ok: true; xml: str
 // ----------------------------------------------------------------------------
 export type EmitirDevolucaoInput = {
   notaOriginalId: string;
-  itens: { produtoId: string; quantidade: number }[];
+  itens: { produtoId: string; quantidade: number; cfop?: string }[];
   naturezaOperacao?: string;
   infCpl?: string;
+  // Chave da NF-e de entrada referenciada (devolução de compra).
+  // Quando informada, substitui a chave da nota original como <refNFe>.
+  refChaveManual?: string;
+  // Força tpNF=1 (saída) para devolução de compra. Default: tpNF=0 (entrada).
+  tipoSaida?: boolean;
 };
 
 export type EmitirDevolucaoResultado =
@@ -1125,12 +1130,15 @@ export async function emitirNotaDevolucao(input: EmitirDevolucaoInput): Promise<
       }
       const preco = Number(origItem.precoUnitario);
       const p = origItem.produto;
+      // CFOP: usa o informado pelo usuário (devolução de compra) ou converte automaticamente (devolução de venda).
+      const cfopManual = (it.cfop ?? "").replace(/\D/g, "");
+      const cfop = /^[1-7]\d{3}$/.test(cfopManual) ? cfopManual : cfopEntrada(origItem.cfop ?? "");
       itensNFe.push({
         cProd: p ? String(p.codigoInterno) : (origItem.produtoId ?? "").slice(0, 8),
         cEAN: p?.codigoBarras || "SEM GTIN",
         xProd: origItem.nome,
         ncm: origItem.ncm ?? p?.ncm ?? "00000000",
-        cfop: cfopEntrada(origItem.cfop ?? ""),
+        cfop,
         uCom: origItem.unidade ?? p?.unidade ?? "UN",
         qCom: qtd,
         vUnCom: preco,
@@ -1177,6 +1185,12 @@ export async function emitirNotaDevolucao(input: EmitirDevolucaoInput): Promise<
     let numero = empresa.proximoNumero;
     const natOp = input.naturezaOperacao?.trim() || "DEVOLUCAO DE VENDA";
 
+    // Devolução de compra: saída (tpNF=1) referenciando NF-e de entrada.
+    // Devolução de venda: entrada (tpNF=0) referenciando NF-e de saída.
+    const refChave = (input.refChaveManual ?? "").replace(/\D/g, "");
+    const chaveRef = refChave.length === 44 ? refChave : original.chaveAcesso;
+    const tpNF = input.tipoSaida ? "1" as const : "0" as const;
+
     const dados: DadosNFe = {
       tpAmb,
       mod: "55",
@@ -1187,8 +1201,8 @@ export async function emitirNotaDevolucao(input: EmitirDevolucaoInput): Promise<
       modFrete: "9",
       infCpl: input.infCpl,
       finNFe: "4",
-      tpNF: "0",
-      refChave: original.chaveAcesso,
+      tpNF,
+      refChave: chaveRef,
       emit: {
         cnpj: empresa.cnpj,
         xNome: empresa.razaoSocial,
