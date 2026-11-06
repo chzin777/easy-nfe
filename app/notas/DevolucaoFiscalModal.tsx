@@ -86,7 +86,7 @@ export default function DevolucaoFiscalModal({
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-[var(--muted)]">
-            Emite uma NF-e de devolução (finNFe=4) referenciando a nota original. Os itens voltam ao estoque automaticamente após autorização.
+            Emite uma NF-e de devolução (finNFe=4) referenciando a nota original. Após a autorização, os itens {tipoSaida ? "saem do" : "voltam ao"} estoque automaticamente.
           </p>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

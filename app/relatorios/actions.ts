@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { exigirEmpresa } from "@/lib/empresa";
 import { exigirAlgumaFeature } from "@/lib/permissoes";
+import { TIPO_DEVOLUCAO_COMPRA } from "@/lib/mock-data";
 
 // ---------------------------------------------------------------------------
 // Fonte de dados dos relatórios PDF. Cada dataset devolve linhas já
@@ -144,7 +145,7 @@ export async function dadosRelatorio(dataset: Dataset, filtro: FiltroRelatorio =
       const range = intervalo(filtro);
       const [notas, vendas] = await Promise.all([
         prisma.nota.findMany({
-          where: { emitenteId: empresaId, status: "AUTORIZADA", autorizadaEm: range },
+          where: { emitenteId: empresaId, status: "AUTORIZADA", autorizadaEm: range, tipoNota: { not: TIPO_DEVOLUCAO_COMPRA } },
           select: { autorizadaEm: true, valorTotal: true },
         }),
         prisma.venda.findMany({

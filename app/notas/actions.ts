@@ -161,8 +161,12 @@ async function baixarEstoqueEmissao(
   });
 }
 
-// Devolve o estoque ao cancelar uma nota (movimento de ENTRADA por produto).
+// Reverte o estoque ao cancelar uma nota: o que saiu volta (ENTRADA). Só a NF-e
+// de devolução que somou ao estoque faz o caminho inverso (SAIDA).
 async function restaurarEstoqueCancelamento(empresaId: string, notaId: string, numero: number): Promise<void> {
+  const somou = await prisma.movimentoEstoque.count({
+    where: { notaId, tipo: "DEVOLUCAO", nota: { tipoNota: TIPO_DEVOLUCAO_COMPRA } },
+  });
   const itens = await prisma.itemNota.findMany({
     where: { notaId, produtoId: { not: null } },
     include: { produto: { select: { id: true, controlaEstoque: true } } },
@@ -174,9 +178,12 @@ async function restaurarEstoqueCancelamento(empresaId: string, notaId: string, n
   if (!mapa.size) return;
   await prisma.$transaction(async (tx) => {
     for (const [pid, qty] of mapa) {
-      const upd = await tx.produto.update({ where: { id: pid }, data: { estoque: { increment: qty } } });
+      const upd = await tx.produto.update({
+        where: { id: pid },
+        data: { estoque: somou ? { decrement: qty } : { increment: qty } },
+      });
       await tx.movimentoEstoque.create({
-        data: { empresaId, produtoId: pid, notaId, tipo: "ENTRADA", quantidade: qty, saldoApos: Number(upd.estoque), motivo: `Cancelamento NF-e ${numero}` },
+        data: { empresaId, produtoId: pid, notaId, tipo: somou ? "SAIDA" : "ENTRADA", quantidade: qty, saldoApos: Number(upd.estoque), motivo: `Cancelamento NF-e ${numero}` },
       });
     }
   });
@@ -1286,7 +1293,8 @@ export async function emitirNotaDevolucao(input: EmitirDevolucaoInput): Promise<
       ]);
       notaId = notaCriada.id;
 
-      // Devolução ao estoque dos itens controlados (só quando autorizada).
+      // Estoque dos itens controlados (só quando autorizada): devolução de venda
+      // (entrada) soma; devolução de compra (saída) baixa.
       if (r.ok) {
         try {
           const produtos = await prisma.produto.findMany({
@@ -1298,11 +1306,11 @@ export async function emitirNotaDevolucao(input: EmitirDevolucaoInput): Promise<
             if (!controlados.has(it.produtoId)) continue;
             const upd = await prisma.produto.update({
               where: { id: it.produtoId },
-              data: { estoque: { increment: it.quantidade } },
+              data: { estoque: input.tipoSaida ? { decrement: it.quantidade } : { increment: it.quantidade } },
             });
             await prisma.movimentoEstoque.create({
               data: {
-                empresaId, produtoId: it.produtoId, notaId: notaCriada.id, tipo: "DEVOLUCAO",
+                empresaId, produtoId: it.produtoId, notaId: notaCriada.id, tipo: input.tipoSaida ? "SAIDA" : "DEVOLUCAO",
                 quantidade: it.quantidade, saldoApos: Number(upd.estoque),
                 motivo: `Devolução NF ${numero} (ref. NF ${original.numero})`,
               },

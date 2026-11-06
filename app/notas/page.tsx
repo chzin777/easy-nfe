@@ -24,7 +24,7 @@ import DanfeNFCe from "@/app/ui/DanfeNFCe";
 import Danfse from "@/app/ui/Danfse";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { baixarDanfePdf } from "@/app/ui/danfePdf";
-import { STATUS_NOTA, TIPOS_NOTA_EMISSAO, rotulo, rotuloTipoCurto } from "@/lib/mock-data";
+import { STATUS_NOTA, TIPOS_NOTA_EMISSAO, TIPO_DEVOLUCAO_COMPRA, rotulo, rotuloTipoCurto } from "@/lib/mock-data";
 import { formatCpfCnpj } from "@/lib/format";
 import type { StatusNota } from "@/lib/types";
 import { listarNotas, cancelarNota, obterXmlNota, type NotaCompleta } from "./actions";
@@ -220,9 +220,11 @@ export default function NotasEmitidasPage() {
     const aut = filtradas.filter((n) => n.status === "autorizada");
     const canceladas = filtradas.filter((n) => n.status === "cancelada").length;
     const rejeitadas = filtradas.filter((n) => n.status === "rejeitada" || n.status === "denegada").length;
-    const valorAut = aut.reduce((s, n) => s + n.valor, 0);
+    // Devolução é nota autorizada, mas não é faturamento.
+    const faturadas = aut.filter((n) => n.produto?.tipoNota !== TIPO_DEVOLUCAO_COMPRA);
+    const valorAut = faturadas.reduce((s, n) => s + n.valor, 0);
     const agora = new Date();
-    const valorMes = aut.reduce((s, n) => {
+    const valorMes = faturadas.reduce((s, n) => {
       const d = new Date(n.emitidaEm);
       return d.getMonth() === agora.getMonth() && d.getFullYear() === agora.getFullYear() ? s + n.valor : s;
     }, 0);
@@ -233,7 +235,7 @@ export default function NotasEmitidasPage() {
       rejeitadas,
       valorAut,
       valorMes,
-      ticket: aut.length ? valorAut / aut.length : 0,
+      ticket: faturadas.length ? valorAut / faturadas.length : 0,
     };
   }, [filtradas]);
 

@@ -2,6 +2,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { empresaAtivaId } from "@/lib/empresa";
+import { TIPO_DEVOLUCAO_COMPRA } from "@/lib/mock-data";
+
+// Devolução é nota autorizada, mas não é receita: fica fora de faturamento e lucro.
+const notaFaturada = { status: "AUTORIZADA" as const, tipoNota: { not: TIPO_DEVOLUCAO_COMPRA } };
 
 export type ResumoDashboard = {
   produtos: number;
@@ -130,7 +134,7 @@ async function resumoInterno(filtros: FiltrosDashboard): Promise<ResumoDashboard
     produtoId: { not: null },
     nota: {
       emitenteId: empresaId,
-      status: "AUTORIZADA" as const,
+      ...notaFaturada,
       ...(modelo ? { modelo } : {}),
       ...(desde ? { emitidaEm: { gte: desde } } : {}),
     },
@@ -144,9 +148,9 @@ async function resumoInterno(filtros: FiltrosDashboard): Promise<ResumoDashboard
     prisma.produto.count({ where: { empresaId } }),
     prisma.cliente.count({ where: { empresaId } }),
     prisma.transportadora.count({ where: { empresaId } }),
-    prisma.nota.count({ where: { ...wherePeriodo, status: "AUTORIZADA" } }),
+    prisma.nota.count({ where: { ...wherePeriodo, ...notaFaturada } }),
     prisma.nota.aggregate({
-      where: { ...wherePeriodo, status: "AUTORIZADA" },
+      where: { ...wherePeriodo, ...notaFaturada },
       _sum: { valorTotal: true },
     }),
     prisma.nota.findMany({
@@ -162,7 +166,7 @@ async function resumoInterno(filtros: FiltrosDashboard): Promise<ResumoDashboard
     }),
     prisma.nota.findMany({
       where: { emitenteId: empresaId, ...(modelo ? { modelo } : {}), emitidaEm: { gte: inicioJanela } },
-      select: { emitidaEm: true, valorTotal: true, status: true },
+      select: { emitidaEm: true, valorTotal: true, status: true, tipoNota: true },
     }),
     prisma.itemNota.findMany({
       where: whereItensAutorizados(inicio),
@@ -179,7 +183,7 @@ async function resumoInterno(filtros: FiltrosDashboard): Promise<ResumoDashboard
     // --- Comparação com o período anterior ---
     wherePeriodoAnterior
       ? prisma.nota.aggregate({
-          where: { ...wherePeriodoAnterior, status: "AUTORIZADA" },
+          where: { ...wherePeriodoAnterior, ...notaFaturada },
           _sum: { valorTotal: true },
           _count: { _all: true },
         })
@@ -190,7 +194,7 @@ async function resumoInterno(filtros: FiltrosDashboard): Promise<ResumoDashboard
             produtoId: { not: null },
             nota: {
               emitenteId: empresaId,
-              status: "AUTORIZADA" as const,
+              ...notaFaturada,
               ...(modelo ? { modelo } : {}),
               emitidaEm: { gte: janelaAnterior.de, lt: janelaAnterior.ate },
             },
@@ -201,14 +205,14 @@ async function resumoInterno(filtros: FiltrosDashboard): Promise<ResumoDashboard
     // Faturamento e volume por modelo de documento.
     prisma.nota.groupBy({
       by: ["modelo"],
-      where: { ...wherePeriodo, status: "AUTORIZADA" },
+      where: { ...wherePeriodo, ...notaFaturada },
       _sum: { valorTotal: true },
       _count: { _all: true },
     }),
     // Top clientes por faturamento no período.
     prisma.nota.groupBy({
       by: ["clienteId"],
-      where: { ...wherePeriodo, status: "AUTORIZADA" },
+      where: { ...wherePeriodo, ...notaFaturada },
       _sum: { valorTotal: true },
       _count: { _all: true },
       orderBy: { _sum: { valorTotal: "desc" } },
@@ -247,7 +251,7 @@ async function resumoInterno(filtros: FiltrosDashboard): Promise<ResumoDashboard
     const i = idx.get(k);
     if (i === undefined) continue;
     buckets[i].notas += 1;
-    if (n.status === "AUTORIZADA") buckets[i].faturado += Number(n.valorTotal);
+    if (n.status === "AUTORIZADA" && n.tipoNota !== TIPO_DEVOLUCAO_COMPRA) buckets[i].faturado += Number(n.valorTotal);
   }
   // Lucro por mês: receita do item − (qtd × custo), só itens com custo cadastrado.
   for (const it of itensJanela) {
