@@ -9,11 +9,12 @@ import {
   contingenciaDaUF,
   type Certificado,
 } from "@/lib/nfe";
-import { dataHoraBrasilia } from "@/lib/nfe/chave";
+import { dataHoraBrasilia, dvMod11 } from "@/lib/nfe/chave";
 import { lerNFe, type TotaisNFe } from "@/lib/nfe/danfe-xml";
 import { cfopPorDestino } from "@/lib/nfe/xml";
 import type { DadosNFe, EnderecoNFe } from "@/lib/nfe/types";
 import { resolverCodMunicipio } from "@/lib/nfe/ibge";
+import { TIPO_DEVOLUCAO_COMPRA } from "@/lib/mock-data";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { exigirEmpresa } from "@/lib/empresa";
@@ -100,6 +101,8 @@ export type EmitirInput = {
   // item usa o do próprio cadastro. O primeiro dígito ainda é ajustado pelo
   // destino (5 interna, 6 interestadual, 7 exterior).
   cfop?: string;
+  // Devolução de compra: chave da NF-e recebida do fornecedor (<refNFe>).
+  refChave?: string;
   // Emissão em contingência SVC (só NF-e 55), quando a autorizadora da UF está fora.
   // A justificativa vai no XML (xJust, 15-256 chars) e é definitiva.
   contingencia?: { justificativa: string };
@@ -190,6 +193,13 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     await exigirFeature(nfce ? "emitir_nfce" : "emitir_nfe");
     const lic = await estadoLicencaUsuario();
     if (lic.bloqueado) return { ok: false, erro: lic.mensagem ?? "Licença expirada — emissão bloqueada." };
+
+    const devolucao = input.tipoNota === TIPO_DEVOLUCAO_COMPRA;
+    const refChave = (input.refChave ?? "").replace(/\D/g, "");
+    if (devolucao && (refChave.length !== 44 || dvMod11(refChave.slice(0, 43)) !== refChave[43])) {
+      return { ok: false, erro: "Chave da NF-e de compra inválida. Confira os 44 dígitos da nota recebida." };
+    }
+    const natOp = devolucao ? "DEVOLUCAO DE COMPRA" : "VENDA DE MERCADORIA";
 
     const empresaId = await exigirEmpresa();
     const empresa = await prisma.emitente.findUniqueOrThrow({ where: { id: empresaId } });
@@ -293,8 +303,9 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
     });
 
     // CFOP informado na emissão vale para a nota inteira e vence o cadastro do
-    // produto. Entrada usa 1/2/3; saída, 5/6/7.
-    const cfopNota = (input.cfop ?? "").replace(/\D/g, "");
+    // produto. Entrada usa 1/2/3; saída, 5/6/7. Devolução nunca usa o CFOP de
+    // venda do cadastro: sem informar, vai 5202 (6202 fora do estado).
+    const cfopNota = (input.cfop ?? "").replace(/\D/g, "") || (devolucao ? "5202" : "");
     if (cfopNota) {
       const entrada = input.tipoNota.includes("entrada");
       const inicio = entrada ? /^[123]/ : /^[567]/;
@@ -456,7 +467,8 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       xJust: cont?.xJust,
       serie: String(serieDoc),
       nNF: String(numero),
-      natOp: "VENDA DE MERCADORIA",
+      natOp,
+      ...(devolucao ? { finNFe: "4" as const, tpNF: "1" as const, refChave } : {}),
       modFrete: input.modFrete || "9",
       vFrete: valorFrete,
       infCpl: input.infCpl,
@@ -508,7 +520,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
             serie: serieDoc,
             modelo,
             qrCode: r.qrCode ?? null,
-            naturezaOperacao: "VENDA DE MERCADORIA",
+            naturezaOperacao: natOp,
             tipoNota: input.tipoNota,
             emitenteId: empresa.id,
             clienteId: cliente.id,
@@ -574,7 +586,8 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       }
       // Envio por WhatsApp ao cliente — só quando autorizada. Roda após a
       // resposta (after) p/ não atrasar a emissão; falhas são engolidas dentro.
-      if (r.ok) {
+      // Devolução vai ao fornecedor, não a um cliente: fica fora do envio.
+      if (r.ok && !devolucao) {
         const id = notaId;
         after(() => dispararNotaWhatsApp(empresa.id, id));
         // Envio automático por e-mail é disparado no CLIENTE após renderizar o

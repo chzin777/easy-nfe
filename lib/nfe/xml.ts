@@ -97,11 +97,14 @@ function r2(v: number): number {
 }
 
 // Monta o grupo ICMS e devolve também vBC/vICMS do item p/ somar nos totais.
-// Simples Nacional → CSOSN 102 (sem imposto destacado).
+// Simples Nacional → CSOSN 102 (sem imposto destacado); devolução usa CSOSN 900.
 // Regime Normal: CST 40 (isenta, padrão) ou CST 20 (redução de base de cálculo).
-function icmsXml(crt: string, item: ItemNFe, base: number): { xml: string; vBC: number; vICMS: number } {
+function icmsXml(crt: string, item: ItemNFe, base: number, devolucao = false): { xml: string; vBC: number; vICMS: number } {
   const orig = item.orig;
   if (crt === "1" || crt === "2") {
+    if (devolucao) {
+      return { xml: `<ICMS><ICMSSN900><orig>${orig}</orig><CSOSN>900</CSOSN></ICMSSN900></ICMS>`, vBC: 0, vICMS: 0 };
+    }
     return { xml: `<ICMS><ICMSSN102><orig>${orig}</orig><CSOSN>102</CSOSN></ICMSSN102></ICMS>`, vBC: 0, vICMS: 0 };
   }
   if (item.cst === "20") {
@@ -127,6 +130,7 @@ function detXml(
   nItem: number,
   crt: string,
   vFrete = 0,
+  devolucao = false,
 ): { xml: string; vBC: number; vICMS: number } {
   const vProd = item.qCom * item.vUnCom;
   // Desconto do item (vDesc) — limitado ao valor do produto. Só inclui se > 0.
@@ -136,7 +140,7 @@ function detXml(
   // de vDesc — trocar a ordem é rejeição 225.
   const freteTag = vFrete > 0 ? `<vFrete>${n2(vFrete)}</vFrete>` : "";
   // O frete integra a base de cálculo do ICMS (LC 87/96 art. 13).
-  const icms = icmsXml(crt, item, vProd - vDesc + vFrete);
+  const icms = icmsXml(crt, item, vProd - vDesc + vFrete, devolucao);
   // CEST tem EXATAMENTE 7 dígitos no schema 4.00. Valor inválido (ex.: 8 dígitos)
   // gera rejeição 225 — então só inclui quando bater os 7 dígitos.
   const cestDig = (item.cest ?? "").replace(/\D/g, "");
@@ -261,7 +265,9 @@ export function montarNFe(
     const cfop = cfopPorDestino(it.cfop, uf, nfce ? uf : ufDest);
     return cfop === it.cfop ? it : { ...it, cfop };
   });
-  const detsArr = itensCfop.map((it, i) => detXml(it, i + 1, dados.emit.crt, fretePorItem[i]));
+  const detsArr = itensCfop.map((it, i) =>
+    detXml(it, i + 1, dados.emit.crt, fretePorItem[i], dados.finNFe === "4"),
+  );
   const dets = detsArr.map((d) => d.xml).join("");
   const vBCTotal = detsArr.reduce((s, d) => s + d.vBC, 0);
   const vICMSTotal = detsArr.reduce((s, d) => s + d.vICMS, 0);

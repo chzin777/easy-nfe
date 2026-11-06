@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Badge, Card } from "../ui/primitives";
 import CountUp from "../ui/CountUp";
 import { formatBRL, formatData } from "@/lib/format";
-import { TIPOS_NOTA, rotulo } from "@/lib/mock-data";
+import { TIPOS_NOTA_EMISSAO, rotulo } from "@/lib/mock-data";
 import type { ReactNode } from "react";
 import type { StatusNota } from "@/lib/types";
 import { resumoDashboard, type PeriodoFiltro } from "../dashboard-actions";
@@ -190,7 +190,7 @@ export default async function Dashboard({
           linhas={resumo.recentes.map((n) => ({
             Número: n.numero,
             Cliente: n.clienteNome,
-            Tipo: rotulo(TIPOS_NOTA, n.tipoNota),
+            Tipo: rotulo(TIPOS_NOTA_EMISSAO, n.tipoNota),
             Emitida: formatData(n.emitidaEm),
             Valor: num(n.valorTotal),
             Status: n.status,
@@ -210,7 +210,7 @@ export default async function Dashboard({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">Nº {n.numero} · {n.clienteNome}</p>
                     <p className="text-xs text-[var(--muted)]">
-                      {rotulo(TIPOS_NOTA, n.tipoNota)} · {formatData(n.emitidaEm)}
+                      {rotulo(TIPOS_NOTA_EMISSAO, n.tipoNota)} · {formatData(n.emitidaEm)}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">

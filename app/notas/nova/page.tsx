@@ -14,7 +14,7 @@ import { formatBRL } from "@/lib/format";
 import Modal from "@/app/ui/Modal";
 import Stepper, { Step } from "@/app/ui/Stepper";
 import LightningLoader from "@/app/ui/LightningLoader";
-import { TIPOS_NOTA, MODALIDADES_FRETE, rotulo } from "@/lib/mock-data";
+import { TIPOS_NOTA_EMISSAO, TIPO_DEVOLUCAO_COMPRA, MODALIDADES_FRETE, rotulo } from "@/lib/mock-data";
 import type { ItemNota, Cliente, Produto, Transportadora } from "@/lib/types";
 
 // Item da nota com desconto opcional (não persiste no tipo base).
@@ -69,6 +69,8 @@ export default function NovaNotaPage() {
   const [temNfse, setTemNfse] = useState(false);
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [tipoNota, setTipoNota] = useState("55-saida");
+  // Chave da NF-e de compra referenciada (só na devolução ao fornecedor).
+  const [refChave, setRefChave] = useState("");
   const [clienteId, setClienteId] = useState("");
   const [transportadoraId, setTransportadoraId] = useState("");
   const [modFrete, setModFrete] = useState("9");
@@ -112,8 +114,9 @@ export default function NovaNotaPage() {
 
   // A opção de serviço só aparece para quem tem o benefício.
   const opcoesTipo = temNfse
-    ? [...TIPOS_NOTA, { value: "nfse", label: "NFS-e (serviço)" }]
-    : TIPOS_NOTA;
+    ? [...TIPOS_NOTA_EMISSAO, { value: "nfse", label: "NFS-e (serviço)" }]
+    : TIPOS_NOTA_EMISSAO;
+  const devolucao = tipoNota === TIPO_DEVOLUCAO_COMPRA;
 
   // O mesmo seletor serve os dois fluxos — trocar o tipo troca o formulário
   // abaixo dele, sem sair da página.
@@ -124,6 +127,7 @@ export default function NovaNotaPage() {
   // Limpa todos os campos e volta ao passo 1 (mantém listas já carregadas).
   function resetarFormulario() {
     setTipoNota(padroes.tipoNotaPadrao);
+    setRefChave("");
     setClienteId(padroes.clientePadraoId);
     setTransportadoraId("");
     setModFrete(padroes.modFretePadrao);
@@ -179,6 +183,7 @@ export default function NovaNotaPage() {
     }
     salvarRascunho({
       tipoNota,
+      refChave,
       clienteId,
       transportadoraId,
       modFrete,
@@ -195,13 +200,14 @@ export default function NovaNotaPage() {
         precoVisto: i.precoOriginal,
       })),
     });
-  }, [carregando, rascunho, emitindo, resultado, tipoNota, clienteId, transportadoraId, modFrete, valorFrete, info, descNota, itens]);
+  }, [carregando, rascunho, emitindo, resultado, tipoNota, refChave, clienteId, transportadoraId, modFrete, valorFrete, info, descNota, itens]);
 
   // Retoma o rascunho reidratando os itens contra o catálogo atual.
   function retomarRascunho() {
     if (!rascunho) return;
     const { itens: recuperados } = reidratarItens(rascunho.itens, produtos);
     setTipoNota(rascunho.tipoNota);
+    setRefChave(rascunho.refChave ?? "");
     if (clientes.some((c) => c.id === rascunho.clienteId)) setClienteId(rascunho.clienteId);
     if (transportadoras.some((t) => t.id === rascunho.transportadoraId)) setTransportadoraId(rascunho.transportadoraId);
     setModFrete(rascunho.modFrete);
@@ -309,6 +315,10 @@ export default function NovaNotaPage() {
       setResultado({ ok: false, erro: "Selecione um cliente." });
       return;
     }
+    if (devolucao && refChave.length !== 44) {
+      setResultado({ ok: false, erro: "Informe os 44 dígitos da chave da NF-e de compra." });
+      return;
+    }
     if (!transporteOk) {
       setResultado({ ok: false, erro: "Escolha uma transportadora para a modalidade de frete selecionada." });
       return;
@@ -338,6 +348,7 @@ export default function NovaNotaPage() {
       })),
       descontoNota: descNota.valor > 0 ? descNota : undefined,
       cfop: cfopNota.trim() || undefined,
+      refChave: devolucao ? refChave : undefined,
       contingencia,
     };
 
@@ -395,7 +406,7 @@ export default function NovaNotaPage() {
   const passos = [...(pularDest ? [] : ["dest"]), "produtos", ...(mostrarTransporte ? ["transporte"] : []), "revisao"];
   function canProceed(step: number) {
     const kind = passos[step - 1];
-    if (kind === "dest") return clienteId !== "";
+    if (kind === "dest") return clienteId !== "" && (!devolucao || refChave.length === 44);
     if (kind === "produtos") return itens.length > 0;
     if (kind === "transporte") return transporteOk;
     return true;
@@ -450,7 +461,7 @@ export default function NovaNotaPage() {
             {padroes.travarTipoNota ? (
               <Field label="Tipo de nota" hint="Fixado nas configurações">
                 <div className="flex h-[46px] items-center rounded-lg border border-[var(--border)] bg-slate-50 px-3 text-sm font-medium text-[var(--muted)]">
-                  {rotulo(TIPOS_NOTA, tipoNota)}
+                  {rotulo(TIPOS_NOTA_EMISSAO, tipoNota)}
                 </div>
               </Field>
             ) : (
@@ -458,7 +469,11 @@ export default function NovaNotaPage() {
                 {selectTipo}
               </Field>
             )}
-            <Field label="Cliente" required>
+            <Field
+              label={devolucao ? "Fornecedor (destinatário)" : "Cliente"}
+              required
+              hint={devolucao ? "Precisa estar no cadastro de clientes para receber a nota." : undefined}
+            >
               <ClientePicker
                 clientes={clientes}
                 value={clienteId}
@@ -466,6 +481,18 @@ export default function NovaNotaPage() {
                 onCriado={(c) => { setClientes((prev) => [...prev, c]); setClienteId(c.id); }}
               />
             </Field>
+            {devolucao && (
+              <div className="sm:col-span-2">
+                <Field label="Chave da NF-e de compra" required hint="44 dígitos da nota recebida do fornecedor.">
+                  <Input
+                    inputMode="numeric"
+                    value={refChave}
+                    onChange={(e) => setRefChave(e.target.value.replace(/\D/g, "").slice(0, 44))}
+                    placeholder="Chave de acesso da nota de entrada"
+                  />
+                </Field>
+              </div>
+            )}
           </div>
           {cliente && (
             <div className="mt-4 rounded-lg border border-[var(--border)] bg-slate-50 px-4 py-3 text-sm">
@@ -481,6 +508,11 @@ export default function NovaNotaPage() {
         {/* Etapa 2 */}
         <Step>
           <SectionTitle>Produtos</SectionTitle>
+          {devolucao && (
+            <p className="-mt-2 mb-4 text-sm text-[var(--muted)]">
+              Ajuste o preço de cada item para o valor unitário da nota de compra.
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
             <Field label="Produto">
               <ProdutoPicker
@@ -730,13 +762,19 @@ export default function NovaNotaPage() {
 
           {/* Dados gerais */}
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-[var(--border)] bg-slate-50 p-4 text-sm sm:grid-cols-3">
-            <Resumo rotulo="Tipo de nota" valor={rotulo(TIPOS_NOTA, tipoNota)} />
+            <Resumo rotulo="Tipo de nota" valor={rotulo(TIPOS_NOTA_EMISSAO, tipoNota)} />
             <Resumo rotulo="Destinatário" valor={cliente?.nome ?? "—"} />
             <Resumo rotulo="Documento" valor={cliente?.documento ?? "—"} />
-            <Resumo rotulo="CFOP" valor={cfopNota || "Do cadastro de cada produto"} />
+            <Resumo rotulo="CFOP" valor={cfopNota || (devolucao ? "5202 (6202 fora do estado)" : "Do cadastro de cada produto")} />
             <Resumo rotulo="Modalidade do frete" valor={rotulo(MODALIDADES_FRETE, modFrete)} />
             <Resumo rotulo="Transportadora" valor={transportadora?.nome ?? "Sem transporte / retirada"} />
             <Resumo rotulo="Valor do frete" valor={freteNota > 0 ? formatBRL(freteNota) : "—"} />
+            {devolucao && (
+              <div className="col-span-2 sm:col-span-3">
+                <p className="text-xs uppercase tracking-wider text-[var(--muted)]">NF-e de compra referenciada</p>
+                <p className="mt-0.5 break-all font-mono text-xs font-medium">{refChave}</p>
+              </div>
+            )}
           </div>
 
           {/* Produtos da nota */}
@@ -795,14 +833,18 @@ export default function NovaNotaPage() {
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field
               label="CFOP da nota"
-              hint="Vazio = o CFOP de cada produto. Preenchido, vale para todos os itens."
+              hint={
+                devolucao
+                  ? "Vazio = 5202 (6202 fora do estado). Mercadoria com ST: 5411."
+                  : "Vazio = o CFOP de cada produto. Preenchido, vale para todos os itens."
+              }
             >
               <Input
                 inputMode="numeric"
                 maxLength={4}
                 value={cfopNota}
                 onChange={(e) => setCfopNota(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                placeholder={tipoNota.includes("entrada") ? "Ex.: 1102" : "Ex.: 5102"}
+                placeholder={tipoNota.includes("entrada") ? "Ex.: 1102" : devolucao ? "Ex.: 5202" : "Ex.: 5102"}
               />
             </Field>
             <div className="sm:col-span-2">

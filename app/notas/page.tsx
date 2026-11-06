@@ -24,7 +24,7 @@ import DanfeNFCe from "@/app/ui/DanfeNFCe";
 import Danfse from "@/app/ui/Danfse";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { baixarDanfePdf } from "@/app/ui/danfePdf";
-import { STATUS_NOTA, TIPOS_NOTA, rotulo, rotuloTipoCurto } from "@/lib/mock-data";
+import { STATUS_NOTA, TIPOS_NOTA_EMISSAO, rotulo, rotuloTipoCurto } from "@/lib/mock-data";
 import { formatCpfCnpj } from "@/lib/format";
 import type { StatusNota } from "@/lib/types";
 import { listarNotas, cancelarNota, obterXmlNota, type NotaCompleta } from "./actions";
@@ -280,7 +280,7 @@ export default function NotasEmitidasPage() {
     const linhas = filtradas.map((l) => [
       l.numero,
       l.origem === "servico" ? "NFS-e" : "NF-e/NFC-e",
-      l.origem === "servico" ? "NFS-e" : rotulo(TIPOS_NOTA, l.produto!.tipoNota),
+      l.origem === "servico" ? "NFS-e" : rotulo(TIPOS_NOTA_EMISSAO, l.produto!.tipoNota),
       l.nome,
       l.status,
       formatData(l.emitidaEm),
@@ -458,7 +458,7 @@ export default function NotasEmitidasPage() {
             placeholder="Todos os status"
           />
           <Select
-            opcoes={TIPOS_NOTA}
+            opcoes={TIPOS_NOTA_EMISSAO}
             value={filtroTipo}
             onChange={(e) => { setFiltroTipo(e.target.value); setPagina(1); }}
             placeholder="Todos os tipos"

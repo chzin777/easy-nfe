@@ -28,6 +28,7 @@ export type ItemRascunho = {
 export type Rascunho = {
   em: number;
   tipoNota: string;
+  refChave?: string;
   clienteId: string;
   transportadoraId: string;
   modFrete: string;

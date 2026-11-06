@@ -65,6 +65,15 @@ export const TIPOS_NOTA: Opcao[] = [
   { value: "65-saida", label: "NFC-e (mod. 65) - Saída" },
 ];
 
+// Devolução ao fornecedor: NF-e de saída (finNFe=4) que referencia a nota de
+// compra. Só existe na emissão — fora de orçamentos e dos padrões da empresa.
+export const TIPO_DEVOLUCAO_COMPRA = "55-devolucao";
+export const TIPOS_NOTA_EMISSAO: Opcao[] = [
+  TIPOS_NOTA[0],
+  { value: TIPO_DEVOLUCAO_COMPRA, label: "NF-e (mod. 55) - Saída - Devolução de compra" },
+  ...TIPOS_NOTA.slice(1),
+];
+
 export const UFS: Opcao[] = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
   "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
@@ -78,7 +87,7 @@ export function rotulo(opcoes: Opcao[], value: string): string {
 }
 
 // Rótulo compacto do tipo p/ a coluna da tabela: "55 - Saída", "65 - Saída".
-const SENTIDO_TIPO: Record<string, string> = { saida: "Saída", entrada: "Entrada" };
+const SENTIDO_TIPO: Record<string, string> = { saida: "Saída", entrada: "Entrada", devolucao: "Devolução" };
 export function rotuloTipoCurto(value: string): string {
   const [mod, sentido] = value.split("-");
   return `${mod} - ${SENTIDO_TIPO[sentido] ?? sentido}`;
