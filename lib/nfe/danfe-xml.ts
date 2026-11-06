@@ -50,7 +50,9 @@ function textoLivre(bloco: string | null, tag: string): string | undefined {
 }
 
 // Devolve null quando o XML não é um nfeProc utilizável (nota sem autorização).
-export function lerNFe(xml: string | null): { totais: TotaisNFe; itens: ItemNFe[]; volumes: VolumesNFe | null } | null {
+export function lerNFe(
+  xml: string | null,
+): { totais: TotaisNFe; itens: ItemNFe[]; volumes: VolumesNFe | null; modFrete: string | null } | null {
   if (!xml) return null;
   const tot = extraiBloco(xml, "ICMSTot");
   if (!tot) return null;
@@ -92,7 +94,8 @@ export function lerNFe(xml: string | null): { totais: TotaisNFe; itens: ItemNFe[
     });
   }
 
-  const vol = extraiBloco(extraiBloco(xml, "transp") ?? "", "vol");
+  const transp = extraiBloco(xml, "transp");
+  const vol = extraiBloco(transp ?? "", "vol");
   const volumes: VolumesNFe | null = vol
     ? {
         qVol: num(vol, "qVol") || undefined,
@@ -104,5 +107,5 @@ export function lerNFe(xml: string | null): { totais: TotaisNFe; itens: ItemNFe[
       }
     : null;
 
-  return { totais, itens, volumes };
+  return { totais, itens, volumes, modFrete: txt(transp, "modFrete") || null };
 }

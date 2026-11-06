@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/app/ui/Modal";
-import { Button, Field, Input, Textarea, EmptyState } from "@/app/ui/primitives";
+import { Button, Field, Input, Select, Textarea, EmptyState } from "@/app/ui/primitives";
 import LightningLoader from "@/app/ui/LightningLoader";
+import { MODALIDADES_FRETE } from "@/lib/mock-data";
+import type { Transportadora } from "@/lib/types";
+import { listarTransportadoras } from "@/app/transportadoras/actions";
 import { itensDevolviveis, emitirNotaDevolucao, type ItemDevolvivel } from "./actions";
 import VolumesFields, { VOLUMES_VAZIO, lerVolumes } from "./VolumesFields";
 
@@ -25,6 +28,9 @@ export default function DevolucaoFiscalModal({
   const [tipoSaida, setTipoSaida] = useState(true);
   const [natOp, setNatOp] = useState("DEVOLUCAO DE COMPRA");
   const [infCpl, setInfCpl] = useState("");
+  const [modFrete, setModFrete] = useState("9");
+  const [transportadoraId, setTransportadoraId] = useState("");
+  const [transportadoras, setTransportadoras] = useState<Transportadora[]>([]);
   const [volumes, setVolumes] = useState(VOLUMES_VAZIO);
   const [erro, setErro] = useState<string | null>(null);
   const [emitindo, setEmitindo] = useState(false);
@@ -34,7 +40,12 @@ export default function DevolucaoFiscalModal({
       setItens(lista);
       setQtd(Object.fromEntries(lista.map((i) => [i.produtoId, i.disponivel])));
     });
+    listarTransportadoras().then(setTransportadoras).catch(() => {});
   }, [notaId]);
+
+  // Mesma regra da emissão: só as modalidades 2/3/4 obrigam transportadora.
+  const transpOpcional = ["0", "1", "9"].includes(modFrete);
+  const transporteOk = transpOpcional || transportadoraId !== "";
 
   const fmt = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 4 });
 
@@ -55,6 +66,8 @@ export default function DevolucaoFiscalModal({
       infCpl: infCpl || undefined,
       refChaveManual: refChave.replace(/\D/g, "") || undefined,
       tipoSaida,
+      modFrete,
+      transportadoraId: transportadoraId || null,
       volumes: lerVolumes(volumes),
     });
     setEmitindo(false);
@@ -73,7 +86,7 @@ export default function DevolucaoFiscalModal({
       rodape={
         <>
           <Button variante="secondary" onClick={onFechar} disabled={emitindo}>Cancelar</Button>
-          <Button onClick={emitir} disabled={emitindo || selecionados.length === 0}>
+          <Button onClick={emitir} disabled={emitindo || selecionados.length === 0 || !transporteOk}>
             {emitindo ? "Emitindo…" : "Emitir NF-e de Devolução"}
           </Button>
         </>
@@ -151,6 +164,33 @@ export default function DevolucaoFiscalModal({
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Modalidade do frete" required>
+              <Select
+                opcoes={MODALIDADES_FRETE}
+                value={modFrete}
+                onChange={(e) => {
+                  setModFrete(e.target.value);
+                  if (e.target.value === "9") setTransportadoraId(""); // sem ocorrência → sem transportadora
+                }}
+              />
+            </Field>
+            {modFrete !== "9" && (
+              <Field
+                label="Transportadora"
+                required={!transpOpcional}
+                hint={transpOpcional ? "Opcional para esta modalidade" : "Obrigatória para esta modalidade"}
+              >
+                <Select
+                  placeholder="Sem transportadora"
+                  opcoes={transportadoras.map((t) => ({ value: t.id, label: t.nome }))}
+                  value={transportadoraId}
+                  onChange={(e) => setTransportadoraId(e.target.value)}
+                />
+              </Field>
+            )}
           </div>
 
           <VolumesFields value={volumes} onChange={setVolumes} />

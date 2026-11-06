@@ -219,7 +219,7 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
           <div className="flex">
             <Cel label="Nome / Razão social" className="flex-1">{transp?.nome ?? "—"}</Cel>
             <Cel label="Frete por conta" className="w-40 border-l border-black">
-              {transp ? rotulo(TIPOS_TRANSPORTE, transp.tipoTransporte) : "9 - Sem frete"}
+              {rotulo(TIPOS_TRANSPORTE, nota.modFrete ?? transp?.tipoTransporte ?? "9")}
             </Cel>
             <Cel label="Código ANTT" className="w-24 border-l border-black" />
             <Cel label="Placa do veículo" className="w-24 border-l border-black" />

@@ -739,6 +739,8 @@ export type NotaCompleta = {
   totais: TotaisNFe | null;
   // Volumes transportados do XML autorizado (null quando a nota não informou).
   volumes: VolumesNFe | null;
+  // Modalidade do frete do XML autorizado (null em nota não autorizada).
+  modFrete: string | null;
   itens: {
     codigo: string; nome: string; ncm: string; cfop: string;
     unidade: string; quantidade: number; precoUnitario: number; valorTotal: number;
@@ -820,6 +822,7 @@ function mapNota(n: NotaRow, comXml = false): NotaCompleta {
       : null,
     totais: doXml?.totais ?? null,
     volumes: doXml?.volumes ?? null,
+    modFrete: doXml?.modFrete ?? null,
     // Com XML autorizado os itens saem dele (fonte da verdade, e com tributos).
     // Sem XML — rascunho, rejeitada — caem no snapshot do banco.
     itens:
@@ -1101,6 +1104,9 @@ export type EmitirDevolucaoInput = {
   refChaveManual?: string;
   // Força tpNF=1 (saída) para devolução de compra. Default: tpNF=0 (entrada).
   tipoSaida?: boolean;
+  // Modalidade do frete (default 9) e transportadora (obrigatória em 2/3/4).
+  modFrete?: string;
+  transportadoraId?: string | null;
   // Volumes transportados (grupo <vol> do XML).
   volumes?: VolumesNFe;
 };
@@ -1139,6 +1145,18 @@ export async function emitirNotaDevolucao(input: EmitirDevolucaoInput): Promise<
 
     const empresa = original.emitente;
     const tpAmb = empresa.ambiente === "PRODUCAO" ? "1" as const : "2" as const;
+
+    // Transporte: valida antes de transmitir para não gastar numeração à toa.
+    const modFrete = input.modFrete || "9";
+    if (!["0", "1", "2", "3", "4", "9"].includes(modFrete)) {
+      return { ok: false, erro: "Modalidade de frete inválida." };
+    }
+    const transp = modFrete !== "9" && input.transportadoraId
+      ? await prisma.transportadora.findFirst({ where: { id: input.transportadoraId, empresaId } })
+      : null;
+    if (["2", "3", "4"].includes(modFrete) && !transp) {
+      return { ok: false, erro: "Escolha uma transportadora para a modalidade de frete selecionada." };
+    }
 
     // Certificado.
     const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
@@ -1225,7 +1243,7 @@ export async function emitirNotaDevolucao(input: EmitirDevolucaoInput): Promise<
       serie: String(serieDoc),
       nNF: String(numero),
       natOp,
-      modFrete: "9",
+      modFrete,
       volumes: input.volumes,
       infCpl: input.infCpl,
       finNFe: "4",
@@ -1272,6 +1290,7 @@ export async function emitirNotaDevolucao(input: EmitirDevolucaoInput): Promise<
             tipoNota: "55-devolucao",
             emitenteId: empresa.id,
             clienteId: cliente.id,
+            transportadoraId: transp?.id ?? null,
             informacoesAdicionais: input.infCpl || null,
             status: r.ok ? "AUTORIZADA" : "REJEITADA",
             ambiente: empresa.ambiente,
