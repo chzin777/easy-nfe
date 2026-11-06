@@ -335,7 +335,11 @@ export function montarNFe(
     `</ICMSTot></total>`;
 
   const transp = `<transp><modFrete>${dados.modFrete}</modFrete></transp>`;
-  const pag = `<pag><detPag><indPag>0</indPag><tPag>01</tPag><vPag>${n2(vTotal)}</vPag></detPag></pag>`;
+  // Devolução não tem pagamento: a SEFAZ exige tPag=90 com vPag zerado (cStat 871).
+  const pag =
+    finNFe === "4"
+      ? `<pag><detPag><tPag>90</tPag><vPag>0.00</vPag></detPag></pag>`
+      : `<pag><detPag><indPag>0</indPag><tPag>01</tPag><vPag>${n2(vTotal)}</vPag></detPag></pag>`;
   const infAdic = limpar(dados.infCpl ?? "").trim()
     ? `<infAdic><infCpl>${escLim(dados.infCpl ?? "", 5000)}</infCpl></infAdic>`
     : "";
