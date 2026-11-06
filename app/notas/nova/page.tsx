@@ -35,6 +35,7 @@ function calcDesc(base: number, tipo: DescontoTipo, valor: number): number {
 }
 import { emitirNota, obterNota, envioAutoEmail, type EmitirInput, type EmitirResultado, type NotaCompleta, type DescontoTipo } from "../actions";
 import VisualizarDanfeModal from "../VisualizarDanfeModal";
+import VolumesFields, { VOLUMES_VAZIO, lerVolumes } from "../VolumesFields";
 import { explicarRejeicao } from "@/lib/nfe/mensagens";
 import { listarClientes } from "@/app/clientes/actions";
 import NovoClienteModal from "@/app/clientes/NovoClienteModal";
@@ -76,6 +77,8 @@ export default function NovaNotaPage() {
   const [modFrete, setModFrete] = useState("9");
   // Valor do frete da nota (texto enquanto digita; vira número na emissão).
   const [valorFrete, setValorFrete] = useState("");
+  // Volumes transportados (só na devolução).
+  const [volumes, setVolumes] = useState(VOLUMES_VAZIO);
   const [info, setInfo] = useState("");
   const [itens, setItens] = useState<LinhaItem[]>([]);
   const [descNota, setDescNota] = useState<{ tipo: DescontoTipo; valor: number }>({ tipo: "valor", valor: 0 });
@@ -132,6 +135,7 @@ export default function NovaNotaPage() {
     setTransportadoraId("");
     setModFrete(padroes.modFretePadrao);
     setValorFrete("");
+    setVolumes(VOLUMES_VAZIO);
     setInfo(padroes.infoComplementarPadrao);
     setItens([]);
     setDescNota({ tipo: "valor", valor: 0 });
@@ -188,6 +192,7 @@ export default function NovaNotaPage() {
       transportadoraId,
       modFrete,
       valorFrete,
+      volumes,
       info,
       descNota,
       itens: itens.map((i) => ({
@@ -200,7 +205,7 @@ export default function NovaNotaPage() {
         precoVisto: i.precoOriginal,
       })),
     });
-  }, [carregando, rascunho, emitindo, resultado, tipoNota, refChave, clienteId, transportadoraId, modFrete, valorFrete, info, descNota, itens]);
+  }, [carregando, rascunho, emitindo, resultado, tipoNota, refChave, clienteId, transportadoraId, modFrete, valorFrete, volumes, info, descNota, itens]);
 
   // Retoma o rascunho reidratando os itens contra o catálogo atual.
   function retomarRascunho() {
@@ -212,6 +217,7 @@ export default function NovaNotaPage() {
     if (transportadoras.some((t) => t.id === rascunho.transportadoraId)) setTransportadoraId(rascunho.transportadoraId);
     setModFrete(rascunho.modFrete);
     setValorFrete(rascunho.valorFrete ?? "");
+    setVolumes(rascunho.volumes ?? VOLUMES_VAZIO);
     setInfo(rascunho.info);
     setDescNota(rascunho.descNota);
     setItens(recuperados);
@@ -349,6 +355,7 @@ export default function NovaNotaPage() {
       descontoNota: descNota.valor > 0 ? descNota : undefined,
       cfop: cfopNota.trim() || undefined,
       refChave: devolucao ? refChave : undefined,
+      volumes: devolucao ? lerVolumes(volumes) : undefined,
       contingencia,
     };
 
@@ -393,7 +400,8 @@ export default function NovaNotaPage() {
   }
 
   // Padrão pode ocultar o passo de transporte (usa a modalidade padrão direto).
-  const mostrarTransporte = padroes.definirTransporte;
+  // Na devolução o passo sempre aparece: é nele que se informam os volumes.
+  const mostrarTransporte = padroes.definirTransporte || devolucao;
   // CIF (0), FOB (1) e "9 - Sem ocorrência" não exigem transportadora.
   // Só modalidades 2/3/4 (terceiros / transporte próprio) obrigam.
   const transpOpcional = ["0", "1", "9"].includes(modFrete);
@@ -750,6 +758,11 @@ export default function NovaNotaPage() {
               Escolha uma transportadora — obrigatória para a modalidade de frete selecionada.
             </p>
           )}
+          {devolucao && (
+            <div className="mt-6">
+              <VolumesFields value={volumes} onChange={setVolumes} />
+            </div>
+          )}
         </Step>
         )}
 
@@ -769,6 +782,19 @@ export default function NovaNotaPage() {
             <Resumo rotulo="Modalidade do frete" valor={rotulo(MODALIDADES_FRETE, modFrete)} />
             <Resumo rotulo="Transportadora" valor={transportadora?.nome ?? "Sem transporte / retirada"} />
             <Resumo rotulo="Valor do frete" valor={freteNota > 0 ? formatBRL(freteNota) : "—"} />
+            {devolucao && (
+              <Resumo
+                rotulo="Volumes"
+                valor={[
+                  volumes.quantidade,
+                  volumes.especie,
+                  volumes.marca,
+                  volumes.numeracao,
+                  volumes.pesoLiquido && `${volumes.pesoLiquido} kg líq.`,
+                  volumes.pesoBruto && `${volumes.pesoBruto} kg bruto`,
+                ].filter(Boolean).join(" · ") || "—"}
+              />
+            )}
             {devolucao && (
               <div className="col-span-2 sm:col-span-3">
                 <p className="text-xs uppercase tracking-wider text-[var(--muted)]">NF-e de compra referenciada</p>

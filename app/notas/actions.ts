@@ -12,7 +12,7 @@ import {
 import { dataHoraBrasilia, dvMod11 } from "@/lib/nfe/chave";
 import { lerNFe, type TotaisNFe } from "@/lib/nfe/danfe-xml";
 import { cfopPorDestino } from "@/lib/nfe/xml";
-import type { DadosNFe, EnderecoNFe } from "@/lib/nfe/types";
+import type { DadosNFe, EnderecoNFe, VolumesNFe } from "@/lib/nfe/types";
 import { resolverCodMunicipio } from "@/lib/nfe/ibge";
 import { TIPO_DEVOLUCAO_COMPRA } from "@/lib/mock-data";
 import { prisma } from "@/lib/prisma";
@@ -103,6 +103,8 @@ export type EmitirInput = {
   cfop?: string;
   // Devolução de compra: chave da NF-e recebida do fornecedor (<refNFe>).
   refChave?: string;
+  // Devolução de compra: volumes transportados (grupo <vol> do XML).
+  volumes?: VolumesNFe;
   // Emissão em contingência SVC (só NF-e 55), quando a autorizadora da UF está fora.
   // A justificativa vai no XML (xJust, 15-256 chars) e é definitiva.
   contingencia?: { justificativa: string };
@@ -475,7 +477,7 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       serie: String(serieDoc),
       nNF: String(numero),
       natOp,
-      ...(devolucao ? { finNFe: "4" as const, tpNF: "1" as const, refChave } : {}),
+      ...(devolucao ? { finNFe: "4" as const, tpNF: "1" as const, refChave, volumes: input.volumes } : {}),
       modFrete: input.modFrete || "9",
       vFrete: valorFrete,
       infCpl: input.infCpl,
@@ -735,6 +737,8 @@ export type NotaCompleta = {
   // Totais de imposto do XML autorizado. null enquanto a nota não foi
   // autorizada — nesse caso o DANFE não tem o que imprimir nesses campos.
   totais: TotaisNFe | null;
+  // Volumes transportados do XML autorizado (null quando a nota não informou).
+  volumes: VolumesNFe | null;
   itens: {
     codigo: string; nome: string; ncm: string; cfop: string;
     unidade: string; quantidade: number; precoUnitario: number; valorTotal: number;
@@ -815,6 +819,7 @@ function mapNota(n: NotaRow, comXml = false): NotaCompleta {
         }
       : null,
     totais: doXml?.totais ?? null,
+    volumes: doXml?.volumes ?? null,
     // Com XML autorizado os itens saem dele (fonte da verdade, e com tributos).
     // Sem XML — rascunho, rejeitada — caem no snapshot do banco.
     itens:
@@ -1096,6 +1101,8 @@ export type EmitirDevolucaoInput = {
   refChaveManual?: string;
   // Força tpNF=1 (saída) para devolução de compra. Default: tpNF=0 (entrada).
   tipoSaida?: boolean;
+  // Volumes transportados (grupo <vol> do XML).
+  volumes?: VolumesNFe;
 };
 
 export type EmitirDevolucaoResultado =
@@ -1219,6 +1226,7 @@ export async function emitirNotaDevolucao(input: EmitirDevolucaoInput): Promise<
       nNF: String(numero),
       natOp,
       modFrete: "9",
+      volumes: input.volumes,
       infCpl: input.infCpl,
       finNFe: "4",
       tpNF,

@@ -5,6 +5,7 @@ import Modal from "@/app/ui/Modal";
 import { Button, Field, Input, Textarea, EmptyState } from "@/app/ui/primitives";
 import LightningLoader from "@/app/ui/LightningLoader";
 import { itensDevolviveis, emitirNotaDevolucao, type ItemDevolvivel } from "./actions";
+import VolumesFields, { VOLUMES_VAZIO, lerVolumes } from "./VolumesFields";
 
 export default function DevolucaoFiscalModal({
   notaId,
@@ -24,6 +25,7 @@ export default function DevolucaoFiscalModal({
   const [tipoSaida, setTipoSaida] = useState(true);
   const [natOp, setNatOp] = useState("DEVOLUCAO DE COMPRA");
   const [infCpl, setInfCpl] = useState("");
+  const [volumes, setVolumes] = useState(VOLUMES_VAZIO);
   const [erro, setErro] = useState<string | null>(null);
   const [emitindo, setEmitindo] = useState(false);
 
@@ -53,6 +55,7 @@ export default function DevolucaoFiscalModal({
       infCpl: infCpl || undefined,
       refChaveManual: refChave.replace(/\D/g, "") || undefined,
       tipoSaida,
+      volumes: lerVolumes(volumes),
     });
     setEmitindo(false);
     if (r.ok) onConcluido();
@@ -149,6 +152,8 @@ export default function DevolucaoFiscalModal({
               </div>
             ))}
           </div>
+
+          <VolumesFields value={volumes} onChange={setVolumes} />
 
           <Field label="Natureza da Operação">
             <Input value={natOp} onChange={(e) => setNatOp(e.target.value)} placeholder="DEVOLUCAO DE COMPRA" />

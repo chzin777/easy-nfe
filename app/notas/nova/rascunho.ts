@@ -2,6 +2,7 @@
 
 import type { Produto } from "@/lib/types";
 import type { DescontoTipo } from "../actions";
+import type { VolumesForm } from "../VolumesFields";
 
 // Rascunho da emissão em andamento (localStorage). Sair da página no meio da
 // emissão — para corrigir um produto, por exemplo — não pode custar o trabalho
@@ -33,6 +34,7 @@ export type Rascunho = {
   transportadoraId: string;
   modFrete: string;
   valorFrete?: string;
+  volumes?: VolumesForm;
   info: string;
   descNota: { tipo: DescontoTipo; valor: number };
   itens: ItemRascunho[];

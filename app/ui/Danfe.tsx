@@ -233,12 +233,12 @@ export default function Danfe({ nota }: { nota: NotaCompleta }) {
             <Cel label="Inscrição estadual" className="w-44 border-l border-black">{transp?.ie ?? "—"}</Cel>
           </div>
           <div className="flex border-t border-black">
-            <Cel label="Quantidade" className="flex-1" />
-            <Cel label="Espécie" className="flex-1 border-l border-black" />
-            <Cel label="Marca" className="flex-1 border-l border-black" />
-            <Cel label="Numeração" className="flex-1 border-l border-black" />
-            <Cel label="Peso bruto" className="flex-1 border-l border-black" alinhar="right" />
-            <Cel label="Peso líquido" className="flex-1 border-l border-black" alinhar="right" />
+            <Cel label="Quantidade" className="flex-1">{nota.volumes?.qVol}</Cel>
+            <Cel label="Espécie" className="flex-1 border-l border-black">{nota.volumes?.esp}</Cel>
+            <Cel label="Marca" className="flex-1 border-l border-black">{nota.volumes?.marca}</Cel>
+            <Cel label="Numeração" className="flex-1 border-l border-black">{nota.volumes?.nVol}</Cel>
+            <Cel label="Peso bruto" className="flex-1 border-l border-black" alinhar="right">{peso(nota.volumes?.pesoB)}</Cel>
+            <Cel label="Peso líquido" className="flex-1 border-l border-black" alinhar="right">{peso(nota.volumes?.pesoL)}</Cel>
           </div>
         </div>
 
@@ -393,6 +393,10 @@ function espacar(chave: string): string {
 
 function moeda(v: number): string {
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function peso(v?: number): string {
+  return v ? v.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : "";
 }
 
 function formatNumero(n: number): string {

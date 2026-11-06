@@ -1,7 +1,7 @@
 import { montarChave } from "./chave";
 import { montarQrCode } from "./qrcode";
 import { codigoUF, type TpEmis } from "./ufs";
-import type { DadosNFe, EnderecoNFe, ItemNFe } from "./types";
+import type { DadosNFe, EnderecoNFe, ItemNFe, VolumesNFe } from "./types";
 
 // O schema NF-e 4.00 só aceita caracteres de U+0020 a U+00FF (TString =
 // "[!-ÿ]{1}[ -ÿ]{0,}[!-ÿ]{1}|[!-ÿ]{1}"). Texto colado do Word/WhatsApp traz
@@ -53,6 +53,27 @@ function escMin2(s: string, max: number): string {
   const t = limpar(s).trim();
   if (!t) return "";
   return escLim(t.length === 1 ? `${t}.` : t, max);
+}
+
+// Grupo <vol> na ordem do schema. Campo vazio não pode virar tag vazia (o schema
+// exige ao menos 1 caractere) e, sem nenhum campo, o grupo inteiro fica de fora.
+// Valores numéricos seguem os limites do schema: qVol até 15 dígitos e peso com
+// exatamente 3 casas (TDec_1203).
+function volXml(v?: VolumesNFe): string {
+  if (!v) return "";
+  const texto = (tag: string, valor?: string) => {
+    const t = escLim(valor ?? "", 60);
+    return t ? `<${tag}>${t}</${tag}>` : "";
+  };
+  const peso = (tag: string, valor?: number) =>
+    typeof valor === "number" && valor > 0 && valor < 1e12 ? `<${tag}>${valor.toFixed(3)}</${tag}>` : "";
+  const qVol = typeof v.qVol === "number" && v.qVol >= 1 && v.qVol < 1e15
+    ? `<qVol>${Math.trunc(v.qVol)}</qVol>`
+    : "";
+  const corpo =
+    qVol + texto("esp", v.esp) + texto("marca", v.marca) + texto("nVol", v.nVol) +
+    peso("pesoL", v.pesoL) + peso("pesoB", v.pesoB);
+  return corpo ? `<vol>${corpo}</vol>` : "";
 }
 
 const n2 = (v: number) => v.toFixed(2);
@@ -334,7 +355,7 @@ export function montarNFe(
     `<vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${n2(vTotal)}</vNF><vTotTrib>0.00</vTotTrib>` +
     `</ICMSTot></total>`;
 
-  const transp = `<transp><modFrete>${dados.modFrete}</modFrete></transp>`;
+  const transp = `<transp><modFrete>${dados.modFrete}</modFrete>${volXml(dados.volumes)}</transp>`;
   // Devolução não tem pagamento: a SEFAZ exige tPag=90 com vPag zerado (cStat 871).
   const pag =
     finNFe === "4"

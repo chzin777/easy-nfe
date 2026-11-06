@@ -50,6 +50,16 @@ export type ItemNFe = {
   reducaoBaseIcms?: number; // pRedBC % p/ CST 20
 };
 
+// Grupo <vol> de <transp>. Todos os campos são opcionais no schema 4.00.
+export type VolumesNFe = {
+  qVol?: number; // quantidade (inteiro)
+  esp?: string; // espécie (caixa, pallet...)
+  marca?: string;
+  nVol?: string; // numeração
+  pesoL?: number; // peso líquido em kg
+  pesoB?: number; // peso bruto em kg
+};
+
 export type DadosNFe = {
   tpAmb: "1" | "2"; // 1 produção | 2 homologação
   mod?: "55" | "65"; // modelo do documento (default 55)
@@ -70,6 +80,7 @@ export type DadosNFe = {
   // Valor do frete da nota inteira. É rateado entre os itens (prod/vFrete) e
   // somado no total (ICMSTot/vFrete e vNF) — a SEFAZ confere as duas somas.
   vFrete?: number;
+  volumes?: VolumesNFe;
   // CSC + idCSC (cIdToken) — obrigatórios para gerar o QR Code da NFC-e.
   csc?: string;
   idCsc?: string;

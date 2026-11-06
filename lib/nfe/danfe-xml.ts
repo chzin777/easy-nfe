@@ -3,6 +3,7 @@
 // daqui, não de recálculo em cima do banco.
 
 import { extrai, extraiBloco } from "./soap";
+import type { VolumesNFe } from "./types";
 
 export type TotaisNFe = {
   vBC: number; vICMS: number; vBCST: number; vST: number;
@@ -39,8 +40,17 @@ function txt(bloco: string | null, tag: string): string {
   return (bloco && extrai(bloco, tag)) || "";
 }
 
+// Texto livre digitado pelo operador volta ao normal para exibição ("&amp;" → "&").
+function textoLivre(bloco: string | null, tag: string): string | undefined {
+  const t = txt(bloco, tag)
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+  return t || undefined;
+}
+
 // Devolve null quando o XML não é um nfeProc utilizável (nota sem autorização).
-export function lerNFe(xml: string | null): { totais: TotaisNFe; itens: ItemNFe[] } | null {
+export function lerNFe(xml: string | null): { totais: TotaisNFe; itens: ItemNFe[]; volumes: VolumesNFe | null } | null {
   if (!xml) return null;
   const tot = extraiBloco(xml, "ICMSTot");
   if (!tot) return null;
@@ -82,5 +92,17 @@ export function lerNFe(xml: string | null): { totais: TotaisNFe; itens: ItemNFe[
     });
   }
 
-  return { totais, itens };
+  const vol = extraiBloco(extraiBloco(xml, "transp") ?? "", "vol");
+  const volumes: VolumesNFe | null = vol
+    ? {
+        qVol: num(vol, "qVol") || undefined,
+        esp: textoLivre(vol, "esp"),
+        marca: textoLivre(vol, "marca"),
+        nVol: textoLivre(vol, "nVol"),
+        pesoL: num(vol, "pesoL") || undefined,
+        pesoB: num(vol, "pesoB") || undefined,
+      }
+    : null;
+
+  return { totais, itens, volumes };
 }
