@@ -32,7 +32,7 @@ const MAPA: Record<string, Explicacao> = {
   },
   "225": {
     resumo: "O arquivo da nota saiu fora do padrão (schema) exigido pela SEFAZ.",
-    acao: "É um problema interno do sistema, não do seu cadastro. Tente emitir de novo; se continuar, avise o suporte com o número da nota.",
+    acao: "Geralmente é algum campo vazio ou inválido no cadastro. Confira os dados da empresa (Configurações), do cliente e dos produtos; se estiver tudo certo, avise o suporte com o número da nota.",
   },
   "226": {
     resumo: "A UF do emitente não bate com a UF do serviço da SEFAZ.",

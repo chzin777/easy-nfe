@@ -74,6 +74,27 @@ function endEmpresa(e: {
   };
 }
 
+// Campos de endereço obrigatórios no schema (vazios = rejeição 225 genérica).
+function faltandoEndereco(e: {
+  logradouro: string | null; bairro: string | null; municipio: string | null; cep: string | null;
+}): string[] {
+  return ([
+    [e.logradouro, "logradouro"],
+    [e.bairro, "bairro"],
+    [e.municipio, "município"],
+    [e.cep, "CEP"],
+  ] as const).filter(([v]) => !(v ?? "").trim()).map(([, nome]) => nome);
+}
+
+function faltandoEnderecoEmitente(e: {
+  logradouro: string | null; bairro: string | null; municipio: string | null; cep: string | null;
+  ie: string | null;
+}): string[] {
+  const f = faltandoEndereco(e);
+  if (!(e.ie ?? "").trim()) f.push("inscrição estadual");
+  return f;
+}
+
 export type DescontoTipo = "valor" | "percent";
 
 export type EmitirInput = {
@@ -372,6 +393,16 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
       };
     }
 
+    // Endereço da própria empresa incompleto também vira tag vazia e cai em 225
+    // (que não diz qual campo). Número vazio vira "S/N" no XML, então não entra aqui.
+    const faltandoEmit = faltandoEnderecoEmitente(empresa);
+    if (faltandoEmit.length) {
+      return {
+        ok: false,
+        erro: `O cadastro da empresa está incompleto (falta ${faltandoEmit.join(", ")}). Complete em Configurações e emita de novo.`,
+      };
+    }
+
     const { pfxBase64, senha } = certDaEmpresa(empresa.certData);
     const cert = carregarCertificado(pfxBase64, senha);
 
@@ -401,7 +432,6 @@ export async function emitirNota(input: EmitirInput): Promise<EmitirResultado> {
         [cliente.bairro, "bairro"],
         [cliente.municipio, "município"],
         [cliente.cep, "CEP"],
-        [cliente.numero, "número"],
       ].filter(([v]) => !(v ?? "").trim()).map(([, nome]) => nome);
       if (faltando.length) {
         return {
@@ -1199,6 +1229,14 @@ export async function emitirNotaDevolucao(input: EmitirDevolucaoInput): Promise<
 
     // Destinatário = cliente da nota original (remetente da devolução).
     const cliente = original.cliente;
+    const faltandoEmit = faltandoEnderecoEmitente(empresa);
+    if (faltandoEmit.length) {
+      return { ok: false, erro: `O cadastro da empresa está incompleto (falta ${faltandoEmit.join(", ")}). Complete em Configurações e emita de novo.` };
+    }
+    const faltandoDest = faltandoEndereco(cliente);
+    if (faltandoDest.length) {
+      return { ok: false, erro: `O endereço do cliente "${cliente.nome}" está incompleto (falta ${faltandoDest.join(", ")}). Complete o cadastro do cliente e emita de novo.` };
+    }
     const destUf = (cliente.uf ?? empresa.uf).toUpperCase();
     const cMunDest = await resolverCodMunicipio(cliente.municipio ?? "", destUf);
     const ieDest = (cliente.inscricaoEstadual ?? "").replace(/\D/g, "");
