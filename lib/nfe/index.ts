@@ -2,6 +2,7 @@ import { carregarCertificado, type Certificado } from "./cert";
 import { dataHoraBrasilia } from "./chave";
 import { assinar } from "./sign";
 import { montarNFe } from "./xml";
+import { exigirSemCamposVazios } from "./validar";
 import { extrai, extraiBloco, soap } from "./soap";
 import { codigoUF, contingenciaDaUF, type Modelo, type TpAmb } from "./ufs";
 import type {
@@ -76,6 +77,8 @@ export async function emitirNFe(
   const dhEmi = dataHoraBrasilia();
   const cNF = gerarCNF(dados.nNF);
   const { xml, chave, infNFeSupl, qrCode, urlChave } = montarNFe(dados, dhEmi, cNF);
+  // Campo vazio = rejeição 225 genérica na SEFAZ; aqui aponta qual é antes de enviar.
+  exigirSemCamposVazios(xml);
   const assinada0 = assinar(xml, `NFe${chave}`, cert, "infNFe");
   // NFC-e: <infNFeSupl> entra entre </infNFe> e <Signature> (ordem do schema).
   // A assinatura referencia só infNFe, então injetar depois não a invalida.
