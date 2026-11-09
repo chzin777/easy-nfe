@@ -354,7 +354,11 @@ export default function Sidebar({
 }
 
 // Seletor de empresa ativa — dropdown custom animado, topo da sidebar.
-function SeletorEmpresa({ empresas }: { empresas: EmpresaResumo[] }) {
+function SeletorEmpresa({ empresas: doMontar }: { empresas: EmpresaResumo[] }) {
+  // Lista relida do servidor a cada abertura: a empresa ativa pode ter sido
+  // trocada em outra tela/aba e o estado montado aqui ficaria desatualizado.
+  const [atualizadas, setAtualizadas] = useState<EmpresaResumo[] | null>(null);
+  const empresas = atualizadas ?? doMontar;
   const ativa = empresas.find((e) => e.ativa);
   const [aberto, setAberto] = useState(false);
   const [trocando, setTrocando] = useState<string | null>(null);
@@ -369,10 +373,17 @@ function SeletorEmpresa({ empresas }: { empresas: EmpresaResumo[] }) {
   }, []);
 
   async function onTrocar(id: string) {
-    if (id === ativa?.id) { setAberto(false); return; }
     setTrocando(id);
-    await trocarEmpresa(id);
-    window.location.reload();
+    try {
+      await trocarEmpresa(id);
+    } finally {
+      window.location.reload();
+    }
+  }
+
+  function alternar() {
+    if (!aberto) listarEmpresas().then(setAtualizadas).catch(() => {});
+    setAberto((v) => !v);
   }
 
   if (empresas.length === 0) {
@@ -392,7 +403,7 @@ function SeletorEmpresa({ empresas }: { empresas: EmpresaResumo[] }) {
     <div ref={ref} className="relative mx-3 mb-2">
       <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Empresa ativa</p>
       <button
-        onClick={() => setAberto((v) => !v)}
+        onClick={alternar}
         className={
           "flex w-full items-center gap-2.5 rounded-xl border bg-white/5 px-2.5 py-2 text-left transition " +
           (aberto ? "border-[var(--primary)] bg-white/10" : "border-white/10 hover:border-white/20 hover:bg-white/10")

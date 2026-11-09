@@ -117,16 +117,20 @@ export default function ConfiguracoesPage() {
 
   async function onTrocar(id: string) {
     setTrocando(true);
-    await trocarEmpresa(id);
-    await carregar();
-    setTrocando(false);
+    try {
+      await trocarEmpresa(id);
+    } finally {
+      // Recarrega tudo: a sidebar guarda a empresa ativa em estado próprio e,
+      // sem isso, continuava marcando a anterior (clicar nela não fazia nada).
+      window.location.reload();
+    }
   }
 
-  async function aoCriarEmpresa() {
+  function aoCriarEmpresa() {
     setNovaAberta(false);
     setTrocando(true);
-    await carregar(); // a empresa nova já vem como ativa (server action)
-    setTrocando(false);
+    // A empresa nova já vem como ativa (server action) — recarrega app inteiro.
+    window.location.reload();
   }
 
   async function salvar() {
