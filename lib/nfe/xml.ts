@@ -89,9 +89,12 @@ function tagDoc(doc: string): string {
 function enderXml(tag: string, e: EnderecoNFe): string {
   const cMun = e.cMun ?? "";
   const cep = e.cep.replace(/\D/g, "");
+  // nro é obrigatório com minLength 1: endereço sem número (comum em "QD x LT y")
+  // gerava <nro></nro> e a SEFAZ rejeitava por schema (cStat 225).
+  const nro = escLim(e.nro ?? "", 60) || "S/N";
   return (
     `<${tag}>` +
-    `<xLgr>${escMin2(e.xLgr, 60)}</xLgr><nro>${escLim(e.nro, 60)}</nro>` +
+    `<xLgr>${escMin2(e.xLgr, 60)}</xLgr><nro>${nro}</nro>` +
     (limpar(e.xCpl ?? "").trim() ? `<xCpl>${escMin2(e.xCpl ?? "", 60)}</xCpl>` : "") +
     `<xBairro>${escMin2(e.xBairro, 60)}</xBairro>` +
     `<cMun>${cMun}</cMun><xMun>${escMin2(e.municipio, 60)}</xMun><UF>${e.uf}</UF>` +
